@@ -1,7 +1,8 @@
-# Document Scanner — Vercel + Supabase + GitHub Actions
+# Bid Scout — Vercel + Supabase + GitHub Actions
 
-Scans configured sites daily for keyword matches in linked PDF/DOCX documents,
-using Claude for semantic matching. This edition splits the work across three
+Scans planning/bid sites daily for new construction plans, then reads each
+linked PDF/DOCX and flags the ones worth pursuing based on a user-supplied
+keyword list, using Claude for semantic matching. This edition splits the work across three
 services, each doing the part it's actually good at:
 
 | Service | What it does | Why it, not something else |

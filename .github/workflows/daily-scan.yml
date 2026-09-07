@@ -1,0 +1,54 @@
+name: Daily Document Scan
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC only, and — like Vercel Hobby — only
+    # guarantees the job starts sometime within this hour, not to the exact
+    # minute. Adjust for your timezone: this example (08:00 UTC) is roughly
+    # 1am Mountain Time (MDT, UTC-7) / 2am during MST.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      division_id:
+        description: "Division to scan (leave blank to scan every division — this is what the daily schedule does)"
+        required: false
+        default: ""
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    # Generous timeout — GitHub Actions jobs can run far longer than a
+    # Vercel function ever could; this is the whole reason the scan lives
+    # here instead of on Vercel. Raise it if you have many sites/divisions.
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install LibreOffice (for real DOCX page numbers)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-scan.txt
+
+      - name: Run scan
+        run: python scraper.py "${{ github.event.inputs.division_id }}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # Pick your AI provider — set AI_PROVIDER to "anthropic" or
+          # "gemini" as a repo/environment secret, or leave it unset and it
+          # auto-picks whichever key below is present. Only add the secret
+          # for the provider you're actually using; the other can stay unset.
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}

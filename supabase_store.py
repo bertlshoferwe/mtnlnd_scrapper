@@ -64,6 +64,18 @@ def create_division(name):
     return row
 
 
+def rename_division(division_id, name):
+    """Change a division's display name. The id/slug stays fixed so existing
+    URLs and the foreign keys on sites/keywords/results keep working."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("name is required")
+    res = get_client().table("divisions").update({"name": name}).eq("id", division_id).execute()
+    if not res.data:
+        raise ValueError("division not found")
+    return res.data[0]
+
+
 def delete_division(division_id):
     """Removes the division and (via ON DELETE CASCADE) all its sites,
     keywords, results, summaries, and run history. Unlike the local-file

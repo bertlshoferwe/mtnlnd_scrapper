@@ -1,5 +1,5 @@
 """
-Web dashboard for the document scanner — Vercel + Supabase edition.
+Web dashboard for Bid Scout — Vercel + Supabase edition.
 
 This is a stateless Flask app (a single Vercel serverless function). It does
 NOT run the scan itself and does NOT schedule anything in-process — Vercel
@@ -13,6 +13,7 @@ Routes:
   GET  /                                    the dashboard page
   GET  /api/divisions                       list divisions
   POST /api/divisions                       create a division
+  PATCH /api/divisions/<division_id>        rename a division
   DEL  /api/divisions/<division_id>          delete a division (cascades in Supabase)
   GET  /api/<division_id>/sites              list sites
   POST /api/<division_id>/sites              add a site
@@ -93,6 +94,16 @@ def api_create_division():
         division = supabase_store.create_division(data.get("name", ""))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "division": division})
+
+
+@app.route("/api/divisions/<division_id>", methods=["PATCH"])
+def api_rename_division(division_id):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        division = supabase_store.rename_division(division_id, data.get("name", ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), (404 if "not found" in str(e) else 400)
     return jsonify({"ok": True, "division": division})
 
 

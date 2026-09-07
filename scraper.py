@@ -1,5 +1,5 @@
 """
-Daily document scanner — AI-centric edition, run by GitHub Actions,
+Bid Scout — daily scan worker, AI-centric edition, run by GitHub Actions,
 storing everything in Supabase (this is the scan worker; api/index.py is
 the Vercel dashboard that reads the same tables — see supabase_store.py).
 

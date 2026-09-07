@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Document Scanner Dashboard</title>
+<title>Bid Scout</title>
 <style>
   :root {
     --bg: #f6f7f9;
@@ -112,33 +112,76 @@
 
   select { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 14px; font-family: inherit; background: #fbfcfd; color: var(--text); }
 
-  .division-bar {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 12px 16px;
+  /* Division folder tabs */
+  .tabs {
+    display: flex; align-items: flex-end; flex-wrap: wrap; gap: 3px;
+    margin-bottom: 22px; padding: 0 2px;
+    border-bottom: 2px solid var(--accent);
   }
-  .division-bar label { font-size: 12.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-  .division-bar select { flex: 1; max-width: 280px; }
-  .division-badge {
-    font-size: 12px; font-weight: 650; color: var(--accent); background: #eef2ff;
-    padding: 3px 10px; border-radius: 999px;
+  .tab {
+    position: relative;
+    display: flex; align-items: center; gap: 4px;
+    background: #eceef1; color: var(--muted);
+    border: 1px solid var(--border); border-bottom: none;
+    border-radius: 9px 9px 0 0;
+    padding: 8px 10px 8px 13px;
+    margin-bottom: -2px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; user-select: none;
+    transition: background .12s, color .12s;
   }
+  .tab:hover { background: #e2e5ea; }
+  .tab.active {
+    background: var(--card); color: var(--text);
+    border-color: var(--accent);
+    border-bottom: 2px solid var(--card);
+    padding-bottom: 9px;
+    z-index: 2;
+  }
+  .tab-name { white-space: nowrap; }
+  .tab-edit {
+    background: transparent; border: none; padding: 0 2px;
+    font-size: 12px; line-height: 1; color: inherit;
+    cursor: pointer; opacity: 0; transition: opacity .12s;
+  }
+  .tab:hover .tab-edit, .tab.active .tab-edit { opacity: .5; }
+  .tab-edit:hover { opacity: 1 !important; color: var(--accent); }
+  .tab-add {
+    align-self: flex-end;
+    background: transparent; border: 1px dashed var(--border); border-bottom: none;
+    border-radius: 9px 9px 0 0;
+    color: var(--muted); font-size: 16px; font-weight: 600; line-height: 1;
+    padding: 7px 13px; margin-bottom: -2px;
+    cursor: pointer;
+  }
+  .tab-add:hover { color: var(--accent); border-color: var(--accent); }
+  .tab-rename-input {
+    border: 1px solid var(--accent); border-radius: 5px;
+    padding: 2px 5px; font-size: 13px; font-family: inherit; width: 130px;
+  }
+  .tab-menu {
+    position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12);
+    padding: 4px; z-index: 20; min-width: 170px;
+  }
+  .tab-menu button {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--text);
+    padding: 7px 10px; font-size: 13px; font-weight: 500; border-radius: 5px;
+  }
+  .tab-menu button:hover { background: var(--bg); }
+  .tab-menu button.danger { color: var(--danger); }
+  .tab-menu button.danger:hover { background: #fef2f2; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <h1>Document Scanner</h1>
-  <p class="subtitle">Sites, keywords, and the daily run time &mdash; scoped per division, fully isolated from one another.</p>
+  <h1>Bid Scout</h1>
+  <p class="subtitle">Scans planning sites daily for new construction plans and flags the ones worth pursuing, based on your keywords. Each division has its own sites and keywords.</p>
 
-  <div class="division-bar">
-    <label>Division</label>
-    <select id="divisionSelect" onchange="switchDivision(this.value)"></select>
-    <span class="division-badge" id="divisionBadge"></span>
-    <span style="flex:1"></span>
-    <button class="btn-ghost" onclick="showAddDivision()">+ New division</button>
-    <button class="btn-danger" onclick="removeCurrentDivision()">Delete this division</button>
-  </div>
+  <div class="tabs" id="divisionTabs"></div>
 
   <div class="card" id="addDivisionCard" style="display:none;">
     <h2>New division</h2>
@@ -216,14 +259,8 @@
   </div>
 
   <div class="card">
-    <h2>Daily run time</h2>
-    <p class="desc">Every division scans at the same time each day.</p>
-    <div class="status-line">Runs daily around <strong>{{ display_schedule }}</strong>.</div>
-  </div>
-
-  <div class="card">
     <h2>Sites</h2>
-    <p class="desc">The web pages you want checked every day for new documents.</p>
+    <p class="desc">The web pages you want checked every day for new documents. Scanned daily around <strong>{{ display_schedule }}</strong>.</p>
     <ul class="list" id="sitesList"></ul>
     <div class="empty" id="sitesEmpty" style="display:none;">No sites yet &mdash; add one below.</div>
 
@@ -300,14 +337,6 @@ function escapeHtml(str) {
 
 async function loadDivisions() {
   allDivisions = await api('/api/divisions');
-  const select = document.getElementById('divisionSelect');
-  select.innerHTML = '';
-  allDivisions.forEach(function(d) {
-    const opt = document.createElement('option');
-    opt.value = d.id;
-    opt.textContent = d.name;
-    select.appendChild(opt);
-  });
 
   const urlParams = new URLSearchParams(window.location.search);
   const requested = urlParams.get('division');
@@ -317,9 +346,133 @@ async function loadDivisions() {
   } else if (!currentDivision || !allDivisions.some(function(d) { return d.id === currentDivision; })) {
     currentDivision = allDivisions.length ? allDivisions[0].id : null;
   }
-  select.value = currentDivision;
-  document.getElementById('divisionBadge').textContent = currentDivision || 'none';
+  renderDivisionTabs();
   updateUrl();
+}
+
+function renderDivisionTabs() {
+  closeTabMenu();
+  const strip = document.getElementById('divisionTabs');
+  strip.innerHTML = '';
+  allDivisions.forEach(function(d) {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (d.id === currentDivision ? ' active' : '');
+    tab.dataset.id = d.id;
+
+    const name = document.createElement('span');
+    name.className = 'tab-name';
+    name.textContent = d.name;
+    name.onclick = function() { switchDivision(d.id); };
+
+    const edit = document.createElement('button');
+    edit.className = 'tab-edit';
+    edit.innerHTML = '&#9998;';
+    edit.title = 'Rename or delete ' + d.name;
+    edit.onclick = function(e) { e.stopPropagation(); openTabMenu(tab, d); };
+
+    tab.appendChild(name);
+    tab.appendChild(edit);
+    strip.appendChild(tab);
+  });
+
+  const add = document.createElement('button');
+  add.className = 'tab-add';
+  add.textContent = '+';
+  add.title = 'Add a division';
+  add.onclick = showAddDivision;
+  strip.appendChild(add);
+}
+
+function closeTabMenu() {
+  const m = document.querySelector('.tab-menu');
+  if (m) m.remove();
+  document.removeEventListener('click', closeTabMenu);
+}
+
+function openTabMenu(tab, d) {
+  const alreadyOpen = document.querySelector('.tab-menu');
+  const wasThisTab = alreadyOpen && alreadyOpen.dataset.id === d.id;
+  closeTabMenu();
+  if (wasThisTab) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'tab-menu';
+  menu.dataset.id = d.id;
+
+  const rename = document.createElement('button');
+  rename.textContent = 'Rename';
+  rename.onclick = function(e) { e.stopPropagation(); closeTabMenu(); startRename(tab, d); };
+
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.textContent = 'Delete this division';
+  del.onclick = function(e) { e.stopPropagation(); closeTabMenu(); deleteDivision(d); };
+
+  menu.appendChild(rename);
+  menu.appendChild(del);
+  tab.appendChild(menu);
+  setTimeout(function() { document.addEventListener('click', closeTabMenu); }, 0);
+}
+
+function startRename(tab, d) {
+  const nameEl = tab.querySelector('.tab-name');
+  const editEl = tab.querySelector('.tab-edit');
+  nameEl.style.display = 'none';
+  if (editEl) editEl.style.display = 'none';
+
+  const input = document.createElement('input');
+  input.className = 'tab-rename-input';
+  input.value = d.name;
+  tab.insertBefore(input, tab.firstChild);
+  input.focus();
+  input.select();
+
+  let done = false;
+  function finish(save) {
+    if (done) return;
+    done = true;
+    const newName = input.value.trim();
+    if (save && newName && newName !== d.name) {
+      commitRename(d.id, newName);
+    } else {
+      renderDivisionTabs();
+    }
+  }
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter') finish(true);
+    else if (e.key === 'Escape') finish(false);
+  };
+  input.onblur = function() { finish(true); };
+}
+
+async function commitRename(id, newName) {
+  try {
+    await api('/api/divisions/' + id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: newName}),
+    });
+    await loadDivisions();
+  } catch (e) {
+    alert(e.message);
+    renderDivisionTabs();
+  }
+}
+
+async function deleteDivision(d) {
+  if (allDivisions.length <= 1) {
+    alert("Can't delete the only remaining division.");
+    return;
+  }
+  if (!confirm('Delete "' + d.name + '"? Its sites, keywords, and results are permanently removed. Past results already downloaded are unaffected.')) return;
+  try {
+    await api('/api/divisions/' + d.id, { method: 'DELETE' });
+    if (currentDivision === d.id) currentDivision = null;
+    await loadDivisions();
+    loadAllForCurrentDivision();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function updateUrl() {
@@ -329,11 +482,12 @@ function updateUrl() {
 }
 
 function switchDivision(id) {
+  if (id === currentDivision) return;
   currentDivision = id;
-  document.getElementById('divisionBadge').textContent = id;
   resultsPage = 1;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = '';
+  renderDivisionTabs();
   updateUrl();
   loadAllForCurrentDivision();
 }
@@ -355,25 +509,6 @@ async function createDivision() {
     hideAddDivision();
     await loadDivisions();
     switchDivision(result.division.id);
-  } catch (e) {
-    alert(e.message);
-  }
-}
-
-async function removeCurrentDivision() {
-  if (!currentDivision) return;
-  const division = allDivisions.find(function(d) { return d.id === currentDivision; });
-  const label = division ? division.name : currentDivision;
-  if (allDivisions.length <= 1) {
-    alert("Can't delete the only remaining division.");
-    return;
-  }
-  if (!confirm('Delete "' + label + '"? Its sites/keywords/schedule stop being used, but past results on disk are kept.')) return;
-  try {
-    await api('/api/divisions/' + currentDivision, { method: 'DELETE' });
-    currentDivision = null;
-    await loadDivisions();
-    loadAllForCurrentDivision();
   } catch (e) {
     alert(e.message);
   }
