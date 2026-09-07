@@ -129,10 +129,16 @@ def load_keywords(division_id):
     return [row["keyword"] for row in res.data]
 
 
+def _clean_keyword(kw):
+    """Trim and collapse internal whitespace so 'soil   sampling' and
+    'soil sampling' are stored and compared as the same keyword."""
+    return re.sub(r"\s+", " ", (kw or "").strip())
+
+
 def add_keyword(division_id, keyword):
-    keyword = keyword.strip()
+    keyword = _clean_keyword(keyword)
     existing = load_keywords(division_id)
-    if keyword.lower() in (k.lower() for k in existing):
+    if not keyword or keyword.lower() in (k.lower() for k in existing):
         return existing
     get_client().table("keywords").insert({"division_id": division_id, "keyword": keyword}).execute()
     return load_keywords(division_id)
@@ -141,22 +147,33 @@ def add_keyword(division_id, keyword):
 def add_keywords_bulk(division_id, keywords):
     """
     Add multiple keywords in one round trip (used by the "add from a file"
-    upload) — skips any already present (case-insensitive) and any
-    duplicates within the batch itself. Returns (all_keywords, added_list).
+    upload). Skips any already in the DB and any repeated within the batch,
+    comparing case- and whitespace-insensitively.
+
+    Returns (all_keywords, added_list, skipped) where skipped is
+    {"already_present": int, "repeated_in_file": int}.
     """
-    existing = load_keywords(division_id)
-    existing_lower = {k.lower() for k in existing}
+    existing_lower = {k.lower() for k in load_keywords(division_id)}
+    seen_in_batch = set()
     new_rows, added = [], []
+    already_present = repeated_in_file = 0
     for kw in keywords:
-        kw = kw.strip()
-        if not kw or kw.lower() in existing_lower:
+        kw = _clean_keyword(kw)
+        if not kw:
             continue
-        existing_lower.add(kw.lower())
-        new_rows.append({"division_id": division_id, "keyword": kw})
-        added.append(kw)
+        key = kw.lower()
+        if key in existing_lower:
+            already_present += 1
+        elif key in seen_in_batch:
+            repeated_in_file += 1
+        else:
+            seen_in_batch.add(key)
+            new_rows.append({"division_id": division_id, "keyword": kw})
+            added.append(kw)
     if new_rows:
         get_client().table("keywords").insert(new_rows).execute()
-    return load_keywords(division_id), added
+    skipped = {"already_present": already_present, "repeated_in_file": repeated_in_file}
+    return load_keywords(division_id), added, skipped
 
 
 def delete_keyword(division_id, keyword):

@@ -718,7 +718,10 @@ async function uploadKeywordsFile() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
     let msg = 'Added ' + data.added.length + ' new keyword' + (data.added.length === 1 ? '' : 's') + ' from ' + file.name + '.';
-    if (data.skipped > 0) msg += ' (' + data.skipped + ' already on the list.)';
+    const notes = [];
+    if (data.skipped_present > 0) notes.push(data.skipped_present + ' already on the list');
+    if (data.skipped_repeat > 0) notes.push(data.skipped_repeat + ' repeated in the file');
+    if (notes.length) msg += ' (' + notes.join(', ') + '.)';
     status.textContent = msg;
     input.value = '';
     loadKeywords();

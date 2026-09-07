@@ -275,8 +275,14 @@ def api_upload_keywords(division_id):
     if not candidates:
         return jsonify({"error": "no usable keyword lines found — each keyword should be on its own line"}), 400
 
-    keywords, added = supabase_store.add_keywords_bulk(division_id, candidates)
-    return jsonify({"ok": True, "keywords": keywords, "added": added, "skipped": len(candidates) - len(added)})
+    keywords, added, skipped = supabase_store.add_keywords_bulk(division_id, candidates)
+    return jsonify({
+        "ok": True,
+        "keywords": keywords,
+        "added": added,
+        "skipped_present": skipped["already_present"],
+        "skipped_repeat": skipped["repeated_in_file"],
+    })
 
 
 @app.route("/api/<division_id>/keywords/<path:keyword>", methods=["DELETE"])
