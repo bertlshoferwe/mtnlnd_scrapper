@@ -509,9 +509,10 @@
     </div>
     <div class="modal-body">
       <div class="row">
-        <input type="text" id="newKeyword" placeholder="Add a keyword or phrase&hellip;" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
+        <input type="text" id="newKeyword" placeholder="Add a keyword or phrase&hellip;" style="flex:1;" oninput="document.getElementById('keywordAddStatus').textContent='';" onkeydown="if(event.key==='Enter') addKeyword();">
         <button class="btn-primary" onclick="addKeyword()">Add</button>
       </div>
+      <div class="status-line" id="keywordAddStatus"></div>
       <div class="adv-toggle" onclick="toggleKeywordUpload()">+ Add a list from a file</div>
       <div class="adv-fields" id="keywordUploadFields">
         <p class="desc" style="margin-bottom:8px;">Upload a Word or PDF document with one keyword or phrase per line, and they'll all be added at once.</p>
@@ -878,11 +879,17 @@ function renderKeywordChips() {
 
 async function addKeyword() {
   const input = document.getElementById('newKeyword');
+  const status = document.getElementById('keywordAddStatus');
   const kw = input.value.trim();
   if (!kw) return;
-  await api('/api/' + currentDivision + '/keywords', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw}) });
-  input.value = '';
-  loadKeywords();
+  status.textContent = '';
+  try {
+    await api('/api/' + currentDivision + '/keywords', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw}) });
+    input.value = '';
+    loadKeywords();
+  } catch (e) {
+    status.textContent = e.message;
+  }
 }
 
 async function deleteKeyword(encodedKw) {

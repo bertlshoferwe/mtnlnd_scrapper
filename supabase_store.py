@@ -130,15 +130,39 @@ def load_keywords(division_id):
 
 
 def _clean_keyword(kw):
-    """Trim and collapse internal whitespace so 'soil   sampling' and
-    'soil sampling' are stored and compared as the same keyword."""
-    return re.sub(r"\s+", " ", (kw or "").strip())
+    """Trim, drop Markdown emphasis/heading marks, and collapse internal
+    whitespace so 'soil   sampling', '**soil sampling**' and 'soil sampling'
+    are stored and compared as the same keyword."""
+    kw = (kw or "").strip()
+    kw = re.sub(r"^#+\s*", "", kw)          # "## Geotextiles" -> "Geotextiles"
+    kw = kw.strip("*_`").strip()            # "**Filter fabric**" -> "Filter fabric"
+    kw = kw.rstrip(":").strip()             # "Erosion control:" -> "Erosion control"
+    return re.sub(r"\s+", " ", kw)
+
+
+def looks_like_section_heading(text):
+    """True for lines that are document structure, not keywords: anything
+    that started with '#', or an ALL-CAPS label of 3+ words like
+    'PRODUCT TYPE / MATERIAL CATEGORY TERMS'. Short all-caps acronyms
+    (GCL, HDPE) are fine. Used for both single adds and file uploads so a
+    pasted outline never becomes a keyword."""
+    if not text:
+        return False
+    if text.lstrip().startswith("#"):
+        return True
+    letters = [c for c in text if c.isalpha()]
+    return bool(letters) and len(text.split()) >= 3 and all(c.isupper() for c in letters)
 
 
 def add_keyword(division_id, keyword):
+    raw = keyword
     keyword = _clean_keyword(keyword)
+    if not keyword:
+        raise ValueError("keyword is required")
+    if looks_like_section_heading(raw) or looks_like_section_heading(keyword):
+        raise ValueError("that looks like a section heading, not a keyword")
     existing = load_keywords(division_id)
-    if not keyword or keyword.lower() in (k.lower() for k in existing):
+    if keyword.lower() in (k.lower() for k in existing):
         return existing
     get_client().table("keywords").insert({"division_id": division_id, "keyword": keyword}).execute()
     return load_keywords(division_id)
@@ -158,8 +182,10 @@ def add_keywords_bulk(division_id, keywords):
     new_rows, added = [], []
     already_present = repeated_in_file = 0
     for kw in keywords:
+        if looks_like_section_heading(kw):
+            continue
         kw = _clean_keyword(kw)
-        if not kw:
+        if not kw or looks_like_section_heading(kw):
             continue
         key = kw.lower()
         if key in existing_lower:

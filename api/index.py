@@ -208,7 +208,10 @@ def api_add_keyword(division_id):
     kw = (data.get("keyword") or "").strip()
     if not kw:
         return jsonify({"error": "keyword is required"}), 400
-    keywords = supabase_store.add_keyword(division_id, kw)
+    try:
+        keywords = supabase_store.add_keyword(division_id, kw)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True, "keywords": keywords})
 
 
@@ -236,27 +239,17 @@ def _lines_to_keywords(text):
     plausibly be a keyword/phrase (rather than a full sentence) dropped."""
     candidates = []
     for line in text.splitlines():
+        raw = line.strip()
         line = line.strip(" \t\u2022\u2023\u25e6\u2043\u2219-–—.").strip()
         line = re.sub(r"^\d+[\.\)]\s*", "", line)  # strip leading "1. " / "2) " numbering
         line = line.strip("*_`").strip()           # strip Markdown emphasis / code ticks
         line = line.rstrip(":").strip()            # strip a trailing "Label:" colon
         if not line or len(line) > MAX_KEYWORD_LENGTH:
             continue
-        if _looks_like_heading(line):
+        if supabase_store.looks_like_section_heading(raw) or supabase_store.looks_like_section_heading(line):
             continue
         candidates.append(line)
     return candidates
-
-
-def _looks_like_heading(line):
-    """True for lines that are document structure, not keywords: Markdown
-    headings ('# ...'), and ALL-CAPS section labels of 3+ words like
-    'PRODUCT TYPE / MATERIAL CATEGORY TERMS'. Short all-caps acronyms
-    (GCL, HDPE) are kept."""
-    if line.startswith("#"):
-        return True
-    letters = [c for c in line if c.isalpha()]
-    return bool(letters) and len(line.split()) >= 3 and all(c.isupper() for c in letters)
 
 
 @app.route("/api/<division_id>/keywords/upload", methods=["POST"])
