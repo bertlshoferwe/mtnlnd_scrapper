@@ -368,24 +368,60 @@ def api_run_now(division_id):
                      "project — Run Now can't trigger the GitHub Actions workflow. See README.md."
         }), 500
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches"
+    gh_headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    base = f"https://api.github.com/repos/{owner}/{repo}"
+    url = f"{base}/actions/workflows/{workflow_file}/dispatches"
     try:
         resp = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-            },
+            url, headers=gh_headers,
             json={"ref": ref, "inputs": {"division_id": division_id}},
             timeout=8,
         )
     except requests.RequestException as e:
         return jsonify({"error": f"Failed to reach GitHub: {e}"}), 502
 
-    if resp.status_code >= 300:
-        return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 502
+    if resp.status_code < 300:
+        return jsonify({"ok": True})
 
-    return jsonify({"ok": True})
+    # Non-2xx: figure out *which* part is wrong so the message is actionable.
+    if resp.status_code == 404:
+        detail = _diagnose_dispatch_404(base, workflow_file, gh_headers)
+        return jsonify({"error": (
+            f"GitHub couldn't run the workflow (404). Resolved to "
+            f"owner='{owner}', repo='{repo}', workflow='{workflow_file}', ref='{ref}'. {detail}"
+        )}), 502
+
+    return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 502
+
+
+def _diagnose_dispatch_404(base, workflow_file, gh_headers):
+    """A workflow_dispatch 404 can mean: repo not found / token can't see it,
+    the workflow file isn't on the repo, or its name is misspelled. Probe to
+    say which."""
+    try:
+        r = requests.get(base, headers=gh_headers, timeout=6)
+        if r.status_code == 404:
+            return ("The repo isn't visible to this token — check GITHUB_OWNER/GITHUB_REPO "
+                    "and that GITHUB_TOKEN has access (a fine-grained token needs this repo "
+                    "selected, with Actions: read & write).")
+        if r.status_code == 401:
+            return "GITHUB_TOKEN is invalid or expired."
+        wr = requests.get(f"{base}/actions/workflows", headers=gh_headers, timeout=6)
+        if wr.ok:
+            names = sorted(w["path"].split("/")[-1] for w in wr.json().get("workflows", []))
+            if workflow_file not in names:
+                have = ", ".join(names) or "none"
+                return (f"No workflow file named '{workflow_file}' on the default branch. "
+                        f"Workflows present: {have}. Set GITHUB_WORKFLOW_FILE to one of those.")
+            return ("The workflow exists but the dispatch still 404'd — check GITHUB_REF names a "
+                    "real branch and GITHUB_TOKEN has Actions: write.")
+    except requests.RequestException:
+        pass
+    return "Check GITHUB_OWNER, GITHUB_REPO, GITHUB_WORKFLOW_FILE, GITHUB_REF and the token's scopes."
 
 
 # ---------------------------------------------------------------------------
