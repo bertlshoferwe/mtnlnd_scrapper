@@ -564,12 +564,18 @@ let scanRunning = false;
 let siteCount = 0;
 let keywordCount = 0;
 
+let runRequestedAt = 0;
+function runPending() {
+  return runRequestedAt && (Date.now() - runRequestedAt < 180000);
+}
+
 function refreshRunNowButton() {
   const btn = document.getElementById('runNowBtn');
   if (!btn) return;
   const ready = siteCount > 0 && keywordCount > 0;
-  btn.disabled = scanRunning || !ready;
-  btn.title = scanRunning
+  btn.disabled = scanRunning || runPending() || !ready;
+  btn.title = runPending() ? 'Scan requested — waiting for GitHub Actions to pick it up'
+    : scanRunning
     ? 'A scan is already running'
     : (ready ? '' : 'Add at least one site and one keyword first');
 }
@@ -965,11 +971,17 @@ async function loadStatus() {
   const detail = document.getElementById('statusDetail');
 
   scanRunning = !!s.running;
+  if (s.running) runRequestedAt = 0;
   refreshRunNowButton();
 
   if (s.running) {
     dot.className = 'status-dot running';
     text.textContent = 'Scan running\u2026';
+  } else if (runPending()) {
+    dot.className = 'status-dot running';
+    text.textContent = 'Scan requested\u2026';
+    detail.textContent = 'GitHub Actions is starting the scan \u2014 this can take a minute to show as running.';
+    return;
   } else {
     if (s.last_result === 'success') {
       dot.className = 'status-dot success';
@@ -991,10 +1003,29 @@ async function loadStatus() {
 }
 
 async function runNow() {
+  const btn = document.getElementById('runNowBtn');
+  const text = document.getElementById('statusText');
+  const dot = document.getElementById('statusDot');
+  btn.disabled = true;
+  text.textContent = 'Requesting scan…';
   try {
     await api('/api/' + currentDivision + '/run-now', { method: 'POST' });
-    loadStatus();
+    runRequestedAt = Date.now();
+    dot.className = 'status-dot running';
+    text.textContent = 'Scan requested…';
+    document.getElementById('statusDetail').textContent =
+      'GitHub Actions is starting the scan — this can take a minute to show as running.';
+    refreshRunNowButton();
+    // Poll faster than the normal 4s loop while we wait for the runner to boot.
+    let tries = 0;
+    const iv = setInterval(function () {
+      if (++tries > 40 || scanRunning) { clearInterval(iv); return; }
+      loadStatus();
+      loadResultsInfo();
+    }, 3000);
   } catch (e) {
+    text.textContent = 'Idle';
+    refreshRunNowButton();
     alert(e.message);
   }
 }
