@@ -203,8 +203,11 @@ def add_keywords_bulk(division_id, keywords):
 
 
 def delete_keyword(division_id, keyword):
+    # ilike gives case-insensitive matching; escape LIKE metacharacters so a
+    # keyword containing % or _ deletes only itself, not everything.
+    pattern = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     get_client().table("keywords").delete() \
-        .eq("division_id", division_id).ilike("keyword", keyword).execute()
+        .eq("division_id", division_id).ilike("keyword", pattern).execute()
     return load_keywords(division_id)
 
 

@@ -857,12 +857,23 @@ function renderKeywordChips() {
   shown.forEach(function(kw) {
     const chip = document.createElement('div');
     chip.className = 'chip';
-    let label = escapeHtml(kw);
+
+    const span = document.createElement('span');
     if (q) {
       const i = kw.toLowerCase().indexOf(q);
-      label = escapeHtml(kw.slice(0, i)) + '<mark>' + escapeHtml(kw.slice(i, i + q.length)) + '</mark>' + escapeHtml(kw.slice(i + q.length));
+      span.innerHTML = escapeHtml(kw.slice(0, i)) + '<mark>' + escapeHtml(kw.slice(i, i + q.length)) + '</mark>' + escapeHtml(kw.slice(i + q.length));
+    } else {
+      span.textContent = kw;
     }
-    chip.innerHTML = '<span>' + label + '</span><button title="Remove" onclick="deleteKeyword(\'' + encodeURIComponent(kw) + '\')">&times;</button>';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Remove';
+    btn.innerHTML = '&times;';
+    btn.addEventListener('click', function() { deleteKeyword(kw); });
+
+    chip.appendChild(span);
+    chip.appendChild(btn);
     chips.appendChild(chip);
   });
 
@@ -892,9 +903,13 @@ async function addKeyword() {
   }
 }
 
-async function deleteKeyword(encodedKw) {
-  await api('/api/' + currentDivision + '/keywords/' + encodedKw, { method: 'DELETE' });
-  loadKeywords();
+async function deleteKeyword(kw) {
+  try {
+    await api('/api/' + currentDivision + '/keywords?keyword=' + encodeURIComponent(kw), { method: 'DELETE' });
+    loadKeywords();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function clearAllKeywords() {

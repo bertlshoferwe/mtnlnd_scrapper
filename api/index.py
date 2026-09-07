@@ -21,8 +21,7 @@ Routes:
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
-  DEL  /api/<division_id>/keywords            remove every keyword ("clear all")
-  DEL  /api/<division_id>/keywords/<keyword>  remove a keyword
+  DEL  /api/<division_id>/keywords            remove one keyword (?keyword=…) or all of them
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
@@ -296,20 +295,19 @@ def api_upload_keywords(division_id):
 
 
 @app.route("/api/<division_id>/keywords", methods=["DELETE"])
-def api_clear_keywords(division_id):
+def api_delete_keywords(division_id):
+    """?keyword=<term> removes that one keyword; with no query param, clears
+    every keyword for the division. The term goes in the query string, not
+    the path, so slashes / punctuation / ® ™ in keywords survive the round
+    trip (a <path:> segment mangles those on some hosts)."""
     _, err = _require_division(division_id)
     if err:
         return err
-    keywords = supabase_store.clear_keywords(division_id)
-    return jsonify({"ok": True, "keywords": keywords})
-
-
-@app.route("/api/<division_id>/keywords/<path:keyword>", methods=["DELETE"])
-def api_delete_keyword(division_id, keyword):
-    _, err = _require_division(division_id)
-    if err:
-        return err
-    keywords = supabase_store.delete_keyword(division_id, keyword)
+    keyword = request.args.get("keyword")
+    if keyword is not None:
+        keywords = supabase_store.delete_keyword(division_id, keyword)
+    else:
+        keywords = supabase_store.clear_keywords(division_id)
     return jsonify({"ok": True, "keywords": keywords})
 
 
