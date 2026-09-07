@@ -996,9 +996,15 @@ async function loadStatus() {
   }
 
   let detailText = '';
-  if (s.last_started) detailText += 'Last started: ' + new Date(s.last_started).toLocaleString() + '. ';
-  if (s.last_finished) detailText += 'Finished: ' + new Date(s.last_finished).toLocaleString() + '. ';
-  if (s.last_result && s.last_result.startsWith('error')) detailText += s.last_result;
+  const lastRun = s.last_finished || s.last_started;
+  if (lastRun) {
+    detailText = 'Last run ' + new Date(lastRun).toLocaleString([], {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+  }
+  if (s.last_result && s.last_result.startsWith('error')) {
+    detailText += (detailText ? ' — ' : '') + s.last_result;
+  }
   detail.textContent = detailText;
 }
 
