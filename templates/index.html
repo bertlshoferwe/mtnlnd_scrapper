@@ -6,65 +6,146 @@
 <title>Bid Scout</title>
 <style>
   :root {
-    --bg: #f6f7f9;
-    --card: #ffffff;
-    --border: #e2e5ea;
-    --text: #1a1d23;
-    --muted: #6b7280;
-    --accent: #2563eb;
-    --accent-hover: #1d4ed8;
-    --danger: #dc2626;
-    --danger-hover: #b91c1c;
-    --success: #16a34a;
-    --radius: 10px;
+    color-scheme: light;
+    --bg: #f2f4f6;
+    --surface: #ffffff;
+    --surface-2: #eceef2;
+    --card: var(--surface);            /* legacy alias, still used widely */
+    --border: #d6dae1;
+    --border-strong: #c0c6d0;
+    --text: #15202e;
+    --muted: #5a6472;
+    --accent: #14568f;
+    --accent-hover: #0f4272;
+    --accent-contrast: #ffffff;
+    --accent-soft: #e3edf6;
+    --accent-soft-text: #124a80;
+    --danger: #c23b2e;
+    --danger-hover: #9f2f24;
+    --danger-soft: #f8e9e7;
+    --success: #1f7a43;
+    --warning: #b26b00;
+    --warning-soft: #f5ecd9;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --shadow-sm: 0 1px 2px rgba(16,26,40,.06), 0 1px 3px rgba(16,26,40,.04);
+    --shadow-md: 0 8px 24px rgba(16,26,40,.12);
+    --shadow-lg: 0 24px 64px rgba(16,26,40,.30);
+    --overlay: rgba(14,20,30,.5);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0d131e;
+      --surface: #151d2a;
+      --surface-2: #1e2736;
+      --border: #2a3444;
+      --border-strong: #3b4658;
+      --text: #e5e9f0;
+      --muted: #98a2b1;
+      --accent: #4c93d8;
+      --accent-hover: #6aa9e4;
+      --accent-contrast: #08131f;
+      --accent-soft: #16324c;
+      --accent-soft-text: #a9cded;
+      --danger: #e0705f;
+      --danger-hover: #ec8776;
+      --danger-soft: #37201c;
+      --success: #57bb80;
+      --warning: #d49b52;
+      --warning-soft: #33291a;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+      --shadow-md: 0 8px 24px rgba(0,0,0,.5);
+      --shadow-lg: 0 24px 64px rgba(0,0,0,.6);
+      --overlay: rgba(4,8,14,.62);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d131e;
+    --surface: #151d2a;
+    --surface-2: #1e2736;
+    --border: #2a3444;
+    --border-strong: #3b4658;
+    --text: #e5e9f0;
+    --muted: #98a2b1;
+    --accent: #4c93d8;
+    --accent-hover: #6aa9e4;
+    --accent-contrast: #08131f;
+    --accent-soft: #16324c;
+    --accent-soft-text: #a9cded;
+    --danger: #e0705f;
+    --danger-hover: #ec8776;
+    --danger-soft: #37201c;
+    --success: #57bb80;
+    --warning: #d49b52;
+    --warning-soft: #33291a;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-md: 0 8px 24px rgba(0,0,0,.5);
+    --shadow-lg: 0 24px 64px rgba(0,0,0,.6);
+    --overlay: rgba(4,8,14,.62);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
-  h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; }
-  .subtitle { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .topbar-accent { height: 4px; background: var(--accent); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 30px 20px 80px; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  h1 { font-size: 23px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 5px; text-transform: uppercase; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0; max-width: 62ch; }
+  .brandrule { height: 3px; width: 46px; background: var(--accent); margin: 14px 0 20px; }
+  .theme-toggle {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .theme-toggle:hover { color: var(--text); border-color: var(--border-strong); }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 20px 22px;
     margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
   }
-  .card h2 { font-size: 15px; font-weight: 650; margin: 0 0 4px; }
+  .card h2 { font-size: 13px; font-weight: 700; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
   .card .desc { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  input[type=text], input[type=url], input[type=number] {
-    border: 1px solid var(--border);
-    border-radius: 7px;
+  input[type=text], input[type=url], input[type=number], input[type=file] {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
     font-size: 14px;
     font-family: inherit;
-    background: #fbfcfd;
+    background: var(--surface);
     color: var(--text);
   }
   input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   button {
     border: none;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     padding: 8px 14px;
     font-size: 14px;
-    font-weight: 550;
+    font-weight: 600;
     cursor: pointer;
     font-family: inherit;
   }
-  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary { background: var(--accent); color: var(--accent-contrast); }
   .btn-primary:hover { background: var(--accent-hover); }
-  .btn-primary:disabled { background: #93b4f0; cursor: not-allowed; }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
   .btn-danger { background: transparent; color: var(--danger); padding: 4px 8px; font-size: 13px; }
-  .btn-danger:hover { background: #fef2f2; }
-  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-  .btn-ghost:hover { background: #f3f4f6; }
+  .btn-danger:hover { background: var(--danger-soft); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
+  .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
@@ -78,18 +159,18 @@
   .tag {
     display: inline-block; font-size: 11px; font-weight: 600;
     padding: 2px 7px; border-radius: 999px; margin-right: 5px;
-    background: #eef2ff; color: #4338ca;
+    background: var(--accent-soft); color: var(--accent-soft-text);
   }
-  .tag.tag-tabs { background: #fef3c7; color: #92400e; }
+  .tag.tag-tabs { background: var(--warning-soft); color: var(--warning); }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .chip {
     display: flex; align-items: center; gap: 6px;
-    background: #eef2ff; color: #3730a3;
+    background: var(--accent-soft); color: var(--accent-soft-text);
     border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 13px; font-weight: 550;
   }
   .chip button {
-    background: transparent; color: #6366f1; border: none; padding: 0 4px;
+    background: transparent; color: var(--accent); border: none; padding: 0 4px;
     font-size: 15px; line-height: 1; cursor: pointer;
   }
   .chip button:hover { color: var(--danger); }
@@ -97,8 +178,8 @@
   .empty { color: var(--muted); font-size: 13.5px; font-style: italic; padding: 6px 0; }
 
   .status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 7px; }
-  .status-dot.idle { background: #9ca3af; }
-  .status-dot.running { background: #f59e0b; animation: pulse 1.2s infinite; }
+  .status-dot.idle { background: var(--muted); }
+  .status-dot.running { background: var(--warning); animation: pulse 1.2s infinite; }
   .status-dot.success { background: var(--success); }
   .status-dot.error { background: var(--danger); }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
@@ -110,7 +191,7 @@
   .adv-fields .row { margin-bottom: 8px; }
   .adv-fields label { font-size: 12.5px; color: var(--muted); width: 130px; flex-shrink: 0; }
 
-  select { border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 14px; font-family: inherit; background: #fbfcfd; color: var(--text); }
+  select { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 14px; font-family: inherit; background: var(--surface); color: var(--text); }
 
   /* Division folder tabs */
   .tabs {
@@ -121,7 +202,7 @@
   .tab {
     position: relative;
     display: flex; align-items: center; gap: 4px;
-    background: #eceef1; color: var(--muted);
+    background: var(--surface-2); color: var(--muted);
     border: 1px solid var(--border); border-bottom: none;
     border-radius: 9px 9px 0 0;
     padding: 8px 10px 8px 13px;
@@ -130,7 +211,7 @@
     cursor: pointer; user-select: none;
     transition: background .12s, color .12s;
   }
-  .tab:hover { background: #e2e5ea; }
+  .tab:hover { background: var(--border); }
   .tab.active {
     background: var(--card); color: var(--text);
     border-color: var(--accent);
@@ -162,7 +243,7 @@
   .tab-menu {
     position: absolute; top: 100%; left: 0; margin-top: 4px;
     background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.12);
+    box-shadow: var(--shadow-md);
     padding: 4px; z-index: 20; min-width: 170px;
   }
   .tab-menu button {
@@ -184,7 +265,7 @@
     padding: 18px 20px; cursor: pointer;
     transition: border-color .12s, box-shadow .12s;
   }
-  .summary-card:hover { border-color: var(--accent); box-shadow: 0 3px 12px rgba(37,99,235,.09); }
+  .summary-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
   .summary-card.status-card { cursor: default; }
   .summary-card.status-card:hover { border-color: var(--border); box-shadow: none; }
   .summary-card #runNowBtn { margin-top: auto; }
@@ -197,14 +278,15 @@
 
   /* Modals */
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(17,20,26,.45);
+    position: fixed; inset: 0; background: var(--overlay);
     display: none; align-items: flex-start; justify-content: center;
     padding: 56px 16px; z-index: 100; overflow-y: auto;
   }
   .modal-overlay.open { display: flex; }
   .modal {
-    background: var(--card); border-radius: 12px; width: 100%; max-width: 620px;
-    box-shadow: 0 24px 64px rgba(0,0,0,.28);
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    width: 100%; max-width: 620px;
+    box-shadow: var(--shadow-lg);
   }
   .modal-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
@@ -218,13 +300,34 @@
   }
   .modal-close:hover { color: var(--text); }
   .modal-body { padding: 18px 22px 22px; }
+
+  .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 16px; flex: 1; }
+  .stat-tile .stat-label { font-size: 12px; color: var(--muted); }
+  .stat-tile .stat-value { font-size: 20px; font-weight: 700; }
+  .callout {
+    background: var(--accent-soft); color: var(--accent-soft-text);
+    border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .results-table th { padding: 8px; font-weight: 700; background: var(--surface-2); text-align: left; }
+  .results-table td { padding: 8px; vertical-align: top; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
+<div class="topbar-accent"></div>
 <div class="wrap">
 
-  <h1>Bid Scout</h1>
-  <p class="subtitle">Scans planning sites daily for new construction plans and flags the ones worth pursuing, based on your keywords. Each division has its own sites and keywords.</p>
+  <div class="topbar">
+    <div>
+      <h1>Bid Scout</h1>
+      <p class="subtitle">Scans planning sites daily for new construction plans and flags the ones worth pursuing, based on your keywords. Each division has its own sites and keywords.</p>
+    </div>
+    <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
+      <span id="themeToggleIcon">◐</span><span id="themeToggleLabel">Auto</span>
+    </button>
+  </div>
+  <div class="brandrule"></div>
 
   <div class="tabs" id="divisionTabs"></div>
 
@@ -272,17 +375,17 @@
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 14px;">
-      <div style="background: var(--bg); border-radius: 8px; padding: 10px 16px; flex: 1;">
-        <div style="font-size: 12px; color: var(--muted);">Documents scanned</div>
-        <div style="font-size: 20px; font-weight: 650;" id="statDocs">0</div>
+      <div class="stat-tile">
+        <div class="stat-label">Documents scanned</div>
+        <div class="stat-value" id="statDocs">0</div>
       </div>
-      <div style="background: var(--bg); border-radius: 8px; padding: 10px 16px; flex: 1;">
-        <div style="font-size: 12px; color: var(--muted);">Matches found</div>
-        <div style="font-size: 20px; font-weight: 650;" id="statMatches">0</div>
+      <div class="stat-tile">
+        <div class="stat-label">Matches found</div>
+        <div class="stat-value" id="statMatches">0</div>
       </div>
     </div>
 
-    <div id="summaryCallout" style="display:none; background:#eef2ff; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#3730a3; line-height:1.5;"></div>
+    <div id="summaryCallout" class="callout" style="display:none;"></div>
 
     <div class="row" style="margin-bottom: 10px;">
       <input type="text" id="resultsSearch" placeholder="Search site or filename" style="flex:1;">
@@ -296,13 +399,13 @@
     </div>
 
     <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <table class="results-table">
         <thead>
-          <tr style="background: var(--bg); text-align:left;">
-            <th style="padding:8px; font-weight:650;">Date</th>
-            <th style="padding:8px; font-weight:650;">Site / document</th>
-            <th style="padding:8px; font-weight:650;">Keywords</th>
-            <th style="padding:8px; font-weight:650;">Status</th>
+          <tr>
+            <th>Date</th>
+            <th>Site / document</th>
+            <th>Keywords</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody id="resultsTableBody"></tbody>
@@ -393,6 +496,26 @@
 </div>
 
 <script>
+/* ---- Theme: light / dark / auto ------------------------------------------
+   Every page load starts on "auto" (follow the OS). The toggle overrides
+   it for the current view only — it is not persisted. */
+let themeChoice = 'auto';
+function applyThemeChoice(choice) {
+  themeChoice = choice;
+  const root = document.documentElement;
+  if (choice === 'light' || choice === 'dark') root.setAttribute('data-theme', choice);
+  else root.removeAttribute('data-theme');
+  const icons = { auto: '◐', light: '☀', dark: '☾' };
+  const labels = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+  document.getElementById('themeToggleIcon').textContent = icons[choice];
+  document.getElementById('themeToggleLabel').textContent = labels[choice];
+}
+function cycleTheme() {
+  const order = ['auto', 'light', 'dark'];
+  applyThemeChoice(order[(order.indexOf(themeChoice) + 1) % order.length]);
+}
+applyThemeChoice('auto');
+
 let currentDivision = null;
 let allDivisions = [];
 let scanRunning = false;
