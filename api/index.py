@@ -62,6 +62,22 @@ COLUMN_HEADERS = [
 DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC", "08:00 UTC")
 
 
+def _schedule_hm(text):
+    """Pull an "HH:MM" (24h, UTC) out of DISPLAY_SCHEDULE_UTC so the page can
+    re-render it in the visitor's local time. Returns None if there's no
+    parseable time, in which case the page just shows the raw string."""
+    m = re.search(r"(\d{1,2}):(\d{2})", text or "")
+    if not m:
+        return None
+    h, mn = int(m.group(1)), int(m.group(2))
+    if 0 <= h < 24 and 0 <= mn < 60:
+        return f"{h:02d}:{mn:02d}"
+    return None
+
+
+SCHEDULE_UTC_HM = _schedule_hm(DISPLAY_SCHEDULE_UTC)
+
+
 def _require_division(division_id):
     division = supabase_store.get_division(division_id)
     if division is None:
@@ -75,7 +91,11 @@ def _require_division(division_id):
 
 @app.route("/")
 def index():
-    return render_template("index.html", display_schedule=DISPLAY_SCHEDULE_UTC)
+    return render_template(
+        "index.html",
+        display_schedule=DISPLAY_SCHEDULE_UTC,
+        schedule_utc_hm=SCHEDULE_UTC_HM or "",
+    )
 
 
 # ---------------------------------------------------------------------------

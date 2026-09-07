@@ -251,7 +251,7 @@
         <span class="summary-title">Sites</span>
         <span class="summary-count" id="sitesCount">&ndash;</span>
       </div>
-      <span class="summary-sub">Web pages scanned daily around <strong>{{ display_schedule }}</strong>.</span>
+      <span class="summary-sub">Web pages scanned daily around <strong class="local-schedule" data-utc="{{ schedule_utc_hm }}">{{ display_schedule }}</strong>.</span>
       <span class="summary-manage">Manage sites &rarr;</span>
     </button>
     <button class="summary-card" onclick="openModal('keywords')">
@@ -327,7 +327,7 @@
     <div class="modal-header">
       <div>
         <h2>Sites</h2>
-        <p class="desc">The web pages checked every day for new construction plans. Scanned daily around <strong>{{ display_schedule }}</strong>.</p>
+        <p class="desc">The web pages checked every day for new construction plans. Scanned daily around <strong class="local-schedule" data-utc="{{ schedule_utc_hm }}">{{ display_schedule }}</strong>.</p>
       </div>
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
@@ -896,7 +896,22 @@ async function loadAllForCurrentDivision() {
   await Promise.all([loadSites(), loadKeywords(), loadStatus(), loadResultsInfo()]);
 }
 
+function localizeSchedule() {
+  document.querySelectorAll('.local-schedule[data-utc]').forEach(function(el) {
+    const hm = (el.getAttribute('data-utc') || '').split(':');
+    const h = parseInt(hm[0], 10), m = parseInt(hm[1], 10);
+    if (isNaN(h) || isNaN(m)) return;  // no parseable time — leave the raw string
+    const now = new Date();
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m));
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const tz = d.toLocaleTimeString([], { timeZoneName: 'short' }).split(' ').pop();
+    el.textContent = tz ? time + ' ' + tz : time;
+    el.title = el.getAttribute('data-utc') + ' UTC';
+  });
+}
+
 async function init() {
+  localizeSchedule();
   await loadDivisions();
   await loadAllForCurrentDivision();
   setInterval(function() { loadStatus(); loadResultsInfo(); }, 4000);
