@@ -182,6 +182,12 @@ def delete_keyword(division_id, keyword):
     return load_keywords(division_id)
 
 
+def clear_keywords(division_id):
+    """Remove every keyword for a division (the dashboard's 'Clear all')."""
+    get_client().table("keywords").delete().eq("division_id", division_id).execute()
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Scan runs (status tracking)
 # ---------------------------------------------------------------------------

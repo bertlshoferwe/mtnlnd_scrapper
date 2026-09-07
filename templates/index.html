@@ -306,10 +306,13 @@
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
     width: 100%; max-width: 620px;
     box-shadow: var(--shadow-lg);
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - 96px);
   }
   .modal-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
     padding: 20px 22px 14px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .modal-header h2 { margin: 0; font-size: 16px; font-weight: 650; }
   .modal-header .desc { margin: 4px 0 0; }
@@ -318,7 +321,18 @@
     color: var(--muted); cursor: pointer; padding: 0 2px; flex-shrink: 0;
   }
   .modal-close:hover { color: var(--text); }
-  .modal-body { padding: 18px 22px 22px; }
+  .modal-body { padding: 18px 22px 22px; overflow-y: auto; }
+
+  .kw-toolbar { display: flex; gap: 8px; align-items: center; margin: 16px 0 8px; }
+  .kw-scroll {
+    max-height: 42vh; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-2); padding: 12px;
+  }
+  .kw-scroll .chips { margin-bottom: 0; }
+  .kw-scroll .empty { padding: 2px 0; }
+  .kw-count { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .chip mark { background: var(--accent); color: var(--accent-contrast); border-radius: 2px; padding: 0 1px; }
 
   .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 16px; flex: 1; }
   .stat-tile .stat-label { font-size: 12px; color: var(--muted); }
@@ -494,10 +508,8 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="chips" id="keywordChips"></div>
-      <div class="empty" id="keywordsEmpty" style="display:none;">No keywords yet &mdash; add one below.</div>
       <div class="row">
-        <input type="text" id="newKeyword" placeholder="e.g. prevailing wage" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
+        <input type="text" id="newKeyword" placeholder="Add a keyword or phrase&hellip;" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
         <button class="btn-primary" onclick="addKeyword()">Add</button>
       </div>
       <div class="adv-toggle" onclick="toggleKeywordUpload()">+ Add a list from a file</div>
@@ -509,6 +521,17 @@
         </div>
         <div class="status-line" id="keywordsUploadStatus"></div>
       </div>
+
+      <div class="kw-toolbar">
+        <input type="text" id="keywordFilter" placeholder="Filter keywords&hellip;" oninput="renderKeywordChips()" style="flex:1;">
+        <button class="btn-danger" id="clearKeywordsBtn" onclick="clearAllKeywords()">Clear all</button>
+      </div>
+      <div class="kw-scroll" id="keywordScroll">
+        <div class="chips" id="keywordChips"></div>
+        <div class="empty" id="keywordsEmpty" style="display:none;">No keywords yet &mdash; add one above.</div>
+        <div class="empty" id="keywordsNoMatch" style="display:none;">No keywords match that filter.</div>
+      </div>
+      <div class="kw-count" id="keywordCountLine"></div>
     </div>
   </div>
 </div>
@@ -731,6 +754,7 @@ function switchDivision(id) {
   resultsPage = 1;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = '';
+  document.getElementById('keywordFilter').value = '';
   renderDivisionTabs();
   updateUrl();
   loadAllForCurrentDivision();
@@ -808,21 +832,48 @@ async function deleteSite(siteId) {
   loadSites();
 }
 
+let allKeywords = [];
+
 async function loadKeywords() {
-  const keywords = await api('/api/' + currentDivision + '/keywords');
-  const chips = document.getElementById('keywordChips');
-  const empty = document.getElementById('keywordsEmpty');
-  chips.innerHTML = '';
-  empty.style.display = keywords.length ? 'none' : 'block';
-  document.getElementById('keywordsCount').textContent = keywords.length;
-  keywordCount = keywords.length;
+  allKeywords = await api('/api/' + currentDivision + '/keywords');
+  document.getElementById('keywordsCount').textContent = allKeywords.length;
+  keywordCount = allKeywords.length;
   refreshRunNowButton();
-  keywords.forEach(function(kw) {
+  renderKeywordChips();
+}
+
+function renderKeywordChips() {
+  const chips = document.getElementById('keywordChips');
+  const emptyEl = document.getElementById('keywordsEmpty');
+  const noMatchEl = document.getElementById('keywordsNoMatch');
+  const countLine = document.getElementById('keywordCountLine');
+  const filterInput = document.getElementById('keywordFilter');
+  const q = (filterInput.value || '').trim().toLowerCase();
+
+  const shown = q ? allKeywords.filter(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; }) : allKeywords;
+
+  chips.innerHTML = '';
+  shown.forEach(function(kw) {
     const chip = document.createElement('div');
     chip.className = 'chip';
-    chip.innerHTML = '<span>' + escapeHtml(kw) + '</span><button onclick="deleteKeyword(\'' + encodeURIComponent(kw) + '\')">&times;</button>';
+    let label = escapeHtml(kw);
+    if (q) {
+      const i = kw.toLowerCase().indexOf(q);
+      label = escapeHtml(kw.slice(0, i)) + '<mark>' + escapeHtml(kw.slice(i, i + q.length)) + '</mark>' + escapeHtml(kw.slice(i + q.length));
+    }
+    chip.innerHTML = '<span>' + label + '</span><button title="Remove" onclick="deleteKeyword(\'' + encodeURIComponent(kw) + '\')">&times;</button>';
     chips.appendChild(chip);
   });
+
+  emptyEl.style.display = allKeywords.length ? 'none' : 'block';
+  noMatchEl.style.display = (allKeywords.length && !shown.length) ? 'block' : 'none';
+  document.getElementById('clearKeywordsBtn').style.display = allKeywords.length ? '' : 'none';
+  filterInput.style.display = allKeywords.length > 8 ? '' : 'none';
+
+  const n = allKeywords.length;
+  if (!n) countLine.textContent = '';
+  else if (q) countLine.textContent = shown.length + ' of ' + n + ' keyword' + (n === 1 ? '' : 's') + ' match';
+  else countLine.textContent = n + ' keyword' + (n === 1 ? '' : 's');
 }
 
 async function addKeyword() {
@@ -837,6 +888,18 @@ async function addKeyword() {
 async function deleteKeyword(encodedKw) {
   await api('/api/' + currentDivision + '/keywords/' + encodedKw, { method: 'DELETE' });
   loadKeywords();
+}
+
+async function clearAllKeywords() {
+  if (!allKeywords.length) return;
+  if (!confirm('Remove all ' + allKeywords.length + ' keywords from this division? This cannot be undone.')) return;
+  try {
+    await api('/api/' + currentDivision + '/keywords', { method: 'DELETE' });
+    document.getElementById('keywordFilter').value = '';
+    loadKeywords();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function toggleKeywordUpload() {

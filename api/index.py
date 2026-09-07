@@ -21,6 +21,7 @@ Routes:
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
+  DEL  /api/<division_id>/keywords            remove every keyword ("clear all")
   DEL  /api/<division_id>/keywords/<keyword>  remove a keyword
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
@@ -237,9 +238,25 @@ def _lines_to_keywords(text):
     for line in text.splitlines():
         line = line.strip(" \t\u2022\u2023\u25e6\u2043\u2219-–—.").strip()
         line = re.sub(r"^\d+[\.\)]\s*", "", line)  # strip leading "1. " / "2) " numbering
-        if line and len(line) <= MAX_KEYWORD_LENGTH:
-            candidates.append(line)
+        line = line.strip("*_`").strip()           # strip Markdown emphasis / code ticks
+        line = line.rstrip(":").strip()            # strip a trailing "Label:" colon
+        if not line or len(line) > MAX_KEYWORD_LENGTH:
+            continue
+        if _looks_like_heading(line):
+            continue
+        candidates.append(line)
     return candidates
+
+
+def _looks_like_heading(line):
+    """True for lines that are document structure, not keywords: Markdown
+    headings ('# ...'), and ALL-CAPS section labels of 3+ words like
+    'PRODUCT TYPE / MATERIAL CATEGORY TERMS'. Short all-caps acronyms
+    (GCL, HDPE) are kept."""
+    if line.startswith("#"):
+        return True
+    letters = [c for c in line if c.isalpha()]
+    return bool(letters) and len(line.split()) >= 3 and all(c.isupper() for c in letters)
 
 
 @app.route("/api/<division_id>/keywords/upload", methods=["POST"])
@@ -283,6 +300,15 @@ def api_upload_keywords(division_id):
         "skipped_present": skipped["already_present"],
         "skipped_repeat": skipped["repeated_in_file"],
     })
+
+
+@app.route("/api/<division_id>/keywords", methods=["DELETE"])
+def api_clear_keywords(division_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    keywords = supabase_store.clear_keywords(division_id)
+    return jsonify({"ok": True, "keywords": keywords})
 
 
 @app.route("/api/<division_id>/keywords/<path:keyword>", methods=["DELETE"])
