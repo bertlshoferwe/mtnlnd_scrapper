@@ -173,6 +173,47 @@
   .tab-menu button:hover { background: var(--bg); }
   .tab-menu button.danger { color: var(--danger); }
   .tab-menu button.danger:hover { background: #fef2f2; }
+
+  /* Summary buttons that open modals */
+  .summary-grid { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+  .summary-card {
+    flex: 1; min-width: 220px;
+    display: flex; flex-direction: column; gap: 6px;
+    text-align: left; font-family: inherit;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .summary-card:hover { border-color: var(--accent); box-shadow: 0 3px 12px rgba(37,99,235,.09); }
+  .summary-card .summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .summary-card .summary-title { font-size: 15px; font-weight: 650; color: var(--text); }
+  .summary-card .summary-count { font-size: 22px; font-weight: 650; color: var(--text); line-height: 1; }
+  .summary-card .summary-sub { font-size: 12.5px; color: var(--muted); }
+  .summary-card .summary-manage { font-size: 12.5px; font-weight: 600; color: var(--accent); margin-top: 2px; }
+
+  /* Modals */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(17,20,26,.45);
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 56px 16px; z-index: 100; overflow-y: auto;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 12px; width: 100%; max-width: 620px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.28);
+  }
+  .modal-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 20px 22px 14px; border-bottom: 1px solid var(--border);
+  }
+  .modal-header h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .modal-header .desc { margin: 4px 0 0; }
+  .modal-close {
+    background: transparent; border: none; font-size: 22px; line-height: 1;
+    color: var(--muted); cursor: pointer; padding: 0 2px; flex-shrink: 0;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 18px 22px 22px; }
 </style>
 </head>
 <body>
@@ -258,58 +299,95 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>Sites</h2>
-    <p class="desc">The web pages you want checked every day for new documents. Scanned daily around <strong>{{ display_schedule }}</strong>.</p>
-    <ul class="list" id="sitesList"></ul>
-    <div class="empty" id="sitesEmpty" style="display:none;">No sites yet &mdash; add one below.</div>
-
-    <div style="margin-top: 14px;">
-      <div class="row">
-        <input type="text" id="siteName" placeholder="Site name" style="flex:1; min-width:160px;">
-        <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
-        <button class="btn-primary" onclick="addSite()">Add site</button>
+  <div class="summary-grid">
+    <button class="summary-card" onclick="openModal('sites')">
+      <div class="summary-top">
+        <span class="summary-title">Sites</span>
+        <span class="summary-count" id="sitesCount">&ndash;</span>
       </div>
-      <span class="adv-toggle" onclick="toggleAdv()">+ Advanced (listing page options)</span>
-      <div class="adv-fields" id="advFields">
+      <span class="summary-sub">Web pages scanned daily around <strong>{{ display_schedule }}</strong>.</span>
+      <span class="summary-manage">Manage sites &rarr;</span>
+    </button>
+    <button class="summary-card" onclick="openModal('keywords')">
+      <div class="summary-top">
+        <span class="summary-title">Keywords</span>
+        <span class="summary-count" id="keywordsCount">&ndash;</span>
+      </div>
+      <span class="summary-sub">Words and phrases used to judge whether a plan is worth pursuing.</span>
+      <span class="summary-manage">Manage keywords &rarr;</span>
+    </button>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="sitesModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2>Sites</h2>
+        <p class="desc">The web pages checked every day for new construction plans. Scanned daily around <strong>{{ display_schedule }}</strong>.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <ul class="list" id="sitesList"></ul>
+      <div class="empty" id="sitesEmpty" style="display:none;">No sites yet &mdash; add one below.</div>
+
+      <div style="margin-top: 14px;">
         <div class="row">
-          <label>CSS selector</label>
-          <input type="text" id="linkSelector" placeholder="a.job-title (optional)" style="flex:1;">
+          <input type="text" id="siteName" placeholder="Site name" style="flex:1; min-width:160px;">
+          <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
+          <button class="btn-primary" onclick="addSite()">Add site</button>
         </div>
-        <div class="row">
-          <label>URL pattern</label>
-          <input type="text" id="linkPattern" placeholder="/jobs/ (optional)" style="flex:1;">
-        </div>
-        <div class="row">
-          <label>Or</label>
-          <label style="width:auto; display:flex; align-items:center; gap:6px; font-size:13px; color: var(--text);">
-            <input type="checkbox" id="useAiListing" style="width:auto;"> Let AI find the job links automatically
-          </label>
+        <span class="adv-toggle" onclick="toggleAdv()">+ Advanced (listing page options)</span>
+        <div class="adv-fields" id="advFields">
+          <div class="row">
+            <label>CSS selector</label>
+            <input type="text" id="linkSelector" placeholder="a.job-title (optional)" style="flex:1;">
+          </div>
+          <div class="row">
+            <label>URL pattern</label>
+            <input type="text" id="linkPattern" placeholder="/jobs/ (optional)" style="flex:1;">
+          </div>
+          <div class="row">
+            <label>Or</label>
+            <label style="width:auto; display:flex; align-items:center; gap:6px; font-size:13px; color: var(--text);">
+              <input type="checkbox" id="useAiListing" style="width:auto;"> Let AI find the plan links automatically
+            </label>
+          </div>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <div class="card">
-    <h2>Keywords</h2>
-    <p class="desc">The words or phrases to watch for in scanned documents.</p>
-    <div class="chips" id="keywordChips"></div>
-    <div class="empty" id="keywordsEmpty" style="display:none;">No keywords yet &mdash; add one below.</div>
-    <div class="row">
-      <input type="text" id="newKeyword" placeholder="e.g. prevailing wage" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
-      <button class="btn-primary" onclick="addKeyword()">Add</button>
-    </div>
-    <div class="adv-toggle" onclick="toggleKeywordUpload()">+ Add a list from a file</div>
-    <div class="adv-fields" id="keywordUploadFields">
-      <p class="desc" style="margin-bottom:8px;">Upload a Word or PDF document with one keyword or phrase per line, and they'll all be added at once.</p>
-      <div class="row">
-        <input type="file" id="keywordsFileInput" accept=".pdf,.docx" style="flex:1;">
-        <button class="btn-primary" onclick="uploadKeywordsFile()">Upload</button>
+<div class="modal-overlay" id="keywordsModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2>Keywords</h2>
+        <p class="desc">The words or phrases to watch for in scanned plans.</p>
       </div>
-      <div class="status-line" id="keywordsUploadStatus"></div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="chips" id="keywordChips"></div>
+      <div class="empty" id="keywordsEmpty" style="display:none;">No keywords yet &mdash; add one below.</div>
+      <div class="row">
+        <input type="text" id="newKeyword" placeholder="e.g. prevailing wage" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
+        <button class="btn-primary" onclick="addKeyword()">Add</button>
+      </div>
+      <div class="adv-toggle" onclick="toggleKeywordUpload()">+ Add a list from a file</div>
+      <div class="adv-fields" id="keywordUploadFields">
+        <p class="desc" style="margin-bottom:8px;">Upload a Word or PDF document with one keyword or phrase per line, and they'll all be added at once.</p>
+        <div class="row">
+          <input type="file" id="keywordsFileInput" accept=".pdf,.docx" style="flex:1;">
+          <button class="btn-primary" onclick="uploadKeywordsFile()">Upload</button>
+        </div>
+        <div class="status-line" id="keywordsUploadStatus"></div>
+      </div>
     </div>
   </div>
-
 </div>
 
 <script>
@@ -328,6 +406,16 @@ async function api(path, opts) {
 function toggleAdv() {
   document.getElementById('advFields').classList.toggle('open');
 }
+
+function openModal(name) {
+  document.getElementById(name + 'Modal').classList.add('open');
+}
+function closeModal() {
+  document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -520,6 +608,7 @@ async function loadSites() {
   const empty = document.getElementById('sitesEmpty');
   list.innerHTML = '';
   empty.style.display = sites.length ? 'none' : 'block';
+  document.getElementById('sitesCount').textContent = sites.length;
   sites.forEach(function(site, i) {
     const li = document.createElement('li');
     let tags = '';
@@ -567,6 +656,7 @@ async function loadKeywords() {
   const empty = document.getElementById('keywordsEmpty');
   chips.innerHTML = '';
   empty.style.display = keywords.length ? 'none' : 'block';
+  document.getElementById('keywordsCount').textContent = keywords.length;
   keywords.forEach(function(kw) {
     const chip = document.createElement('div');
     chip.className = 'chip';
