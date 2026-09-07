@@ -129,12 +129,33 @@ def load_keywords(division_id):
     return [row["keyword"] for row in res.data]
 
 
+_MOJIBAKE_MARKERS = ("Ã", "Â", "â€", "â„", "Å")
+
+
+def demojibake(text):
+    """Repair double-encoded text (UTF-8 read as cp1252 then re-encoded),
+    e.g. 'FlexterraÂ® HP-FGMÂ®' -> 'Flexterra® HP-FGM®', 'TensarTechâ„¢' ->
+    'TensarTech™'. Only touched when tell-tale markers are present, and only
+    kept if the round trip actually removes them."""
+    if not text or not any(m in text for m in _MOJIBAKE_MARKERS):
+        return text
+    for enc in ("cp1252", "latin-1"):
+        try:
+            fixed = text.encode(enc).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if not any(m in fixed for m in _MOJIBAKE_MARKERS):
+            return fixed
+    return text
+
+
 def _clean_keyword(kw):
-    """Trim, drop Markdown emphasis/heading marks, and collapse internal
-    whitespace so 'soil   sampling', '**soil sampling**' and 'soil sampling'
-    are stored and compared as the same keyword."""
-    kw = (kw or "").strip()
+    """Trim, repair mojibake, drop Markdown emphasis/heading marks, and
+    collapse internal whitespace so 'soil   sampling', '**soil sampling**'
+    and 'soil sampling' are stored and compared as the same keyword."""
+    kw = demojibake((kw or "").strip())
     kw = re.sub(r"^#+\s*", "", kw)          # "## Geotextiles" -> "Geotextiles"
+    kw = kw.replace("**", "").replace("__", "")  # "HydroChain®** (…)" -> "HydroChain® (…)"
     kw = kw.strip("*_`").strip()            # "**Filter fabric**" -> "Filter fabric"
     kw = kw.rstrip(":").strip()             # "Erosion control:" -> "Erosion control"
     return re.sub(r"\s+", " ", kw)
@@ -143,13 +164,17 @@ def _clean_keyword(kw):
 def looks_like_section_heading(text):
     """True for lines that are document structure, not keywords: anything
     that started with '#', or an ALL-CAPS label of 3+ words like
-    'PRODUCT TYPE / MATERIAL CATEGORY TERMS'. Short all-caps acronyms
-    (GCL, HDPE) are fine. Used for both single adds and file uploads so a
-    pasted outline never becomes a keyword."""
+    'PRODUCT TYPE / MATERIAL CATEGORY TERMS'. Lines with digits or
+    parentheses are spared (spec refs like 'AASHTO M288', brands like
+    'GSE HD (HDPE)'), as are short acronyms (GCL, HDPE). Used for both
+    single adds and file uploads so a pasted outline never becomes a
+    keyword."""
     if not text:
         return False
     if text.lstrip().startswith("#"):
         return True
+    if any(ch.isdigit() for ch in text) or "(" in text or ")" in text:
+        return False
     letters = [c for c in text if c.isalpha()]
     return bool(letters) and len(text.split()) >= 3 and all(c.isupper() for c in letters)
 

@@ -238,17 +238,36 @@ def _lines_to_keywords(text):
     plausibly be a keyword/phrase (rather than a full sentence) dropped."""
     candidates = []
     for line in text.splitlines():
-        raw = line.strip()
+        line = supabase_store.demojibake(line)
         line = line.strip(" \t\u2022\u2023\u25e6\u2043\u2219-–—.").strip()
         line = re.sub(r"^\d+[\.\)]\s*", "", line)  # strip leading "1. " / "2) " numbering
         line = line.strip("*_`").strip()           # strip Markdown emphasis / code ticks
         line = line.rstrip(":").strip()            # strip a trailing "Label:" colon
         if not line or len(line) > MAX_KEYWORD_LENGTH:
             continue
-        if supabase_store.looks_like_section_heading(raw) or supabase_store.looks_like_section_heading(line):
+        if supabase_store.looks_like_section_heading(line) or _looks_like_prose(line):
             continue
         candidates.append(line)
     return candidates
+
+
+def _looks_like_prose(line):
+    """Best-effort filter for the explanatory sentences that sit between the
+    lists in a structured term document ('These phrases appear in plan
+    notes...', 'The most widely specified chamber system...'). Errs toward
+    keeping: anything with a brand mark or a parenthetical is left alone."""
+    low = line.lower()
+    if low.startswith((
+        "these ", "the most ", "phrases ", "short strings", "short phrases",
+        "compiled for ", "panels are ", "vegetated mse", "sources:",
+    )):
+        return True
+    if "®" in line or "™" in line or "(" in line:  # (R), TM
+        return False
+    words = line.split()
+    return len(words) >= 8 and (
+        line.endswith(".") or ". " in line or ";" in line or line.count(",") >= 2
+    )
 
 
 @app.route("/api/<division_id>/keywords/upload", methods=["POST"])
