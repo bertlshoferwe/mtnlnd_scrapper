@@ -86,6 +86,54 @@ class GeminiProvider(AIProvider):
             return None
 
 
+# ---------------------------------------------------------------------------
+# Embeddings — used by scraper.py to pre-filter a large keyword list down to
+# the terms actually relevant to a given document before the (expensive)
+# semantic pass. Anthropic has no first-party embedding API, so this always
+# routes through Gemini when a GEMINI_API_KEY is present, regardless of which
+# provider AI_PROVIDER selects for chat. No key -> no embedder -> the scan
+# falls back to a literal-hits-only pre-filter.
+# ---------------------------------------------------------------------------
+
+EMBED_DIM = 768
+
+
+class GeminiEmbedder:
+    def __init__(self, api_key, model=None):
+        from google import genai
+        self.client = genai.Client(api_key=api_key)
+        self.model = model or os.environ.get("EMBED_MODEL", "gemini-embedding-001")
+
+    def embed(self, texts):
+        """texts: list[str] -> list[list[float]] (len EMBED_DIM each), or None
+        on any failure. Never raises."""
+        if not texts:
+            return []
+        try:
+            from google.genai import types
+            resp = self.client.models.embed_content(
+                model=self.model,
+                contents=list(texts),
+                config=types.EmbedContentConfig(output_dimensionality=EMBED_DIM),
+            )
+            return [list(e.values) for e in resp.embeddings]
+        except Exception as e:
+            print(f"  ! Embedding call failed: {e}")
+            return None
+
+
+def get_embedder():
+    """A GeminiEmbedder if GEMINI_API_KEY is set, else None."""
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        return None
+    try:
+        return GeminiEmbedder(key)
+    except Exception as e:
+        print(f"! Failed to initialize embedder: {e}")
+        return None
+
+
 def get_provider():
     """
     Return an AIProvider instance based on AI_PROVIDER + the matching API

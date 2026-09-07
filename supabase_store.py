@@ -242,6 +242,30 @@ def clear_keywords(division_id):
     return []
 
 
+def load_keyword_rows(division_id):
+    """Full keyword rows (id, keyword, embedding) — used by the scan worker's
+    semantic pre-filter. `embedding` is a list[float] or None."""
+    res = (
+        get_client().table("keywords").select("id,keyword,embedding")
+        .eq("division_id", division_id).order("id").execute()
+    )
+    return res.data
+
+
+def save_keyword_embeddings(division_id, embedded_rows):
+    """Persist freshly-computed embedding vectors. `embedded_rows` is a list
+    of {"id", "keyword", "embedding"} dicts. Uses upsert so it's one round
+    trip for the whole batch (the first scan after a big upload embeds
+    hundreds at once)."""
+    rows = [
+        {"id": r["id"], "division_id": division_id,
+         "keyword": r["keyword"], "embedding": r["embedding"]}
+        for r in embedded_rows
+    ]
+    if rows:
+        get_client().table("keywords").upsert(rows).execute()
+
+
 # ---------------------------------------------------------------------------
 # Scan runs (status tracking)
 # ---------------------------------------------------------------------------

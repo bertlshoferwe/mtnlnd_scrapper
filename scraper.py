@@ -90,6 +90,7 @@ import os
 import sys
 import io
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -115,6 +116,15 @@ PARAS_PER_PSEUDO_PAGE = 25  # only used for the DOCX fallback when LibreOffice i
 # provider is active.
 AI_DOC_CHAR_BUDGET = 60000  # cap on document text sent per semantic keyword scan
 MAX_LISTING_ANCHORS_FOR_AI = 300  # cap on links sent per AI job-link identification call
+
+# Semantic keyword pre-filter: when a division has more than
+# AI_PREFILTER_SEND_ALL_MAX keywords, the semantic pass doesn't see all of
+# them for a given document — it sees the literal-substring hits plus the
+# AI_PREFILTER_TOP_N keywords whose embeddings are closest to that document.
+# Keeps the per-document AI prompt (and its cost) flat as the list grows.
+AI_PREFILTER_SEND_ALL_MAX = int(os.environ.get("AI_PREFILTER_SEND_ALL_MAX", "60"))
+AI_PREFILTER_TOP_N = int(os.environ.get("AI_PREFILTER_TOP_N", "50"))
+EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
 FIRECRAWL_TIMEOUT = 60  # seconds — headless rendering is slower than a plain request
 
@@ -623,6 +633,70 @@ def get_ai_client():
     return ai_provider.get_provider()
 
 
+def _cosine(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def ensure_keyword_embeddings(division_id, embedder):
+    """Make sure every keyword in the division has a cached embedding vector,
+    computing (and storing) any that are missing. Returns {keyword: vector}
+    for all keywords that have one. A no-op when there's no embedder or the
+    embed call fails — the pre-filter then falls back to literal hits only.
+    """
+    rows = supabase_store.load_keyword_rows(division_id)
+    have = {r["keyword"]: r["embedding"] for r in rows if r.get("embedding")}
+    missing = [r for r in rows if not r.get("embedding")]
+    if not missing:
+        return have
+    if embedder is None:
+        print(f"  No embedder (set GEMINI_API_KEY) — {len(missing)} keyword(s) unembedded, "
+              "semantic pre-filter will use literal hits only")
+        return have
+
+    vectors = embedder.embed([r["keyword"] for r in missing])
+    if not vectors or len(vectors) != len(missing):
+        print(f"  ! Could not embed {len(missing)} keyword(s) — semantic pre-filter "
+              "will use literal hits only this run")
+        return have
+
+    for r, v in zip(missing, vectors):
+        r["embedding"] = v
+        have[r["keyword"]] = v
+    supabase_store.save_keyword_embeddings(division_id, missing)
+    print(f"  Embedded {len(missing)} new keyword(s)")
+    return have
+
+
+def select_semantic_keywords(pages, keywords, keyword_vectors, literal_hits, embedder):
+    """Trim the keyword list the semantic pass has to weigh against one
+    document. Always includes the literal-substring hits; when the full list
+    is larger than AI_PREFILTER_SEND_ALL_MAX, adds the AI_PREFILTER_TOP_N
+    keywords whose embeddings are closest to the document text. Returns the
+    list in the caller's original order.
+    """
+    if len(keywords) <= AI_PREFILTER_SEND_ALL_MAX:
+        return keywords
+
+    keep = set(literal_hits)
+    doc_text = "\n".join(t for _, t in pages if t)[:EMBED_DOC_CHARS].strip()
+    doc_vec = embedder.embed([doc_text]) if (embedder and doc_text) else None
+
+    if doc_vec:
+        ranked = sorted(
+            ((k, _cosine(doc_vec[0], keyword_vectors[k])) for k in keywords if k in keyword_vectors),
+            key=lambda kv: kv[1], reverse=True,
+        )
+        keep.update(k for k, _ in ranked[:AI_PREFILTER_TOP_N])
+    # else: no embeddings available — semantic pass still runs, but only over
+    # the literal hits (so it catches synonyms *of those*, not brand-new terms).
+
+    selected = [k for k in keywords if k in keep]
+    return selected or keywords[:AI_PREFILTER_SEND_ALL_MAX]
+
+
 def ai_semantic_keyword_scan(client, filename, pages, keywords):
     """
     Ask Claude to read the whole document, page by page, and identify every
@@ -748,6 +822,16 @@ def _scan_division(division):
             print("No AI provider configured (set AI_PROVIDER + a matching API key) — "
                   "running without semantic matching, AI Notes, or summary.")
 
+        # Semantic pre-filter: embed the keyword list once so each document's
+        # AI pass only weighs the terms relevant to that document, not all of
+        # them. Keeps cost/accuracy stable as the list grows past ~60.
+        embedder = ai_provider.get_embedder()
+        keyword_vectors = ensure_keyword_embeddings(division_id, embedder) if keywords else {}
+        if keywords and len(keywords) > AI_PREFILTER_SEND_ALL_MAX:
+            print(f"  {len(keywords)} keywords — semantic pass will use a per-document "
+                  f"top-{AI_PREFILTER_TOP_N} pre-filter"
+                  + ("" if keyword_vectors else " (literal hits only — no embeddings yet)"))
+
         rows = []  # kept in memory too, just to build the daily summary at the end
         for site in sites:
             name = site["name"]
@@ -793,7 +877,14 @@ def _scan_division(division):
                 # AI semantic pass — runs on every document with text, not just
                 # ones the literal pass already flagged, so it can catch
                 # paraphrases/synonyms the literal pass would miss entirely.
-                ai_hits, ai_truncated = ai_semantic_keyword_scan(ai_client, filename, pages, keywords)
+                # The keyword list is pre-filtered per document (see
+                # select_semantic_keywords) so a huge list doesn't bloat the prompt.
+                semantic_keywords = select_semantic_keywords(
+                    pages, keywords, keyword_vectors, literal_hits, embedder
+                )
+                ai_hits, ai_truncated = ai_semantic_keyword_scan(
+                    ai_client, filename, pages, semantic_keywords
+                )
 
                 merged_pages = {}
                 for kw, page_list in literal_hits.items():

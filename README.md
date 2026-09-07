@@ -98,6 +98,8 @@ Every document goes through two independent passes, merged together:
 1. **Literal substring search** — case-insensitive, exact text only, always runs, no API key needed. The deterministic floor.
 2. **AI semantic scan** (if an AI provider is configured) — reads the entire document and identifies every keyword substantively discussed, including paraphrases and synonyms literal matching can't see (e.g. "M&A" for "merger"). Runs on every downloaded document, not just already-flagged ones.
 
+**Semantic pre-filter (large keyword lists).** When a division has more than `AI_PREFILTER_SEND_ALL_MAX` keywords (default 60), the semantic pass for a given document doesn't weigh all of them — it weighs the literal-substring hits plus the `AI_PREFILTER_TOP_N` (default 50) keywords whose embeddings are closest to that document. Keyword embeddings are computed once (lazily, on the first scan after a keyword is added) and cached in the `keywords.embedding` column; the ranking is done in Python, so no pgvector setup is needed. This keeps the per-document prompt — and its cost — roughly flat whether the list has 60 keywords or 6,000. Embeddings go through Gemini, so set `GEMINI_API_KEY` even if `AI_PROVIDER=anthropic`; without it the pre-filter falls back to literal hits only.
+
 **Cost implication**: the AI scan runs per document downloaded, not per match — cost scales with scan volume, not hit rate. Both providers use their fast/cheap model tier by default (see `ai_provider.py` for the exact model names, overridable via `ANTHROPIC_MODEL`/`GEMINI_MODEL`).
 
 ## Choosing between Anthropic and Gemini

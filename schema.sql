@@ -21,8 +21,15 @@ create table if not exists keywords (
   id bigint generated always as identity primary key,
   division_id text not null references divisions(id) on delete cascade,
   keyword text not null,
+  -- Cached embedding vector (JSON array of floats) for the semantic
+  -- pre-filter in scraper.py. Populated lazily on the first scan after a
+  -- keyword is added; NULL until then. No pgvector extension needed — the
+  -- similarity ranking is done in Python over a division's (small) list.
+  embedding jsonb,
   created_at timestamptz default now()
 );
+-- Migration for existing databases:
+--   alter table keywords add column if not exists embedding jsonb;
 
 -- One row per document found during a run.
 create table if not exists scan_results (
