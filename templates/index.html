@@ -217,13 +217,13 @@
 
   <div class="card">
     <h2>Daily run time</h2>
-    <p class="desc">Every division scans on the same shared schedule, run by a GitHub Actions workflow &mdash; not editable per-division here (Vercel's free tier doesn't support per-division dynamic scheduling). To change it, edit the cron line in <code>.github/workflows/daily-scan.yml</code> and push.</p>
-    <div class="status-line">Runs daily around <strong>{{ display_schedule }}</strong> (times are approximate on GitHub's scheduler, and Vercel Hobby-equivalent cron timing is within-the-hour, not to the minute).</div>
+    <p class="desc">Every division scans at the same time each day.</p>
+    <div class="status-line">Runs daily around <strong>{{ display_schedule }}</strong>.</div>
   </div>
 
   <div class="card">
     <h2>Sites</h2>
-    <p class="desc">Pages to scan each run, for this division only. Tabs aren't in this form yet &mdash; add them directly via the Supabase table editor on a site's <code>tabs</code> column (a JSON array of <code>{"label", "selector"}</code>) if you need that.</p>
+    <p class="desc">The web pages you want checked every day for new documents.</p>
     <ul class="list" id="sitesList"></ul>
     <div class="empty" id="sitesEmpty" style="display:none;">No sites yet &mdash; add one below.</div>
 
@@ -246,7 +246,7 @@
         <div class="row">
           <label>Or</label>
           <label style="width:auto; display:flex; align-items:center; gap:6px; font-size:13px; color: var(--text);">
-            <input type="checkbox" id="useAiListing" style="width:auto;"> Let AI detect job links (needs ANTHROPIC_API_KEY, no selector needed)
+            <input type="checkbox" id="useAiListing" style="width:auto;"> Let AI find the job links automatically
           </label>
         </div>
       </div>
@@ -255,12 +255,21 @@
 
   <div class="card">
     <h2>Keywords</h2>
-    <p class="desc">Checked against every document for this division &mdash; literal match always, semantic AI match too if ANTHROPIC_API_KEY is set.</p>
+    <p class="desc">The words or phrases to watch for in scanned documents.</p>
     <div class="chips" id="keywordChips"></div>
     <div class="empty" id="keywordsEmpty" style="display:none;">No keywords yet &mdash; add one below.</div>
     <div class="row">
       <input type="text" id="newKeyword" placeholder="e.g. prevailing wage" style="flex:1;" onkeydown="if(event.key==='Enter') addKeyword();">
       <button class="btn-primary" onclick="addKeyword()">Add</button>
+    </div>
+    <div class="adv-toggle" onclick="toggleKeywordUpload()">+ Add a list from a file</div>
+    <div class="adv-fields" id="keywordUploadFields">
+      <p class="desc" style="margin-bottom:8px;">Upload a Word or PDF document with one keyword or phrase per line, and they'll all be added at once.</p>
+      <div class="row">
+        <input type="file" id="keywordsFileInput" accept=".pdf,.docx" style="flex:1;">
+        <button class="btn-primary" onclick="uploadKeywordsFile()">Upload</button>
+      </div>
+      <div class="status-line" id="keywordsUploadStatus"></div>
     </div>
   </div>
 
@@ -443,6 +452,35 @@ async function addKeyword() {
 async function deleteKeyword(encodedKw) {
   await api('/api/' + currentDivision + '/keywords/' + encodedKw, { method: 'DELETE' });
   loadKeywords();
+}
+
+function toggleKeywordUpload() {
+  document.getElementById('keywordUploadFields').classList.toggle('open');
+}
+
+async function uploadKeywordsFile() {
+  const input = document.getElementById('keywordsFileInput');
+  const status = document.getElementById('keywordsUploadStatus');
+  if (!input.files.length) {
+    status.textContent = 'Choose a .pdf or .docx file first.';
+    return;
+  }
+  const file = input.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+  status.textContent = 'Uploading\u2026';
+  try {
+    const res = await fetch('/api/' + currentDivision + '/keywords/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    let msg = 'Added ' + data.added.length + ' new keyword' + (data.added.length === 1 ? '' : 's') + ' from ' + file.name + '.';
+    if (data.skipped > 0) msg += ' (' + data.skipped + ' already on the list.)';
+    status.textContent = msg;
+    input.value = '';
+    loadKeywords();
+  } catch (e) {
+    status.textContent = e.message;
+  }
 }
 
 

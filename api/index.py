@@ -19,6 +19,7 @@ Routes:
   DEL  /api/<division_id>/sites/<site_id>     remove a site
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
+  POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
   DEL  /api/<division_id>/keywords/<keyword>  remove a keyword
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
@@ -34,12 +35,15 @@ easily take minutes) does NOT happen here.
 
 import os
 import io
+import re
 import requests
 from datetime import datetime
 
 from flask import Flask, jsonify, request, render_template, send_file, abort
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
+import pypdf
+from docx import Document as DocxDocument
 
 import supabase_store
 
@@ -174,6 +178,74 @@ def api_add_keyword(division_id):
         return jsonify({"error": "keyword is required"}), 400
     keywords = supabase_store.add_keyword(division_id, kw)
     return jsonify({"ok": True, "keywords": keywords})
+
+
+MAX_KEYWORD_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_KEYWORD_LENGTH = 120  # skip lines longer than this — likely a sentence/paragraph, not a keyword
+
+
+def _extract_text_for_keywords(file_bytes, filename):
+    """Return the plain text of an uploaded .pdf or .docx, or None for
+    anything else. Uses pypdf (not pdfplumber) since this only needs plain
+    text, not per-page layout — keeps the Vercel function bundle smaller."""
+    lower = filename.lower()
+    if lower.endswith(".pdf"):
+        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    elif lower.endswith(".docx"):
+        doc = DocxDocument(io.BytesIO(file_bytes))
+        return "\n".join(p.text for p in doc.paragraphs)
+    return None
+
+
+def _lines_to_keywords(text):
+    """Turn extracted text into candidate keywords: one per line, trimmed of
+    bullets/numbering, blank lines skipped, and anything too long to
+    plausibly be a keyword/phrase (rather than a full sentence) dropped."""
+    candidates = []
+    for line in text.splitlines():
+        line = line.strip(" \t\u2022\u2023\u25e6\u2043\u2219-–—.").strip()
+        line = re.sub(r"^\d+[\.\)]\s*", "", line)  # strip leading "1. " / "2) " numbering
+        if line and len(line) <= MAX_KEYWORD_LENGTH:
+            candidates.append(line)
+    return candidates
+
+
+@app.route("/api/<division_id>/keywords/upload", methods=["POST"])
+def api_upload_keywords(division_id):
+    """Add keywords in bulk from an uploaded .pdf or .docx — one keyword per
+    line in the document. Meant for a document that's just a list of terms
+    (e.g. a compliance checklist), not for extracting keywords out of prose."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    if "file" not in request.files or not request.files["file"].filename:
+        return jsonify({"error": "choose a .pdf or .docx file first"}), 400
+
+    upload = request.files["file"]
+    filename = upload.filename
+    file_bytes = upload.read()
+    if len(file_bytes) > MAX_KEYWORD_UPLOAD_BYTES:
+        return jsonify({"error": "file is too large (10 MB max)"}), 400
+
+    if not filename.lower().endswith((".pdf", ".docx")):
+        return jsonify({"error": "only .pdf and .docx files are supported"}), 400
+
+    try:
+        text = _extract_text_for_keywords(file_bytes, filename)
+    except Exception as e:
+        return jsonify({"error": f"couldn't read that file: {e}"}), 400
+
+    if not text or not text.strip():
+        return jsonify({"error": "no readable text found in that file"}), 400
+
+    candidates = _lines_to_keywords(text)
+    if not candidates:
+        return jsonify({"error": "no usable keyword lines found — each keyword should be on its own line"}), 400
+
+    keywords, added = supabase_store.add_keywords_bulk(division_id, candidates)
+    return jsonify({"ok": True, "keywords": keywords, "added": added, "skipped": len(candidates) - len(added)})
 
 
 @app.route("/api/<division_id>/keywords/<path:keyword>", methods=["DELETE"])
