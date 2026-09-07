@@ -175,9 +175,9 @@
   .tab-menu button.danger:hover { background: #fef2f2; }
 
   /* Summary buttons that open modals */
-  .summary-grid { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+  .summary-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; align-items: stretch; }
   .summary-card {
-    flex: 1; min-width: 220px;
+    flex: 1; min-width: 200px;
     display: flex; flex-direction: column; gap: 6px;
     text-align: left; font-family: inherit;
     background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
@@ -185,6 +185,10 @@
     transition: border-color .12s, box-shadow .12s;
   }
   .summary-card:hover { border-color: var(--accent); box-shadow: 0 3px 12px rgba(37,99,235,.09); }
+  .summary-card.status-card { cursor: default; }
+  .summary-card.status-card:hover { border-color: var(--border); box-shadow: none; }
+  .summary-card #runNowBtn { margin-top: auto; }
+  .summary-card #statusDetail:empty { display: none; }
   .summary-card .summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .summary-card .summary-title { font-size: 15px; font-weight: 650; color: var(--text); }
   .summary-card .summary-count { font-size: 22px; font-weight: 650; color: var(--text); line-height: 1; }
@@ -233,15 +237,31 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>Status</h2>
-    <div class="row" style="justify-content: space-between;">
-      <div>
-        <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
-        <div class="status-line" id="statusDetail"></div>
+  <div class="summary-grid">
+    <div class="summary-card status-card">
+      <div class="summary-top">
+        <span class="summary-title">Status</span>
       </div>
-      <button class="btn-primary" id="runNowBtn" onclick="runNow()">Run scan now</button>
+      <span class="summary-sub"><span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span></span>
+      <div class="status-line" id="statusDetail"></div>
+      <button class="btn-primary" id="runNowBtn" onclick="runNow()" style="margin-top:auto; align-self:flex-start;">Run scan now</button>
     </div>
+    <button class="summary-card" onclick="openModal('sites')">
+      <div class="summary-top">
+        <span class="summary-title">Sites</span>
+        <span class="summary-count" id="sitesCount">&ndash;</span>
+      </div>
+      <span class="summary-sub">Web pages scanned daily around <strong>{{ display_schedule }}</strong>.</span>
+      <span class="summary-manage">Manage sites &rarr;</span>
+    </button>
+    <button class="summary-card" onclick="openModal('keywords')">
+      <div class="summary-top">
+        <span class="summary-title">Keywords</span>
+        <span class="summary-count" id="keywordsCount">&ndash;</span>
+      </div>
+      <span class="summary-sub">Words and phrases used to judge whether a plan is worth pursuing.</span>
+      <span class="summary-manage">Manage keywords &rarr;</span>
+    </button>
   </div>
 
   <div class="card">
@@ -299,24 +319,6 @@
     </div>
   </div>
 
-  <div class="summary-grid">
-    <button class="summary-card" onclick="openModal('sites')">
-      <div class="summary-top">
-        <span class="summary-title">Sites</span>
-        <span class="summary-count" id="sitesCount">&ndash;</span>
-      </div>
-      <span class="summary-sub">Web pages scanned daily around <strong>{{ display_schedule }}</strong>.</span>
-      <span class="summary-manage">Manage sites &rarr;</span>
-    </button>
-    <button class="summary-card" onclick="openModal('keywords')">
-      <div class="summary-top">
-        <span class="summary-title">Keywords</span>
-        <span class="summary-count" id="keywordsCount">&ndash;</span>
-      </div>
-      <span class="summary-sub">Words and phrases used to judge whether a plan is worth pursuing.</span>
-      <span class="summary-manage">Manage keywords &rarr;</span>
-    </button>
-  </div>
 
 </div>
 
@@ -393,6 +395,19 @@
 <script>
 let currentDivision = null;
 let allDivisions = [];
+let scanRunning = false;
+let siteCount = 0;
+let keywordCount = 0;
+
+function refreshRunNowButton() {
+  const btn = document.getElementById('runNowBtn');
+  if (!btn) return;
+  const ready = siteCount > 0 && keywordCount > 0;
+  btn.disabled = scanRunning || !ready;
+  btn.title = scanRunning
+    ? 'A scan is already running'
+    : (ready ? '' : 'Add at least one site and one keyword first');
+}
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
@@ -609,6 +624,8 @@ async function loadSites() {
   list.innerHTML = '';
   empty.style.display = sites.length ? 'none' : 'block';
   document.getElementById('sitesCount').textContent = sites.length;
+  siteCount = sites.length;
+  refreshRunNowButton();
   sites.forEach(function(site, i) {
     const li = document.createElement('li');
     let tags = '';
@@ -657,6 +674,8 @@ async function loadKeywords() {
   chips.innerHTML = '';
   empty.style.display = keywords.length ? 'none' : 'block';
   document.getElementById('keywordsCount').textContent = keywords.length;
+  keywordCount = keywords.length;
+  refreshRunNowButton();
   keywords.forEach(function(kw) {
     const chip = document.createElement('div');
     chip.className = 'chip';
@@ -715,14 +734,14 @@ async function loadStatus() {
   const dot = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
   const detail = document.getElementById('statusDetail');
-  const btn = document.getElementById('runNowBtn');
+
+  scanRunning = !!s.running;
+  refreshRunNowButton();
 
   if (s.running) {
     dot.className = 'status-dot running';
     text.textContent = 'Scan running\u2026';
-    btn.disabled = true;
   } else {
-    btn.disabled = false;
     if (s.last_result === 'success') {
       dot.className = 'status-dot success';
       text.textContent = 'Last run succeeded';
@@ -871,6 +890,9 @@ document.getElementById('resultsStatusFilter').addEventListener('change', functi
 
 async function loadAllForCurrentDivision() {
   if (!currentDivision) return;
+  siteCount = 0;
+  keywordCount = 0;
+  refreshRunNowButton();
   await Promise.all([loadSites(), loadKeywords(), loadStatus(), loadResultsInfo()]);
 }
 
