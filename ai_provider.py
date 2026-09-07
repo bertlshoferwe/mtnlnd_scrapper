@@ -65,10 +65,12 @@ class GeminiProvider(AIProvider):
     def __init__(self, api_key, model=None):
         from google import genai
         self.client = genai.Client(api_key=api_key)
-        # Verify the exact current model name against https://ai.google.dev
-        # if this default has been deprecated by the time you set this up —
-        # Google renames/retires free-tier model aliases fairly often.
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        # Google retires Gemini model names often (gemini-2.5-flash was pulled
+        # for new projects in 2026). If this default stops working, set the
+        # GEMINI_MODEL env var to the current one from https://ai.google.dev
+        # — as of late 2026 that's the 3.x flash line (gemini-3.6-flash,
+        # gemini-3.7-flash, …).
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
     def complete(self, prompt, max_tokens):
         try:
