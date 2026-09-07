@@ -1,0 +1,6 @@
+# Vercel's dashboard function — kept lean since it's a single serverless
+# bundle. It never scrapes/downloads/parses documents itself.
+flask>=3.0
+supabase>=2.9
+openpyxl>=3.1
+requests>=2.31
