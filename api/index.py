@@ -18,6 +18,7 @@ Routes:
   DEL  /api/divisions/<division_id>          delete a division (cascades in Supabase)
   GET  /api/<division_id>/sites              list sites
   POST /api/<division_id>/sites              add a site
+  PATCH /api/<division_id>/sites/<site_id>   edit a site (name, url, adapter, selector/pattern)
   DEL  /api/<division_id>/sites/<site_id>     remove a site
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
@@ -161,23 +162,21 @@ def api_get_sites(division_id):
     return jsonify(supabase_store.load_sites(division_id))
 
 
-@app.route("/api/<division_id>/sites", methods=["POST"])
-def api_add_site(division_id):
-    _, err = _require_division(division_id)
-    if err:
-        return err
-
-    data = request.get_json(force=True, silent=True) or {}
+def _parse_site_payload(data):
+    """Turn the add/edit form's JSON into (name, url, listing, adapter) or
+    raise ValueError with a user-facing message. Same rules for both routes
+    so a site can be edited into any strategy it could be created in."""
     name = (data.get("name") or "").strip()
     url = (data.get("url") or "").strip()
     adapter = (data.get("adapter") or "").strip()
     if adapter and adapter not in adapters.ADAPTERS:
-        return jsonify({"error": f"unknown adapter '{adapter}'"}), 400
+        raise ValueError(f"unknown adapter '{adapter}'")
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        raise ValueError("name is required")
     if not url and not adapter:
-        return jsonify({"error": "url is required (unless a portal adapter is selected)"}), 400
+        raise ValueError("url is required (unless a portal adapter is selected)")
 
+    # Adapter set -> the adapter knows where to look, listing/pattern ignored.
     # No adapter and no manual selector/pattern -> the generic browser crawler
     # discovers the plan links itself (the "Let AI find the plan links" default).
     # A selector/pattern switches to the targeted listing crawl instead.
@@ -189,9 +188,47 @@ def api_add_site(division_id):
         if data.get("link_pattern"):
             listing["link_pattern"] = data["link_pattern"].strip()
 
+    return name, url, listing, (adapter or None)
+
+
+@app.route("/api/<division_id>/sites", methods=["POST"])
+def api_add_site(division_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    try:
+        name, url, listing, adapter = _parse_site_payload(
+            request.get_json(force=True, silent=True) or {}
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     site = supabase_store.add_site(
-        division_id, name, url, listing=listing, adapter=adapter or None
+        division_id, name, url, listing=listing, adapter=adapter
     )
+    return jsonify({"ok": True, "site": site})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>", methods=["PATCH"])
+def api_update_site(division_id, site_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    try:
+        name, url, listing, adapter = _parse_site_payload(
+            request.get_json(force=True, silent=True) or {}
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        site = supabase_store.update_site(
+            division_id, site_id, name, url, listing=listing, adapter=adapter
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     return jsonify({"ok": True, "site": site})
 
 

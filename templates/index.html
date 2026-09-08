@@ -523,6 +523,7 @@
       <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-top:14px;">+ Add a site</button>
 
       <div id="addSiteForm" style="display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:16px;">
+        <h3 id="siteFormTitle" style="margin:0 0 12px; font-size:15px;">Add a site</h3>
         <div class="row">
           <input type="text" id="siteName" placeholder="Site name" style="flex:1; min-width:160px;">
           <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
@@ -551,7 +552,7 @@
           </div>
         </div>
         <div class="row" style="margin-top:14px;">
-          <button class="btn-primary" onclick="addSite()">Add site</button>
+          <button class="btn-primary" id="siteSaveBtn" onclick="saveSite()">Add site</button>
           <button class="btn-ghost" onclick="hideAddSite()">Cancel</button>
         </div>
       </div>
@@ -929,8 +930,12 @@ async function createDivision() {
   }
 }
 
+let sitesCache = [];
+let editingSiteId = null;
+
 async function loadSites() {
   const sites = await api('/api/' + currentDivision + '/sites');
+  sitesCache = sites;
   const list = document.getElementById('sitesList');
   const empty = document.getElementById('sitesEmpty');
   list.innerHTML = '';
@@ -945,12 +950,15 @@ async function loadSites() {
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
     li.innerHTML =
-      '<div>' +
+      '<div style="min-width:0;">' +
         '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
         '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
         '<div class="site-tags">' + tags + '</div>' +
       '</div>' +
-      '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>';
+      '<div class="row" style="flex-wrap:nowrap; gap:2px; flex-shrink:0;">' +
+        '<button class="btn-ghost" style="border:none;" onclick="editSite(' + site.id + ')">Edit</button>' +
+        '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>' +
+      '</div>';
     list.appendChild(li);
   });
 }
@@ -992,11 +1000,41 @@ function onAdapterChange() {
 }
 
 function showAddSite() {
+  editingSiteId = null;
+  document.getElementById('siteFormTitle').textContent = 'Add a site';
+  document.getElementById('siteSaveBtn').textContent = 'Add site';
   document.getElementById('showAddSiteBtn').style.display = 'none';
   document.getElementById('addSiteForm').style.display = 'block';
   document.getElementById('siteName').focus();
 }
+
+function editSite(siteId) {
+  const site = sitesCache.find(function(s) { return s.id === siteId; });
+  if (!site) return;
+  editingSiteId = siteId;
+
+  document.getElementById('siteName').value = site.name || '';
+  document.getElementById('siteUrl').value = site.url || '';
+  document.getElementById('siteAdapter').value = site.adapter || '';
+  const sel = (site.listing && site.listing.link_selector) || '';
+  const pat = (site.listing && site.listing.link_pattern) || '';
+  document.getElementById('linkSelector').value = sel;
+  document.getElementById('linkPattern').value = pat;
+  document.getElementById('useAiListing').checked = !site.adapter && !sel && !pat;
+
+  // Show Advanced whenever this site isn't on the plain "let AI find it" default.
+  document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat));
+  onAdapterChange();
+
+  document.getElementById('siteFormTitle').textContent = 'Edit ' + site.name;
+  document.getElementById('siteSaveBtn').textContent = 'Save changes';
+  document.getElementById('showAddSiteBtn').style.display = 'none';
+  document.getElementById('addSiteForm').style.display = 'block';
+  document.getElementById('addSiteForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function hideAddSite() {
+  editingSiteId = null;
   document.getElementById('addSiteForm').style.display = 'none';
   document.getElementById('showAddSiteBtn').style.display = '';
   document.getElementById('siteName').value = '';
@@ -1009,7 +1047,7 @@ function hideAddSite() {
   onAdapterChange();
 }
 
-async function addSite() {
+async function saveSite() {
   const name = document.getElementById('siteName').value.trim();
   const url = document.getElementById('siteUrl').value.trim();
   const adapter = document.getElementById('siteAdapter').value;
@@ -1021,8 +1059,14 @@ async function addSite() {
     link_pattern: document.getElementById('linkPattern').value.trim(),
     use_ai_listing: document.getElementById('useAiListing').checked,
   };
+  const editing = editingSiteId != null;
+  const path = '/api/' + currentDivision + '/sites' + (editing ? '/' + editingSiteId : '');
   try {
-    await api('/api/' + currentDivision + '/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    await api(path, {
+      method: editing ? 'PATCH' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
   } catch (e) {
     alert(e.message);
     return;

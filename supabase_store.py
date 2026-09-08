@@ -115,6 +115,26 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
     return res.data[0]
 
 
+def update_site(division_id, site_id, name, url, listing=None, adapter=None):
+    """Overwrite an existing site's config. `listing` and `adapter` are
+    written as given (including None, to clear a previously-set value) so the
+    dashboard's edit form can move a site between strategies. `tabs` is left
+    untouched — it has no dashboard UI."""
+    patch = {
+        "name": name,
+        "url": url,
+        "listing": listing,
+        "adapter": adapter,
+    }
+    res = (
+        get_client().table("sites").update(patch)
+        .eq("division_id", division_id).eq("id", site_id).execute()
+    )
+    if not res.data:
+        raise ValueError("site not found")
+    return res.data[0]
+
+
 def delete_site(division_id, site_id):
     res = (
         get_client().table("sites").delete()
