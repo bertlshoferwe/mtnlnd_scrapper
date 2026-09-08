@@ -430,9 +430,13 @@
     .card { padding: 15px 14px; margin-bottom: 15px; }
     .tabs { margin-bottom: 16px; }
 
-    .summary-grid { flex-direction: column; gap: 12px; margin-bottom: 15px; }
-    .summary-card { padding: 15px 16px; min-width: 0; }
-    .summary-card .summary-count { font-size: 20px; }
+    /* Status full width on its own row; Sites + Keywords share the next row */
+    .summary-grid { gap: 10px; margin-bottom: 15px; }
+    .summary-card { flex: 1 1 calc(50% - 5px); min-width: 0; padding: 14px; }
+    .summary-card.status-card { flex-basis: 100%; }
+    .summary-card .summary-title { font-size: 14px; }
+    .summary-card .summary-count { font-size: 19px; }
+    .summary-card .summary-sub { font-size: 12px; }
 
     /* Modals go full-screen — no wasted margin, close button always reachable */
     .modal-overlay { padding: 0; align-items: stretch; }
