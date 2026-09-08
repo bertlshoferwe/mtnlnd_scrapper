@@ -948,7 +948,7 @@ def _scan_division(division):
 
                 ai_notes = " | ".join(ai_reason_notes)
                 if ai_truncated:
-                    ai_notes = (ai_notes + " " if ai_notes else "") + "[AI scan truncated — document longer than the per-call text budget]"
+                    print(f"    (AI scan covered the first {AI_DOC_CHAR_BUDGET} chars of {filename})")
 
                 row = [run_date, row_site_name, doc_key, filename,
                        ", ".join(matched), len(matched), locations, status, ai_notes]

@@ -1300,10 +1300,11 @@ function openProjectModal(i) {
       loc.textContent = 'Found at: ' + f.locations;
       row.appendChild(loc);
     }
-    if (f.ai_notes) {
+    const note = (f.ai_notes || '').replace(/\s*\[AI scan truncated[^\]]*\]\s*/g, '').trim();
+    if (note) {
       const n = document.createElement('div');
       n.className = 'f-meta';
-      n.textContent = f.ai_notes;
+      n.textContent = note;
       row.appendChild(n);
     }
     filesEl.appendChild(row);
