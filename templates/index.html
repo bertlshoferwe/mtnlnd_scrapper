@@ -190,7 +190,8 @@
   .icon-btn:hover { background: var(--surface-2); color: var(--text); }
   .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
   .site-name { font-weight: 550; }
-  .site-url { color: var(--muted); font-size: 12.5px; word-break: break-all; }
+  .site-url { display: block; color: var(--muted); font-size: 12.5px; word-break: break-all; text-decoration: none; }
+  a.site-url:hover { color: var(--accent); text-decoration: underline; }
   .site-tags { margin-top: 3px; }
   .tag {
     display: inline-block; font-size: 11px; font-weight: 600;
@@ -534,12 +535,9 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <ul class="list" id="sitesList"></ul>
-      <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
+      <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-bottom:14px;">+ Add a site</button>
 
-      <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-top:14px;">+ Add a site</button>
-
-      <div id="addSiteForm" style="display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:16px;">
+      <div id="addSiteForm" style="display:none; margin:0 0 18px; border:1px solid var(--border); border-radius:8px; padding:16px;">
         <h3 id="siteFormTitle" style="margin:0 0 12px; font-size:15px;">Add a site</h3>
         <div class="row">
           <input type="text" id="siteName" placeholder="Site name" style="flex:1; min-width:160px;">
@@ -573,6 +571,9 @@
           <button class="btn-ghost" onclick="hideAddSite()">Cancel</button>
         </div>
       </div>
+
+      <ul class="list" id="sitesList"></ul>
+      <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
     </div>
   </div>
 </div>
@@ -953,11 +954,12 @@ let editingSiteId = null;
 const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 
-// The edit form is a single shared node; parkFormHome() keeps it safe from
-// list.innerHTML wipes, editSite() moves it into the row being edited.
+// The edit form is a single shared node: its home is at the top under the
+// "+ Add a site" button (used for adding), editSite() moves it into the row
+// being edited. parkFormHome() also keeps it clear of list.innerHTML wipes.
 function parkFormHome() {
-  const form = document.getElementById('addSiteForm');
-  document.querySelector('#sitesModal .modal-body').appendChild(form);
+  const btn = document.getElementById('showAddSiteBtn');
+  btn.insertAdjacentElement('afterend', document.getElementById('addSiteForm'));
 }
 
 async function loadSites() {
@@ -977,11 +979,17 @@ async function loadSites() {
     if (site.adapter) tags += '<span class="tag tag-adapter">' + escapeHtml(adapterLabel(site.adapter)) + '</span>';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
+    const linkable = /^https?:\/\//i.test(site.url || '');
+    const urlHtml = site.url
+      ? (linkable
+          ? '<a class="site-url" href="' + escapeHtml(site.url) + '" target="_blank" rel="noopener">' + escapeHtml(site.url) + '</a>'
+          : '<div class="site-url">' + escapeHtml(site.url) + '</div>')
+      : '<div class="site-url" style="font-style:italic;">no URL — adapter decides where to look</div>';
     li.innerHTML =
       '<div class="site-row">' +
         '<div style="min-width:0;">' +
           '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
-          '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
+          urlHtml +
           '<div class="site-tags">' + tags + '</div>' +
         '</div>' +
         '<div class="site-actions">' +
@@ -1007,7 +1015,6 @@ function mountEditForm(siteId) {
   if (!slot) return;
   slot.appendChild(form);
   form.style.display = 'block';
-  document.getElementById('showAddSiteBtn').style.display = 'none';
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -1052,7 +1059,6 @@ function showAddSite() {
   parkFormHome();
   document.getElementById('siteFormTitle').textContent = 'Add a site';
   document.getElementById('siteSaveBtn').textContent = 'Add site';
-  document.getElementById('showAddSiteBtn').style.display = 'none';
   document.getElementById('addSiteForm').style.display = 'block';
   document.getElementById('siteName').focus();
 }
@@ -1084,7 +1090,6 @@ function hideAddSite() {
   editingSiteId = null;
   parkFormHome();
   document.getElementById('addSiteForm').style.display = 'none';
-  document.getElementById('showAddSiteBtn').style.display = '';
   document.getElementById('siteName').value = '';
   document.getElementById('siteUrl').value = '';
   document.getElementById('siteAdapter').value = '';
