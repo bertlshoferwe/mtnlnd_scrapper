@@ -376,6 +376,7 @@
   }
   /* Results: per-site tabs + one row per project */
   .rtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  #searchToggleBtn { display: none; }  /* desktop shows the input directly */
   .rtab {
     font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
     background: var(--surface-2); color: var(--muted); border: 1px solid transparent;
@@ -465,6 +466,22 @@
     .pdf-modal .modal-header h2 { font-size: 14px; }
     .pdf-modal .modal-body { flex: 1; }
     #pdfFrame { height: 100%; min-height: 55vh; }
+
+    /* Results header: one swipeable line each, search behind a button */
+    .stat-keywords, .rtabs {
+      flex-wrap: nowrap; overflow-x: auto; margin-bottom: 10px;
+      scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    }
+    .stat-keywords::-webkit-scrollbar, .rtabs::-webkit-scrollbar { display: none; }
+    .stat-keywords > *, .rtabs > * { flex-shrink: 0; }
+
+    .results-toolbar { flex-wrap: nowrap; gap: 8px; }
+    #searchToggleBtn { display: inline-flex; }
+    .results-toolbar #resultsSearch { display: none; }
+    .results-toolbar #resultsStatusFilter { flex: 1; min-width: 0; }
+    .results-toolbar.search-open { flex-wrap: wrap; }
+    .results-toolbar.search-open #resultsSearch { display: block; order: 3; flex-basis: 100%; }
+    #searchToggleBtn.active { color: var(--accent); border-color: var(--accent); }
   }
 </style>
 </head>
@@ -549,7 +566,8 @@
 
     <div class="rtabs" id="resultsSiteTabs" style="display:none;"></div>
 
-    <div class="row" style="margin-bottom: 6px;">
+    <div class="row results-toolbar" style="margin-bottom: 6px;">
+      <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleResultsSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
       <select id="resultsStatusFilter">
         <option value="Matched" selected>Flagged only</option>
@@ -964,6 +982,8 @@ function switchDivision(id) {
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
+  document.querySelector('.results-toolbar').classList.remove('search-open');
+  document.getElementById('searchToggleBtn').classList.remove('active');
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('resultsSiteTabs').innerHTML = '';
@@ -1492,11 +1512,7 @@ async function loadResultsInfo() {
       t.className = 'tag';
       t.textContent = kv[0] + ' · ' + kv[1];
       t.title = 'Filter results by "' + kv[0] + '"';
-      t.onclick = function() {
-        document.getElementById('resultsSearch').value = kv[0];
-        resultsPage = 1;
-        loadProjects();
-      };
+      t.onclick = function() { setResultsSearch(kv[0]); };
       skEl.appendChild(t);
     });
     skEl.style.display = 'flex';
@@ -1733,6 +1749,37 @@ document.getElementById('resultsSearch').addEventListener('input', function() {
     loadProjects();
   }, 300);
 });
+
+// Mobile: the search field lives behind the magnifier button.
+function toggleResultsSearch() {
+  const bar = document.querySelector('.results-toolbar');
+  const input = document.getElementById('resultsSearch');
+  const btn = document.getElementById('searchToggleBtn');
+  const open = bar.classList.toggle('search-open');
+  btn.classList.toggle('active', open);
+  btn.setAttribute('aria-expanded', open);
+  if (open) {
+    input.focus();
+  } else if (input.value) {
+    input.value = '';
+    resultsPage = 1;
+    loadProjects();
+  }
+}
+
+// Used by the "most-flagged" chips — sets the query and makes it visible.
+function setResultsSearch(value) {
+  const bar = document.querySelector('.results-toolbar');
+  const btn = document.getElementById('searchToggleBtn');
+  document.getElementById('resultsSearch').value = value;
+  if (!bar.classList.contains('search-open')) {
+    bar.classList.add('search-open');
+    btn.classList.add('active');
+    btn.setAttribute('aria-expanded', 'true');
+  }
+  resultsPage = 1;
+  loadProjects();
+}
 document.getElementById('resultsStatusFilter').addEventListener('change', function() {
   resultsPage = 1;
   loadProjects();
