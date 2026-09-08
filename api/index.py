@@ -11,6 +11,7 @@ that same workflow immediately via its API.
 
 Routes:
   GET  /                                    the dashboard page
+  GET  /api/adapters                        list available portal adapters
   GET  /api/divisions                       list divisions
   POST /api/divisions                       create a division
   PATCH /api/divisions/<division_id>        rename a division
@@ -47,6 +48,7 @@ import pypdf
 from docx import Document as DocxDocument
 
 import supabase_store
+import adapters
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
@@ -157,21 +159,34 @@ def api_add_site(division_id):
     data = request.get_json(force=True, silent=True) or {}
     name = (data.get("name") or "").strip()
     url = (data.get("url") or "").strip()
-    if not name or not url:
-        return jsonify({"error": "name and url are both required"}), 400
+    adapter = (data.get("adapter") or "").strip()
+    if adapter and adapter not in adapters.ADAPTERS:
+        return jsonify({"error": f"unknown adapter '{adapter}'"}), 400
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    if not url and not adapter:
+        return jsonify({"error": "url is required (unless a portal adapter is selected)"}), 400
 
     listing = None
-    if data.get("link_selector") or data.get("link_pattern"):
-        listing = {}
-        if data.get("link_selector"):
-            listing["link_selector"] = data["link_selector"].strip()
-        if data.get("link_pattern"):
-            listing["link_pattern"] = data["link_pattern"].strip()
-    elif data.get("use_ai_listing"):
-        listing = {}
+    if not adapter:
+        if data.get("link_selector") or data.get("link_pattern"):
+            listing = {}
+            if data.get("link_selector"):
+                listing["link_selector"] = data["link_selector"].strip()
+            if data.get("link_pattern"):
+                listing["link_pattern"] = data["link_pattern"].strip()
+        elif data.get("use_ai_listing"):
+            listing = {}
 
-    site = supabase_store.add_site(division_id, name, url, listing=listing)
+    site = supabase_store.add_site(
+        division_id, name, url, listing=listing, adapter=adapter or None
+    )
     return jsonify({"ok": True, "site": site})
+
+
+@app.route("/api/adapters", methods=["GET"])
+def api_list_adapters():
+    return jsonify(adapters.list_adapters())
 
 
 @app.route("/api/<division_id>/sites/<int:site_id>", methods=["DELETE"])

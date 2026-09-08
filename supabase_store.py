@@ -98,12 +98,14 @@ def load_sites(division_id):
     return res.data
 
 
-def add_site(division_id, name, url, listing=None, tabs=None):
+def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
     row = {"division_id": division_id, "name": name, "url": url}
     if listing is not None:
         row["listing"] = listing
     if tabs is not None:
         row["tabs"] = tabs
+    if adapter:
+        row["adapter"] = adapter
     res = get_client().table("sites").insert(row).execute()
     return res.data[0]
 
@@ -309,6 +311,22 @@ def log_scan_row(division_id, run_date, site, document_url, filename,
         "status": status,
         "ai_notes": ai_notes,
     }).execute()
+
+
+def already_scanned_urls(division_id):
+    """document_url of every document this division has already processed to a
+    terminal, non-failure status — so a re-run (especially an adapter that
+    re-lists every advertised project each day) skips them instead of
+    re-downloading and re-running the AI pass. 'Download failed' rows are
+    excluded so those get retried."""
+    res = (
+        get_client().table("scan_results").select("document_url,status")
+        .eq("division_id", division_id).execute()
+    )
+    return {
+        r["document_url"] for r in res.data
+        if r.get("document_url") and r.get("status") != "Download failed"
+    }
 
 
 def get_scan_results(division_id, limit=2000):

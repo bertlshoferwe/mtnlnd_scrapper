@@ -133,6 +133,7 @@ HEADERS = {
 }
 
 import supabase_store
+import adapters
 
 
 def load_config(division_id):
@@ -488,6 +489,14 @@ def scan_site(site, ai_client):
     Dispatch to the right link-finding strategy for a site and return a
     uniform list of (label_or_None, absolute_document_url, filename).
     """
+    adapter_key = (site.get("adapter") or "").strip()
+    if adapter_key:
+        adapter = adapters.get_adapter(adapter_key)
+        if adapter is None:
+            print(f"  ! Site '{site['name']}' has unknown adapter '{adapter_key}' — skipping")
+            return []
+        print(f"  Adapter: {adapter.label}")
+        return adapter.find_documents(site)
     if site.get("listing") is not None:
         return find_document_links_via_listing(site, ai_client)
     if site.get("tabs"):
@@ -832,11 +841,17 @@ def _scan_division(division):
                   f"top-{AI_PREFILTER_TOP_N} pre-filter"
                   + ("" if keyword_vectors else " (literal hits only — no embeddings yet)"))
 
+        # Documents already processed in a previous run — skip re-downloading
+        # and re-scanning them (adapters re-list every advertised project each
+        # day, so without this every run redoes all of them).
+        already_scanned = supabase_store.already_scanned_urls(division_id)
+        skipped_seen = 0
+
         rows = []  # kept in memory too, just to build the daily summary at the end
         for site in sites:
             name = site["name"]
-            url = site["url"]
-            print(f"Scanning site: {name} ({url})")
+            url = site.get("url") or ""
+            print(f"Scanning site: {name}" + (f" ({url})" if url else ""))
 
             if site.get("listing") is not None:
                 print("  Listing mode: crawling item pages for documents")
@@ -860,6 +875,9 @@ def _scan_division(division):
                 continue
 
             for label, doc_url, filename in doc_links:
+                if doc_url in already_scanned:
+                    skipped_seen += 1
+                    continue
                 row_site_name = f"{name} — {label}" if label else name
 
                 raw = download_document(doc_url)
@@ -914,13 +932,18 @@ def _scan_division(division):
                        ", ".join(matched), len(matched), locations, status, ai_notes]
                 rows.append(row)
                 supabase_store.log_scan_row(division_id, *row)
+                already_scanned.add(doc_url)
                 print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
+
+        if skipped_seen:
+            print(f"  Skipped {skipped_seen} document(s) already scanned in a previous run")
 
         summary = generate_daily_summary(ai_client, rows)
         supabase_store.log_summary(division_id, run_date, summary)
 
         supabase_store.finish_run(run_id, "success")
-        print(f"=== Division '{division_id}' done: {len(rows)} row(s) logged ===")
+        print(f"=== Division '{division_id}' done: {len(rows)} new row(s) logged, "
+              f"{skipped_seen} skipped as already scanned ===")
     except Exception as e:
         supabase_store.finish_run(run_id, f"error: {e}")
         raise

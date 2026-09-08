@@ -102,13 +102,34 @@ Every document goes through two independent passes, merged together:
 
 **Cost implication**: the AI scan runs per document downloaded, not per match — cost scales with scan volume, not hit rate. Both providers use their fast/cheap model tier by default (see `ai_provider.py` for the exact model names, overridable via `ANTHROPIC_MODEL`/`GEMINI_MODEL`).
 
+## Portal adapters
+
+Some bid portals render everything client-side (Angular/React SPAs) and put
+documents behind tab navigation or XHR download buttons — the generic HTML
+crawl can't see them. For those, `adapters.py` holds per-portal code that
+talks to the portal's own API and returns the same document list.
+
+Set a site's **Portal adapter** dropdown in the dashboard (Sites → the adapter
+select). When an adapter is chosen the site URL and listing/selector options
+are ignored — the adapter knows where to look. Bundled: **UDOT Contractor
+Zone** (`udot_masterworks`), which pulls every advertised project's PDFs from
+`contractorzone.udot.utah.gov`.
+
+Adding a portal: subclass `SiteAdapter` in `adapters.py`, implement
+`find_documents()`, add it to the `_ADAPTER_CLASSES` list.
+
+**Re-scan skipping.** Because an adapter re-lists every advertised project on
+every run, the scan worker skips any document URL it has already processed to
+a non-failure status (`already_scanned_urls` in `supabase_store.py`) — so a
+daily run only downloads and AI-scans genuinely new documents.
+
 ## Choosing between Anthropic and Gemini
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:
 
 - **Switching providers** is a one-line change: update the `AI_PROVIDER` secret (or just add/remove the relevant API key secret) and re-run — no code or redeploy needed on the Vercel side, since provider selection only affects the GitHub Actions scan worker.
 - **Quality**: both are strong at the structured-JSON-following this pipeline depends on. If a provider's response can't be parsed as valid JSON, the code falls back to treating that document as "AI scan found nothing" for that call — it never crashes the run, just silently does less on that one document. Check the Actions logs for `unparseable result` warnings if matches seem to be missing.
-- **Gemini's model name churns faster than Anthropic's** — Google renames/retires free-tier aliases more often. If `ai_provider.py`'s default (`gemini-2.5-flash`) stops working, check [ai.google.dev](https://ai.google.dev) for the current model list and set `GEMINI_MODEL` to override.
+- **Gemini's model name churns faster than Anthropic's** — Google renames/retires aliases often. If `ai_provider.py`'s default (`gemini-3.6-flash`) stops working, check [ai.google.dev](https://ai.google.dev) for the current model list and set `GEMINI_MODEL` to override. The semantic pre-filter also needs `GEMINI_API_KEY` for embeddings even when `AI_PROVIDER=anthropic`.
 
 ## Known differences from the local/Docker version of this project
 

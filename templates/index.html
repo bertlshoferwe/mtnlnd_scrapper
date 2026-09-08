@@ -181,6 +181,7 @@
     background: var(--accent-soft); color: var(--accent-soft-text);
   }
   .tag.tag-tabs { background: var(--warning-soft); color: var(--warning); }
+  .tag.tag-adapter { background: var(--accent); color: var(--accent-contrast); }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .chip {
@@ -476,7 +477,14 @@
           <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
           <button class="btn-primary" onclick="addSite()">Add site</button>
         </div>
-        <span class="adv-toggle" onclick="toggleAdv()">+ Advanced (listing page options)</span>
+        <div class="row" style="margin-top:8px;">
+          <label style="font-size:12.5px; color:var(--muted); flex-shrink:0;">Portal adapter</label>
+          <select id="siteAdapter" onchange="onAdapterChange()" style="flex:1;">
+            <option value="">None &mdash; generic web page / listing</option>
+          </select>
+        </div>
+        <div class="status-line" id="adapterHelp"></div>
+        <span class="adv-toggle" id="advToggle" onclick="toggleAdv()">+ Advanced (listing page options)</span>
         <div class="adv-fields" id="advFields">
           <div class="row">
             <label>CSS selector</label>
@@ -801,6 +809,7 @@ async function loadSites() {
   sites.forEach(function(site, i) {
     const li = document.createElement('li');
     let tags = '';
+    if (site.adapter) tags += '<span class="tag tag-adapter">' + escapeHtml(adapterLabel(site.adapter)) + '</span>';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
     li.innerHTML =
@@ -814,22 +823,67 @@ async function loadSites() {
   });
 }
 
+let adapterList = [];
+
+async function loadAdapters() {
+  try {
+    adapterList = await api('/api/adapters');
+  } catch (e) {
+    adapterList = [];
+  }
+  const sel = document.getElementById('siteAdapter');
+  adapterList.forEach(function(a) {
+    const opt = document.createElement('option');
+    opt.value = a.key;
+    opt.textContent = a.label;
+    sel.appendChild(opt);
+  });
+}
+
+function adapterLabel(key) {
+  const a = adapterList.find(function(x) { return x.key === key; });
+  return a ? a.label : key;
+}
+
+function onAdapterChange() {
+  const key = document.getElementById('siteAdapter').value;
+  const a = adapterList.find(function(x) { return x.key === key; });
+  document.getElementById('adapterHelp').textContent = a ? a.help : '';
+  // With an adapter selected, the URL and listing/selector fields don't apply.
+  const usingAdapter = !!key;
+  document.getElementById('siteUrl').disabled = usingAdapter;
+  document.getElementById('siteUrl').placeholder = usingAdapter
+    ? 'not needed — the adapter knows where to look'
+    : 'https://example.com/bids';
+  document.getElementById('advToggle').style.display = usingAdapter ? 'none' : '';
+  if (usingAdapter) document.getElementById('advFields').classList.remove('open');
+}
+
 async function addSite() {
   const name = document.getElementById('siteName').value.trim();
   const url = document.getElementById('siteUrl').value.trim();
-  if (!name || !url) { alert('Name and URL are both required.'); return; }
+  const adapter = document.getElementById('siteAdapter').value;
+  if (!name) { alert('Site name is required.'); return; }
+  if (!url && !adapter) { alert('Enter a URL, or pick a portal adapter.'); return; }
   const body = {
-    name: name, url: url,
+    name: name, url: url, adapter: adapter,
     link_selector: document.getElementById('linkSelector').value.trim(),
     link_pattern: document.getElementById('linkPattern').value.trim(),
     use_ai_listing: document.getElementById('useAiListing').checked,
   };
-  await api('/api/' + currentDivision + '/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  try {
+    await api('/api/' + currentDivision + '/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
   document.getElementById('siteName').value = '';
   document.getElementById('siteUrl').value = '';
+  document.getElementById('siteAdapter').value = '';
   document.getElementById('linkSelector').value = '';
   document.getElementById('linkPattern').value = '';
   document.getElementById('useAiListing').checked = false;
+  onAdapterChange();
   loadSites();
 }
 
@@ -1178,6 +1232,7 @@ function localizeSchedule() {
 
 async function init() {
   localizeSchedule();
+  await loadAdapters();
   await loadDivisions();
   await loadAllForCurrentDivision();
   setInterval(function() { loadStatus(); loadResultsInfo(); }, 4000);
