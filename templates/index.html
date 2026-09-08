@@ -175,6 +175,20 @@
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
   }
   .site-edit-slot:empty { display: none; }
+  .site-actions {
+    display: flex; gap: 2px; flex-shrink: 0;
+    opacity: 0; transition: opacity .12s ease;
+  }
+  ul.list li:hover .site-actions,
+  .site-actions:focus-within { opacity: 1; }
+  @media (hover: none) { .site-actions { opacity: 1; } }
+  .icon-btn {
+    background: transparent; border: none; padding: 6px; border-radius: 6px;
+    color: var(--muted); cursor: pointer; display: inline-flex; line-height: 0;
+  }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
   .site-name { font-weight: 550; }
   .site-url { color: var(--muted); font-size: 12.5px; word-break: break-all; }
   .site-tags { margin-top: 3px; }
@@ -936,6 +950,9 @@ async function createDivision() {
 let sitesCache = [];
 let editingSiteId = null;
 
+const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
+
 // The edit form is a single shared node; parkFormHome() keeps it safe from
 // list.innerHTML wipes, editSite() moves it into the row being edited.
 function parkFormHome() {
@@ -967,9 +984,9 @@ async function loadSites() {
           '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
           '<div class="site-tags">' + tags + '</div>' +
         '</div>' +
-        '<div class="row" style="flex-wrap:nowrap; gap:2px; flex-shrink:0;">' +
-          '<button class="btn-ghost" style="border:none;" onclick="editSite(' + site.id + ')">Edit</button>' +
-          '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>' +
+        '<div class="site-actions">' +
+          '<button class="icon-btn" title="Edit" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
+          '<button class="icon-btn danger" title="Remove" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
         '</div>' +
       '</div>' +
       '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
