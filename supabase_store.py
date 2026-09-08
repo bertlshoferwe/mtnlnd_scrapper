@@ -285,6 +285,23 @@ def finish_run(run_id, status):
     }).eq("id", run_id).execute()
 
 
+def update_run_progress(run_id, done=None, total=None, label=None):
+    """Lightweight progress ping for the dashboard's live status. Any of the
+    three fields may be omitted."""
+    patch = {}
+    if done is not None:
+        patch["progress_done"] = done
+    if total is not None:
+        patch["progress_total"] = total
+    if label is not None:
+        patch["progress_label"] = label
+    if patch:
+        try:
+            get_client().table("scan_runs").update(patch).eq("id", run_id).execute()
+        except Exception as e:
+            print(f"  ! progress update failed (non-fatal): {e}")
+
+
 def get_latest_run(division_id):
     res = (
         get_client().table("scan_runs").select("*")

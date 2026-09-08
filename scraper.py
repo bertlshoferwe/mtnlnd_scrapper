@@ -836,6 +836,7 @@ def _scan_division(division):
 
     run_id = supabase_store.start_run(division_id)
     try:
+        supabase_store.update_run_progress(run_id, label="Getting started")
         sites, keywords = load_config(division_id)
         if not keywords:
             print(f"No keywords configured for division '{division_id}' — nothing to check for.")
@@ -850,6 +851,8 @@ def _scan_division(division):
         # AI pass only weighs the terms relevant to that document, not all of
         # them. Keeps cost/accuracy stable as the list grows past ~60.
         embedder = ai_provider.get_embedder()
+        if keywords:
+            supabase_store.update_run_progress(run_id, label="Preparing keywords")
         keyword_vectors = ensure_keyword_embeddings(division_id, embedder) if keywords else {}
         if keywords and len(keywords) > AI_PREFILTER_SEND_ALL_MAX:
             print(f"  {len(keywords)} keywords — semantic pass will use a per-document "
@@ -863,6 +866,7 @@ def _scan_division(division):
         skipped_seen = 0
 
         rows = []  # kept in memory too, just to build the daily summary at the end
+        progress_done = progress_total = 0
         for site in sites:
             name = site["name"]
             url = site.get("url") or ""
@@ -873,7 +877,15 @@ def _scan_division(division):
             elif site.get("tabs"):
                 print(f"  {len(site['tabs'])} tab(s) configured")
 
+            supabase_store.update_run_progress(run_id, label=f"Checking {name}")
             doc_links = scan_site(site, ai_client)
+            progress_total += sum(
+                1 for _, du, fn, _, _ in doc_links
+                if (du or f"{url}#{fn}") not in already_scanned
+            )
+            supabase_store.update_run_progress(
+                run_id, done=progress_done, total=progress_total, label="Reading documents"
+            )
 
             if site.get("tabs") and not os.environ.get("FIRECRAWL_API_KEY"):
                 row = [run_date, name, url, "", "", 0, "",
@@ -901,6 +913,9 @@ def _scan_division(division):
                         already_scanned[doc_key] = source_url
                     continue
                 row_site_name = f"{name} — {label}" if label else name
+                progress_done += 1
+                if progress_done % 3 == 0 or progress_done == progress_total:
+                    supabase_store.update_run_progress(run_id, done=progress_done, total=progress_total)
 
                 raw = content if content is not None else download_document(doc_url)
                 if raw is None:
@@ -960,6 +975,9 @@ def _scan_division(division):
         if skipped_seen:
             print(f"  Skipped {skipped_seen} document(s) already scanned in a previous run")
 
+        supabase_store.update_run_progress(
+            run_id, done=progress_total, total=progress_total, label="Wrapping up"
+        )
         summary = generate_daily_summary(ai_client, rows)
         supabase_store.log_summary(division_id, run_date, summary)
 

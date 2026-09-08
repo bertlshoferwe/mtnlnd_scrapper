@@ -70,8 +70,15 @@ create table if not exists scan_runs (
   started_at timestamptz not null,
   finished_at timestamptz,
   status text,             -- 'running' | 'success' | 'error: ...'
+  progress_done int default 0,     -- documents processed so far
+  progress_total int default 0,    -- documents this run will process (0 = unknown yet)
+  progress_label text,             -- current phase, e.g. "Reading sites"
   created_at timestamptz default now()
 );
+-- Migration for existing databases:
+--   alter table scan_runs add column if not exists progress_done int default 0;
+--   alter table scan_runs add column if not exists progress_total int default 0;
+--   alter table scan_runs add column if not exists progress_label text;
 create index if not exists scan_runs_division_idx on scan_runs(division_id, started_at desc);
 
 -- Row Level Security: this app talks to Supabase using the service_role key,

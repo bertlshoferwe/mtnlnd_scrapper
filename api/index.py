@@ -363,6 +363,9 @@ def api_status(division_id):
         "last_started": run["started_at"],
         "last_finished": run["finished_at"],
         "last_result": None if run["status"] == "running" else run["status"],
+        "progress_done": run.get("progress_done") or 0,
+        "progress_total": run.get("progress_total") or 0,
+        "progress_label": run.get("progress_label") or "",
     })
 
 

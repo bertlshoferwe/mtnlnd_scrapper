@@ -290,6 +290,10 @@
   .summary-card.status-card:hover { border-color: var(--border); box-shadow: none; }
   .summary-card #runNowBtn { margin-top: auto; }
   .summary-card #statusDetail:empty { display: none; }
+  .progress { height: 5px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin: 8px 0 2px; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 999px; width: 0%; transition: width .4s ease; }
+  .progress-fill.indeterminate { width: 35% !important; animation: indet 1.3s ease-in-out infinite; }
+  @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
   .summary-card .summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .summary-card .summary-title { font-size: 15px; font-weight: 650; color: var(--text); }
   .summary-card .summary-count { font-size: 22px; font-weight: 650; color: var(--text); line-height: 1; }
@@ -401,6 +405,7 @@
       </div>
       <span class="summary-sub"><span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span></span>
       <div class="status-line" id="statusDetail"></div>
+      <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
       <button class="btn-primary" id="runNowBtn" onclick="runNow()" style="margin-top:auto; align-self:flex-start;">Run scan now</button>
     </div>
     <button class="summary-card" onclick="openModal('sites')">
@@ -1052,12 +1057,28 @@ async function loadStatus() {
   if (s.running) runRequestedAt = 0;
   refreshRunNowButton();
 
+  const prog = document.getElementById('scanProgress');
+  const fill = document.getElementById('scanProgressFill');
+
   if (s.running) {
     dot.className = 'status-dot running';
-    text.textContent = 'Scanning for new documents…';
-    detail.textContent = "This can take a few minutes. New results appear below as they're found.";
+    prog.style.display = 'block';
+    if (s.progress_total > 0) {
+      const pct = Math.min(100, Math.round(100 * s.progress_done / s.progress_total));
+      text.textContent = 'Scanning documents… ' + pct + '%';
+      detail.textContent = s.progress_done + ' of ' + s.progress_total + " documents. Results appear below as they're found.";
+      fill.classList.remove('indeterminate');
+      fill.style.width = pct + '%';
+    } else {
+      text.textContent = 'Scanning for new documents…';
+      detail.textContent = (s.progress_label || 'Getting started') + '…';
+      fill.classList.add('indeterminate');
+    }
     return;
   }
+  prog.style.display = 'none';
+  fill.classList.remove('indeterminate');
+
   if (runPending()) {
     dot.className = 'status-dot running';
     text.textContent = 'Starting scan…';
