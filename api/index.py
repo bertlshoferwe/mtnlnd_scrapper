@@ -11,6 +11,7 @@ that same workflow immediately via its API.
 
 Routes:
   GET  /                                    the dashboard page
+  GET  /vendor/<path>                       bundled front-end assets (pdf.js)
   GET  /api/adapters                        list available portal adapters
   GET  /api/divisions                       list divisions
   POST /api/divisions                       create a division
@@ -53,7 +54,7 @@ from datetime import datetime, timezone, timedelta
 # the dashboard stops showing a phantom "Checking …" indefinitely.
 STALE_RUN_AFTER = timedelta(minutes=150)
 
-from flask import Flask, jsonify, request, render_template, send_file, abort, Response
+from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
 import pypdf
@@ -62,7 +63,9 @@ from docx import Document as DocxDocument
 import supabase_store
 import adapters
 
-TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEMPLATE_DIR = os.path.join(_REPO_ROOT, "templates")
+VENDOR_DIR = os.path.join(_REPO_ROOT, "vendor")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
 COLUMN_HEADERS = [
@@ -110,6 +113,19 @@ def index():
         display_schedule=DISPLAY_SCHEDULE_UTC,
         schedule_utc_hm=SCHEDULE_UTC_HM or "",
     )
+
+
+@app.route("/vendor/<path:filename>")
+def vendor_asset(filename):
+    """Serve third-party front-end assets (pdf.js) bundled with the repo.
+    Done through Flask rather than Vercel's static handling so it works
+    regardless of how the project routes the root path. .mjs needs an explicit
+    JS mimetype or browsers refuse to load it as a module."""
+    resp = send_from_directory(VENDOR_DIR, filename, max_age=31536000)
+    if filename.endswith(".mjs"):
+        resp.headers["Content-Type"] = "text/javascript; charset=utf-8"
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 # ---------------------------------------------------------------------------

@@ -430,9 +430,21 @@
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
   .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
   .file-row .f-dl:hover { text-decoration: underline; }
-  .pdf-modal { max-width: 920px; }
-  #pdfFrame { width: 100%; height: 74vh; border: none; display: block; background: var(--surface-2); }
-  #pdfMobileFallback { display: none; }
+  .pdf-modal { max-width: 940px; }
+  .pdf-modal .modal-body { flex: 1 1 auto; }
+  #pdfScroll {
+    padding: 12px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    background: var(--surface-2); min-height: 45vh;
+  }
+  #pdfPages { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .pdf-page-wrap {
+    width: 100%; max-width: 900px; background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,.28); border-radius: 2px; overflow: hidden;
+  }
+  .pdf-page-wrap canvas { display: block; width: 100%; height: auto; }
+  #pdfStatus { text-align: center; color: var(--muted); font-size: 13px; padding: 16px; }
+  #pdfStatus:empty { display: none; }
+  #pdfStatus a { color: var(--accent); }
   .file-row .f-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
   .kw-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
   .kw-table th {
@@ -485,18 +497,10 @@
     .kw-table th, .kw-table td { padding: 4px 7px; }
     .kw-table .kt-term { padding-right: 10px; }
 
-    /* PDF preview fills the full-screen modal */
     .pdf-modal .modal-header { flex-wrap: wrap; }
     .pdf-modal .modal-header h2 { font-size: 14px; }
-    .pdf-modal .modal-body { flex: 1; }
-    /* Phones can't scroll a PDF inside an iframe — offer the native viewer */
-    #pdfFrame { display: none; }
-    #pdfMobileFallback {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; height: 100%; padding: 40px 26px; text-align: center;
-      color: var(--muted); font-size: 13.5px; line-height: 1.55;
-    }
-    #pdfMobileFallback .btn-primary { min-width: 180px; padding: 11px 18px; }
+    #pdfScroll { padding: 6px; }
+    .pdf-page-wrap { max-width: 100%; }
 
     /* Most-flagged keywords: one swipeable line instead of wrapping */
     .stat-keywords {
@@ -746,12 +750,9 @@
         <button class="modal-close" onclick="closePdfModal()" aria-label="Close">&times;</button>
       </div>
     </div>
-    <div class="modal-body" style="padding:0; flex:1;">
-      <iframe id="pdfFrame" title="PDF preview"></iframe>
-      <div id="pdfMobileFallback">
-        <p>Inline PDF preview doesn't scroll reliably on phones. Open it in your browser's viewer instead.</p>
-        <a id="pdfFallbackOpen" class="btn-primary" target="_blank" rel="noopener" style="text-decoration:none;">Open PDF</a>
-      </div>
+    <div class="modal-body" id="pdfScroll">
+      <div id="pdfPages"></div>
+      <div id="pdfStatus"></div>
     </div>
   </div>
 </div>
@@ -838,25 +839,101 @@ function openModal(name) {
 }
 function closeModal() {
   document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
-  document.getElementById('pdfFrame').src = 'about:blank';
+  teardownPdf();
 }
 function closePdfModal() {
   document.getElementById('pdfModal').classList.remove('open');
-  document.getElementById('pdfFrame').src = 'about:blank';
+  teardownPdf();
 }
+function teardownPdf() {
+  pdfRenderToken++;                       // cancel any in-flight page renders
+  document.getElementById('pdfPages').innerHTML = '';
+  document.getElementById('pdfStatus').textContent = '';
+}
+
+// ---- pdf.js viewer -------------------------------------------------------
+let pdfLibPromise = null;
+let pdfRenderToken = 0;
+
+function loadPdfLib() {
+  if (!pdfLibPromise) {
+    pdfLibPromise = import('/vendor/pdfjs/pdf.min.mjs').then(function(lib) {
+      lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+      return lib;
+    });
+  }
+  return pdfLibPromise;
+}
+
 function openPdfPreview(url, filename) {
   const src = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(url);
   document.getElementById('pdfModalTitle').textContent = filename || 'Document';
-  // On phones the iframe preview can't scroll, so we show a fallback panel
-  // instead — don't waste a large PDF fetch loading a hidden iframe.
-  const inlinePreview = !window.matchMedia('(max-width: 640px)').matches;
-  document.getElementById('pdfFrame').src = inlinePreview ? src : 'about:blank';
   const dl = document.getElementById('pdfModalDownload');
   dl.href = src + '&download=1';
   if (filename) dl.setAttribute('download', filename);
   document.getElementById('pdfModalNewTab').href = src;
-  document.getElementById('pdfFallbackOpen').href = src;
   document.getElementById('pdfModal').classList.add('open');
+  renderPdf(src);
+}
+
+async function renderPdf(src) {
+  const token = ++pdfRenderToken;
+  const pagesEl = document.getElementById('pdfPages');
+  const statusEl = document.getElementById('pdfStatus');
+  const scrollEl = document.getElementById('pdfScroll');
+  pagesEl.innerHTML = '';
+  scrollEl.scrollTop = 0;
+  statusEl.textContent = 'Loading…';
+
+  try {
+    const lib = await loadPdfLib();
+    if (token !== pdfRenderToken) return;
+    const pdf = await lib.getDocument({ url: src }).promise;
+    if (token !== pdfRenderToken) return;
+    statusEl.textContent = '';
+
+    // Lazy-render: only pages near the viewport get drawn (handles 200+ pages).
+    const io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) { io.unobserve(entry.target); renderPdfPage(pdf, entry.target, token); }
+      });
+    }, { root: scrollEl, rootMargin: '800px 0px' });
+
+    const first = await pdf.getPage(1);
+    const ratio = first.getViewport({ scale: 1 }).height / first.getViewport({ scale: 1 }).width;
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'pdf-page-wrap';
+      wrap.dataset.page = n;
+      wrap.style.aspectRatio = (1 / ratio).toFixed(4);  // reserve height before render
+      pagesEl.appendChild(wrap);
+      io.observe(wrap);
+    }
+  } catch (err) {
+    if (token !== pdfRenderToken) return;
+    statusEl.innerHTML =
+      "Couldn't display this PDF here — <a href='" + src +
+      "' target='_blank' rel='noopener'>open it in your browser</a>.";
+  }
+}
+
+async function renderPdfPage(pdf, wrap, token) {
+  if (token !== pdfRenderToken || wrap.dataset.done) return;
+  wrap.dataset.done = '1';
+  try {
+    const page = await pdf.getPage(parseInt(wrap.dataset.page, 10));
+    if (token !== pdfRenderToken) return;
+    const cssWidth = Math.min(wrap.clientWidth || 900, 1400);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: (cssWidth / base.width) * dpr });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    wrap.style.aspectRatio = '';
+    wrap.appendChild(canvas);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+  } catch (e) { /* a single bad page shouldn't blank the whole document */ }
 }
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
