@@ -421,7 +421,10 @@
       <span class="summary-sub"><span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span></span>
       <div class="status-line" id="statusDetail"></div>
       <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
-      <button class="btn-primary" id="runNowBtn" onclick="runNow()" style="margin-top:auto; align-self:flex-start;">Run scan now</button>
+      <div class="row" style="margin-top:auto; gap:8px;">
+        <button class="btn-primary" id="runNowBtn" onclick="runNow()">Run scan now</button>
+        <button class="btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel scan</button>
+      </div>
     </div>
     <button class="summary-card" onclick="openModal('sites')">
       <div class="summary-top">
@@ -634,11 +637,31 @@ function refreshRunNowButton() {
   const btn = document.getElementById('runNowBtn');
   if (!btn) return;
   const ready = siteCount > 0 && keywordCount > 0;
-  btn.disabled = scanRunning || runPending() || !ready;
+  const active = scanRunning || runPending();
+  btn.disabled = active || !ready;
   btn.title = runPending() ? 'Scan starting — please wait'
     : scanRunning
     ? 'A scan is already running'
     : (ready ? '' : 'Add at least one site and one keyword first');
+  const cancel = document.getElementById('cancelScanBtn');
+  if (cancel) cancel.style.display = active ? '' : 'none';
+}
+
+async function cancelScan() {
+  if (!confirm('Cancel the running scan? Anything already scanned this run is kept.')) return;
+  const btn = document.getElementById('cancelScanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+  try {
+    await api('/api/' + currentDivision + '/cancel-scan', { method: 'POST' });
+  } catch (e) {
+    alert(e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Cancel scan';
+  runRequestedAt = 0;
+  loadStatus();
+  loadResultsInfo();
 }
 
 async function api(path, opts) {
@@ -1153,6 +1176,9 @@ async function loadStatus() {
   if (s.last_result === 'success') {
     dot.className = 'status-dot success';
     text.textContent = 'Scan complete';
+  } else if (s.last_result === 'cancelled') {
+    dot.className = 'status-dot idle';
+    text.textContent = 'Scan cancelled';
   } else if (s.last_result && s.last_result.startsWith('error')) {
     dot.className = 'status-dot error';
     text.textContent = "Last scan didn't finish";

@@ -24,6 +24,7 @@ Routes:
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
   DEL  /api/<division_id>/keywords            remove one keyword (?keyword=…) or all of them
   GET  /api/<division_id>/status             latest run status
+  POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested
@@ -372,30 +373,41 @@ def api_status(division_id):
     })
 
 
+def _github_cfg():
+    """(headers, api_base, workflow_file, ref) or (None, error_response)."""
+    token = os.environ.get("GITHUB_TOKEN")
+    owner = os.environ.get("GITHUB_OWNER")
+    repo = os.environ.get("GITHUB_REPO")
+    if not (token and owner and repo):
+        return None, (jsonify({
+            "error": "GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO not configured on this Vercel "
+                     "project — can't talk to the GitHub Actions workflow. See README.md."
+        }), 500)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    return (
+        headers,
+        f"https://api.github.com/repos/{owner}/{repo}",
+        os.environ.get("GITHUB_WORKFLOW_FILE", "daily-scan.yml"),
+        os.environ.get("GITHUB_REF", "main"),
+    ), None
+
+
 @app.route("/api/<division_id>/run-now", methods=["POST"])
 def api_run_now(division_id):
     _, err = _require_division(division_id)
     if err:
         return err
 
-    token = os.environ.get("GITHUB_TOKEN")
-    owner = os.environ.get("GITHUB_OWNER")
-    repo = os.environ.get("GITHUB_REPO")
-    workflow_file = os.environ.get("GITHUB_WORKFLOW_FILE", "daily-scan.yml")
-    ref = os.environ.get("GITHUB_REF", "main")
-
-    if not (token and owner and repo):
-        return jsonify({
-            "error": "GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO not configured on this Vercel "
-                     "project — Run Now can't trigger the GitHub Actions workflow. See README.md."
-        }), 500
-
-    gh_headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    base = f"https://api.github.com/repos/{owner}/{repo}"
+    cfg, cfg_err = _github_cfg()
+    if cfg_err:
+        return cfg_err
+    gh_headers, base, workflow_file, ref = cfg
+    owner = base.rsplit("/", 2)[-2]
+    repo = base.rsplit("/", 1)[-1]
     url = f"{base}/actions/workflows/{workflow_file}/dispatches"
     try:
         resp = requests.post(
@@ -418,6 +430,47 @@ def api_run_now(division_id):
         )}), 502
 
     return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 502
+
+
+@app.route("/api/<division_id>/cancel-scan", methods=["POST"])
+def api_cancel_scan(division_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    # Mark this division's running scan as cancelled so the dashboard clears
+    # even if the GitHub call below fails or the runner is already gone.
+    run = supabase_store.get_latest_run(division_id)
+    if run and run.get("status") == "running":
+        supabase_store.finish_run(run["id"], "cancelled")
+
+    cfg, cfg_err = _github_cfg()
+    if cfg_err:
+        return cfg_err
+    gh_headers, base, workflow_file, _ = cfg
+
+    # Cancel every in-progress / queued run of the scan workflow. (workflow_
+    # dispatch doesn't hand back a run id, and there's usually only one scan
+    # in flight, so cancelling all of them is the pragmatic move.)
+    cancelled = 0
+    try:
+        for state in ("in_progress", "queued"):
+            r = requests.get(
+                f"{base}/actions/workflows/{workflow_file}/runs",
+                headers=gh_headers, params={"status": state, "per_page": 20}, timeout=8,
+            )
+            if not r.ok:
+                continue
+            for wr in r.json().get("workflow_runs", []):
+                c = requests.post(f"{base}/actions/runs/{wr['id']}/cancel",
+                                  headers=gh_headers, timeout=8)
+                if c.status_code in (202, 409):  # 409 = already completing
+                    cancelled += 1
+    except requests.RequestException as e:
+        return jsonify({"ok": True, "cancelled": cancelled,
+                        "warning": f"marked cancelled, but reaching GitHub failed: {e}"})
+
+    return jsonify({"ok": True, "cancelled": cancelled})
 
 
 def _diagnose_dispatch_404(base, workflow_file, gh_headers):
