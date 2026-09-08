@@ -168,10 +168,13 @@
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
-    display: flex; justify-content: space-between; align-items: center;
     padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   ul.list li:last-child { border-bottom: none; }
+  .site-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  }
+  .site-edit-slot:empty { display: none; }
   .site-name { font-weight: 550; }
   .site-url { color: var(--muted); font-size: 12.5px; word-break: break-all; }
   .site-tags { margin-top: 3px; }
@@ -933,7 +936,15 @@ async function createDivision() {
 let sitesCache = [];
 let editingSiteId = null;
 
+// The edit form is a single shared node; parkFormHome() keeps it safe from
+// list.innerHTML wipes, editSite() moves it into the row being edited.
+function parkFormHome() {
+  const form = document.getElementById('addSiteForm');
+  document.querySelector('#sitesModal .modal-body').appendChild(form);
+}
+
 async function loadSites() {
+  parkFormHome();  // detach from any row about to be destroyed
   const sites = await api('/api/' + currentDivision + '/sites');
   sitesCache = sites;
   const list = document.getElementById('sitesList');
@@ -950,17 +961,37 @@ async function loadSites() {
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
     li.innerHTML =
-      '<div style="min-width:0;">' +
-        '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
-        '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
-        '<div class="site-tags">' + tags + '</div>' +
+      '<div class="site-row">' +
+        '<div style="min-width:0;">' +
+          '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
+          '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
+          '<div class="site-tags">' + tags + '</div>' +
+        '</div>' +
+        '<div class="row" style="flex-wrap:nowrap; gap:2px; flex-shrink:0;">' +
+          '<button class="btn-ghost" style="border:none;" onclick="editSite(' + site.id + ')">Edit</button>' +
+          '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>' +
+        '</div>' +
       '</div>' +
-      '<div class="row" style="flex-wrap:nowrap; gap:2px; flex-shrink:0;">' +
-        '<button class="btn-ghost" style="border:none;" onclick="editSite(' + site.id + ')">Edit</button>' +
-        '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>' +
-      '</div>';
+      '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
     list.appendChild(li);
   });
+
+  // A re-render mid-edit (e.g. deleting another site): re-mount the open form
+  // under its row, or drop out of edit mode if that row is gone.
+  if (editingSiteId != null) {
+    if (sites.some(function(s) { return s.id === editingSiteId; })) mountEditForm(editingSiteId);
+    else hideAddSite();
+  }
+}
+
+function mountEditForm(siteId) {
+  const slot = document.getElementById('edit-slot-' + siteId);
+  const form = document.getElementById('addSiteForm');
+  if (!slot) return;
+  slot.appendChild(form);
+  form.style.display = 'block';
+  document.getElementById('showAddSiteBtn').style.display = 'none';
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 let adapterList = [];
@@ -1001,6 +1032,7 @@ function onAdapterChange() {
 
 function showAddSite() {
   editingSiteId = null;
+  parkFormHome();
   document.getElementById('siteFormTitle').textContent = 'Add a site';
   document.getElementById('siteSaveBtn').textContent = 'Add site';
   document.getElementById('showAddSiteBtn').style.display = 'none';
@@ -1028,13 +1060,12 @@ function editSite(siteId) {
 
   document.getElementById('siteFormTitle').textContent = 'Edit ' + site.name;
   document.getElementById('siteSaveBtn').textContent = 'Save changes';
-  document.getElementById('showAddSiteBtn').style.display = 'none';
-  document.getElementById('addSiteForm').style.display = 'block';
-  document.getElementById('addSiteForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  mountEditForm(siteId);
 }
 
 function hideAddSite() {
   editingSiteId = null;
+  parkFormHome();
   document.getElementById('addSiteForm').style.display = 'none';
   document.getElementById('showAddSiteBtn').style.display = '';
   document.getElementById('siteName').value = '';
