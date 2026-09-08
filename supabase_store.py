@@ -296,24 +296,36 @@ def update_run_progress(run_id, done=None, total=None, label=None,
     `total` are per the CURRENT site; `overall` is documents scanned across
     all sites so far; `site_i`/`site_n` are the current/total site count.
     Any field may be omitted."""
-    patch = {}
+    core = {}  # columns that have existed since the first progress release
     if done is not None:
-        patch["progress_done"] = done
+        core["progress_done"] = done
     if total is not None:
-        patch["progress_total"] = total
+        core["progress_total"] = total
     if label is not None:
-        patch["progress_label"] = label
+        core["progress_label"] = label
+    extra = {}  # added later — a DB that skipped the migration won't have these
     if site_i is not None:
-        patch["progress_site_i"] = site_i
+        extra["progress_site_i"] = site_i
     if site_n is not None:
-        patch["progress_site_n"] = site_n
+        extra["progress_site_n"] = site_n
     if overall is not None:
-        patch["progress_overall"] = overall
-    if patch:
+        extra["progress_overall"] = overall
+
+    if not core and not extra:
+        return
+    # Try the full patch; if the newer columns don't exist, fall back to the
+    # core ones so per-site 0/0 resets still land (no stale "298 of 298").
+    attempts = [{**core, **extra}] + ([core] if extra and core else [])
+    err = None
+    for patch in attempts:
+        if not patch:
+            continue
         try:
             get_client().table("scan_runs").update(patch).eq("id", run_id).execute()
+            return
         except Exception as e:
-            print(f"  ! progress update failed (non-fatal): {e}")
+            err = e
+    print(f"  ! progress update failed (non-fatal): {err}")
 
 
 def get_latest_run(division_id):
