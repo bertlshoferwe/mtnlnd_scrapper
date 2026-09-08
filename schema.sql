@@ -40,7 +40,8 @@ create table if not exists scan_results (
   division_id text not null references divisions(id) on delete cascade,
   run_date timestamptz not null,
   site text,
-  document_url text,
+  document_url text,       -- direct link to the file (may be a synthetic key for JS-captured downloads)
+  source_url text,         -- the project/job page the file belongs to, for the "open project" link
   filename text,
   matched_keywords text,
   match_count int default 0,
@@ -49,6 +50,8 @@ create table if not exists scan_results (
   ai_notes text,
   created_at timestamptz default now()
 );
+-- Migration for existing databases:
+--   alter table scan_results add column if not exists source_url text;
 create index if not exists scan_results_division_idx on scan_results(division_id, run_date desc);
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.

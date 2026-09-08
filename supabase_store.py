@@ -298,12 +298,14 @@ def get_latest_run(division_id):
 # ---------------------------------------------------------------------------
 
 def log_scan_row(division_id, run_date, site, document_url, filename,
-                  matched_keywords, match_count, keyword_locations, status, ai_notes):
+                  matched_keywords, match_count, keyword_locations, status, ai_notes,
+                  source_url=None):
     get_client().table("scan_results").insert({
         "division_id": division_id,
         "run_date": run_date,
         "site": site,
         "document_url": document_url,
+        "source_url": source_url,
         "filename": filename,
         "matched_keywords": matched_keywords,
         "match_count": match_count,
@@ -364,6 +366,103 @@ def get_scan_results_page(division_id, search=None, status=None, page=1, page_si
 
     res = query.order("run_date", desc=True).range(start, end).execute()
     return res.data, (res.count or 0)
+
+
+def _split_site(site):
+    """'UDOT — US-40; MP 52 to Currant Creek' -> ('UDOT', 'US-40; ...').
+    Falls back to ('', site) when there's no ' — ' separator."""
+    parts = (site or "").split(" — ", 1)
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip()
+    return "", (site or "").strip()
+
+
+def get_results_grouped(division_id, search=None, status=None, page=1, page_size=15):
+    """Scan results collapsed to one entry per project (the `site` value),
+    each project's files nested underneath. Filtering and pagination happen
+    over the grouped projects. Returns (projects, total_project_count).
+    """
+    rows = (
+        get_client().table("scan_results").select("*")
+        .eq("division_id", division_id).order("run_date", desc=True)
+        .limit(5000).execute()
+    ).data
+
+    # Newest row wins per (project, filename), so a re-scan doesn't duplicate.
+    seen, latest = set(), []
+    for r in rows:
+        key = (r.get("site"), r.get("filename"))
+        if key in seen:
+            continue
+        seen.add(key)
+        latest.append(r)
+
+    groups = {}
+    for r in latest:
+        site = r.get("site") or "(unknown)"
+        prefix, project = _split_site(site)
+        g = groups.setdefault(site, {
+            "project": project, "source_prefix": prefix,
+            "source_url": None, "latest_date": r.get("run_date") or "", "files": [],
+        })
+        if r.get("source_url") and not g["source_url"]:
+            g["source_url"] = r["source_url"]
+        if (r.get("run_date") or "") > g["latest_date"]:
+            g["latest_date"] = r["run_date"]
+        g["files"].append({
+            "filename": r.get("filename") or "",
+            "url": r.get("document_url") or "",
+            "status": r.get("status") or "",
+            "keywords": [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()],
+            "locations": r.get("keyword_locations") or "",
+            "ai_notes": r.get("ai_notes") or "",
+        })
+
+    projects = []
+    for g in groups.values():
+        real_files = [f for f in g["files"] if f["filename"]]
+        matched = sum(1 for f in g["files"] if f["status"].startswith("Matched"))
+        failed = sum(1 for f in real_files if f["status"] == "Download failed")
+        kws = []
+        for f in g["files"]:
+            for k in f["keywords"]:
+                if k not in kws:
+                    kws.append(k)
+        if not real_files:
+            proj_status = g["files"][0]["status"] if g["files"] else ""
+        elif matched:
+            proj_status = "Matched"
+        elif failed == len(real_files):
+            proj_status = "Download failed"
+        else:
+            proj_status = "No match"
+        projects.append({
+            "project": g["project"], "source_prefix": g["source_prefix"],
+            "source_url": g["source_url"], "latest_date": g["latest_date"],
+            "file_count": len(real_files), "matched_file_count": matched,
+            "keywords": kws, "status": proj_status,
+            "files": sorted(g["files"], key=lambda f: f["filename"]),
+        })
+
+    if status:
+        projects = [p for p in projects if p["status"].startswith(status)]
+    if search:
+        s = search.lower()
+        projects = [
+            p for p in projects
+            if s in p["project"].lower()
+            or any(s in f["filename"].lower() for f in p["files"])
+            or any(s in k.lower() for k in p["keywords"])
+        ]
+
+    projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
+    projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
+
+    total = len(projects)
+    page = max(1, page)
+    page_size = max(1, min(page_size, 50))
+    start = (page - 1) * page_size
+    return projects[start:start + page_size], total
 
 
 def get_stats(division_id):

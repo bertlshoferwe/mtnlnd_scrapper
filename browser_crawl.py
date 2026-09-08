@@ -16,10 +16,11 @@ bid/project/solicitation pages, with page/depth/time caps so a run stays
 bounded.
 
 Entry point:
-    crawl_site(start_url) -> [(label, url_or_None, filename, content_or_None)]
+    crawl_site(start_url) -> [(label, url_or_None, filename, content_or_None, page_url)]
 
 `content` is raw bytes for files captured from a JS download (no URL to fetch
 later); it's None for ordinary linked files, which the caller downloads by URL.
+`page_url` is the page the file was found on (used for the "open project" link).
 If Playwright or its browser isn't available, returns [] and logs why — the
 caller falls back to the plain-requests link finder.
 """
@@ -172,7 +173,7 @@ def crawl_site(start_url):
     origin = urlparse(start_url).netloc
     seen_pages = set()
     queue = [(start_url, 0)]
-    found = {}  # (filename, key) -> (label, url_or_None, content_or_None)
+    found = {}  # (filename, key) -> (label, url_or_None, content_or_None, page_url)
     deadline = time.time() + SITE_BUDGET_S
 
     try:
@@ -234,7 +235,7 @@ def crawl_site(start_url):
                     continue
                 if _is_doc_href(href):
                     fn = _filename_from_url(href)
-                    found.setdefault((fn, href), (label, href, None))
+                    found.setdefault((fn, href), (label, href, None, url))
                     continue
                 if (
                     depth >= MAX_DEPTH
@@ -258,7 +259,7 @@ def crawl_site(start_url):
                     continue
                 data = _save_download(dl)
                 if data:
-                    found[(fn, url + "#dl")] = (label, None, data)
+                    found[(fn, url + "#dl")] = (label, None, data, url)
 
             page.close()
     finally:
@@ -267,6 +268,7 @@ def crawl_site(start_url):
         finally:
             pw.stop()
 
-    results = [(label, url, fn, content) for (fn, _), (label, url, content) in found.items()]
+    results = [(label, u, fn, content, page_url)
+               for (fn, _), (label, u, content, page_url) in found.items()]
     print(f"  Crawled {len(seen_pages)} page(s), found {len(results)} document(s)")
     return results

@@ -26,6 +26,7 @@ Routes:
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
 
@@ -482,6 +483,28 @@ def api_get_results(division_id):
         page=page, page_size=page_size,
     )
     return jsonify({"rows": rows, "total": total, "page": page, "page_size": page_size})
+
+
+@app.route("/api/<division_id>/results-grouped", methods=["GET"])
+def api_get_results_grouped(division_id):
+    """Results collapsed to one entry per project, files nested. Query params:
+    search, status, page (1-based), page_size."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    search = (request.args.get("search") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        page_size = max(1, min(50, int(request.args.get("page_size", 15))))
+    except ValueError:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+
+    projects, total = supabase_store.get_results_grouped(
+        division_id, search=search or None, status=status or None,
+        page=page, page_size=page_size,
+    )
+    return jsonify({"projects": projects, "total": total, "page": page, "page_size": page_size})
 
 
 def _build_results_workbook(division_id, division_name):

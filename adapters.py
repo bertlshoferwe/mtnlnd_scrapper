@@ -34,9 +34,10 @@ class SiteAdapter:
         return any(host == h or host.endswith("." + h) for h in cls.hosts)
 
     def find_documents(self, site):
-        """Return [(label, absolute_document_url, filename), ...] for every
-        document the portal is currently advertising. `site` is the sites row
-        (dict) in case an adapter wants a configurable field off it later."""
+        """Return [(label, document_url, filename, project_page_url), ...] for
+        every document the portal is currently advertising. `label` is the
+        job/project name; `project_page_url` is a link to that job's page
+        (or None). `site` is the sites row (dict)."""
         raise NotImplementedError
 
 
@@ -74,6 +75,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
             if not uuid:
                 continue
             label = p.get("project_name") or p.get("project_number") or str(uuid)
+            project_url = f"{self.BASE}/project/{uuid}/project-files"
             try:
                 files = self._get_json(f"/project-files/{uuid}/project-files")
             except requests.RequestException as e:
@@ -85,7 +87,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
                     continue
                 url = (f"{self.BASE}/project-files/download/{uuid}/project-files"
                        f"?file_name={requests.utils.quote(fn)}")
-                out.append((label, url, fn))
+                out.append((label, url, fn, project_url))
         return out
 
 

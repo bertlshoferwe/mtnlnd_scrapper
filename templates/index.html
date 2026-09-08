@@ -343,9 +343,30 @@
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
     font-size: 13px; line-height: 1.5;
   }
-  .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .results-table th { padding: 8px; font-weight: 700; background: var(--surface-2); text-align: left; }
-  .results-table td { padding: 8px; vertical-align: top; border-top: 1px solid var(--border); }
+  /* Results: one row per project */
+  .project-list { list-style: none; margin: 0; padding: 0; }
+  .project-list li {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 6px; border-bottom: 1px solid var(--border);
+    cursor: pointer; border-radius: 6px;
+  }
+  .project-list li:last-child { border-bottom: none; }
+  .project-list li:hover { background: var(--surface-2); }
+  .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
+  .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
+  .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .pill.match { background: var(--accent); color: var(--accent-contrast); }
+  .pill.nomatch { background: var(--surface-2); color: var(--muted); }
+  .pill.fail { background: var(--danger-soft); color: var(--danger); }
+
+  .file-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .file-row:last-child { border-bottom: none; }
+  .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+  .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+  .file-row .f-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .file-row .f-kw { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 </style>
 </head>
 <body>
@@ -420,31 +441,18 @@
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
 
-    <div class="row" style="margin-bottom: 10px;">
-      <input type="text" id="resultsSearch" placeholder="Search site or filename" style="flex:1;">
+    <div class="row" style="margin-bottom: 6px;">
+      <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
       <select id="resultsStatusFilter">
-        <option value="">All statuses</option>
-        <option value="Matched">Matched</option>
-        <option value="No match">No match</option>
-        <option value="No documents found">No documents found</option>
-        <option value="Download failed">Download failed</option>
+        <option value="">All projects</option>
+        <option value="Matched">Keyword matches</option>
+        <option value="No match">No matches</option>
+        <option value="Download failed">Couldn't download</option>
       </select>
     </div>
 
-    <div style="overflow-x:auto;">
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Site / document</th>
-            <th>Keywords</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="resultsTableBody"></tbody>
-      </table>
-    </div>
-    <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see rows here.</div>
+    <ul class="project-list" id="projectList"></ul>
+    <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
 
     <div class="row" style="justify-content: space-between; margin-top: 10px;">
       <span class="status-line" id="resultsPageInfo"></span>
@@ -541,6 +549,22 @@
         <div class="empty" id="keywordsNoMatch" style="display:none;">No keywords match that filter.</div>
       </div>
       <div class="kw-count" id="keywordCountLine"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="projectModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="projectModalTitle"></h2>
+        <p class="desc" id="projectModalMeta"></p>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <a id="projectModalLink" class="btn-primary" style="display:none; text-decoration:none; margin-bottom:14px;" target="_blank" rel="noopener">Open project page &#8599;</a>
+      <div id="projectModalFiles"></div>
     </div>
   </div>
 </div>
@@ -1102,7 +1126,8 @@ function formatBytes(bytes) {
 
 let resultsPage = 1;
 let resultsTotal = 0;
-const RESULTS_PAGE_SIZE = 20;
+const PROJECTS_PER_PAGE = 15;
+let projectsData = [];
 let resultsSearchDebounce = null;
 
 async function loadResultsInfo() {
@@ -1114,17 +1139,19 @@ async function loadResultsInfo() {
   const callout = document.getElementById('summaryCallout');
 
   if (!info.exists) {
-    line.textContent = 'No results yet \u2014 run a scan to create some.';
+    line.textContent = 'No scans yet.';
     btn.style.display = 'none';
     statsRow.style.display = 'none';
     callout.style.display = 'none';
-    document.getElementById('resultsTableBody').innerHTML = '';
+    document.getElementById('projectList').innerHTML = '';
     document.getElementById('resultsEmpty').style.display = 'block';
     document.getElementById('resultsPageInfo').textContent = '';
     return;
   }
 
-  line.textContent = 'Latest run: ' + new Date(info.latest_run_date).toLocaleString();
+  line.textContent = 'Last scan ' + new Date(info.latest_run_date).toLocaleString([], {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
   btn.href = '/download/' + currentDivision + '/results';
   btn.style.display = 'inline-block';
 
@@ -1139,77 +1166,170 @@ async function loadResultsInfo() {
     callout.style.display = 'none';
   }
 
-  await loadResultsTable();
+  await loadProjects();
 }
 
-function statusColor(status) {
-  if (!status) return 'var(--text)';
-  if (status.indexOf('Matched') === 0) return 'var(--success)';
-  if (status === 'Download failed' || status === 'No text extracted') return 'var(--danger)';
-  return 'var(--muted)';
-}
-
-async function loadResultsTable() {
+async function loadProjects() {
   if (!currentDivision) return;
   const search = document.getElementById('resultsSearch').value.trim();
   const status = document.getElementById('resultsStatusFilter').value;
-  const params = new URLSearchParams({ page: resultsPage, page_size: RESULTS_PAGE_SIZE });
+  const params = new URLSearchParams({ page: resultsPage, page_size: PROJECTS_PER_PAGE });
   if (search) params.set('search', search);
   if (status) params.set('status', status);
 
-  const data = await api('/api/' + currentDivision + '/results?' + params.toString());
-  resultsTotal = data.total;
+  const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
+  projectsData = data.projects || [];
+  resultsTotal = data.total || 0;
 
-  const tbody = document.getElementById('resultsTableBody');
+  const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
-  tbody.innerHTML = '';
-  empty.style.display = data.rows.length ? 'none' : 'block';
+  list.innerHTML = '';
+  empty.style.display = projectsData.length ? 'none' : 'block';
+  empty.textContent = (search || status)
+    ? 'No projects match that filter.'
+    : 'No results yet — run a scan to see projects here.';
 
-  data.rows.forEach(function(r) {
-    const tr = document.createElement('tr');
-    tr.style.borderTop = '1px solid var(--border)';
-    const dateStr = new Date(r.run_date).toLocaleDateString();
-    tr.innerHTML =
-      '<td style="padding:8px; vertical-align:top; color:var(--muted); white-space:nowrap;">' + dateStr + '</td>' +
-      '<td style="padding:8px; vertical-align:top;">' +
-        '<div>' + escapeHtml(r.site || '') + '</div>' +
-        (r.filename ? '<div style="font-size:12px; color:var(--muted);">' + escapeHtml(r.filename) + '</div>' : '') +
-      '</td>' +
-      '<td style="padding:8px; vertical-align:top;">' + escapeHtml(r.matched_keywords || '\u2014') + '</td>' +
-      '<td style="padding:8px; vertical-align:top; color:' + statusColor(r.status) + ';">' + escapeHtml(r.status || '') + '</td>';
-    tbody.appendChild(tr);
+  projectsData.forEach(function(p, i) {
+    const li = document.createElement('li');
+    li.onclick = function() { openProjectModal(i); };
+
+    const name = document.createElement('div');
+    name.className = 'p-name';
+    name.textContent = p.project;
+    if (p.source_prefix) {
+      const sub = document.createElement('span');
+      sub.className = 'p-sub';
+      sub.textContent = p.source_prefix;
+      name.appendChild(sub);
+    }
+
+    const count = document.createElement('span');
+    count.className = 'p-count';
+    count.textContent = p.file_count + (p.file_count === 1 ? ' file' : ' files');
+
+    const pill = document.createElement('span');
+    if (p.status === 'Matched') {
+      pill.className = 'pill match';
+      pill.textContent = p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords');
+    } else if (p.status === 'Download failed') {
+      pill.className = 'pill fail';
+      pill.textContent = "couldn't download";
+    } else {
+      pill.className = 'pill nomatch';
+      pill.textContent = 'no matches';
+    }
+
+    li.appendChild(name);
+    li.appendChild(count);
+    li.appendChild(pill);
+    list.appendChild(li);
   });
 
   const pageInfo = document.getElementById('resultsPageInfo');
   if (resultsTotal === 0) {
-    pageInfo.textContent = 'No matching rows';
+    pageInfo.textContent = '';
   } else {
-    const start = (resultsPage - 1) * RESULTS_PAGE_SIZE + 1;
-    const end = Math.min(resultsPage * RESULTS_PAGE_SIZE, resultsTotal);
-    pageInfo.textContent = 'Showing ' + start + '-' + end + ' of ' + resultsTotal;
+    const start = (resultsPage - 1) * PROJECTS_PER_PAGE + 1;
+    const end = Math.min(resultsPage * PROJECTS_PER_PAGE, resultsTotal);
+    pageInfo.textContent = 'Showing ' + start + '–' + end + ' of ' + resultsTotal + ' project' + (resultsTotal === 1 ? '' : 's');
   }
   document.getElementById('prevPageBtn').disabled = resultsPage <= 1;
-  document.getElementById('nextPageBtn').disabled = resultsPage * RESULTS_PAGE_SIZE >= resultsTotal;
+  document.getElementById('nextPageBtn').disabled = resultsPage * PROJECTS_PER_PAGE >= resultsTotal;
+}
+
+function openProjectModal(i) {
+  const p = projectsData[i];
+  if (!p) return;
+  document.getElementById('projectModalTitle').textContent = p.project;
+
+  const meta = [];
+  if (p.source_prefix) meta.push(p.source_prefix);
+  meta.push(p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned');
+  if (p.status === 'Matched') {
+    meta.push(p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords') + ' found');
+  }
+  document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
+
+  const link = document.getElementById('projectModalLink');
+  if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-block'; }
+  else { link.style.display = 'none'; }
+
+  const filesEl = document.getElementById('projectModalFiles');
+  filesEl.innerHTML = '';
+  p.files.forEach(function(f) {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+
+    const top = document.createElement('div');
+    top.className = 'f-top';
+    const nm = document.createElement('span');
+    nm.className = 'f-name';
+    nm.textContent = f.filename || '(document)';
+    top.appendChild(nm);
+    if (f.url && /^https?:/.test(f.url)) {
+      const dl = document.createElement('a');
+      dl.className = 'f-dl';
+      dl.href = f.url; dl.target = '_blank'; dl.rel = 'noopener';
+      dl.textContent = 'Open PDF ↗';
+      top.appendChild(dl);
+    }
+    row.appendChild(top);
+
+    if (f.keywords.length) {
+      const kw = document.createElement('div');
+      kw.className = 'f-kw';
+      f.keywords.forEach(function(k) {
+        const c = document.createElement('span');
+        c.className = 'tag';
+        c.textContent = k;
+        kw.appendChild(c);
+      });
+      row.appendChild(kw);
+    } else {
+      const m = document.createElement('div');
+      m.className = 'f-meta';
+      m.textContent = f.status === 'Download failed'
+        ? "Couldn't download this file."
+        : (f.status === 'No text extracted' ? 'No readable text in this file.' : 'No keywords matched.');
+      row.appendChild(m);
+    }
+
+    if (f.locations && f.keywords.length) {
+      const loc = document.createElement('div');
+      loc.className = 'f-meta';
+      loc.textContent = 'Found at: ' + f.locations;
+      row.appendChild(loc);
+    }
+    if (f.ai_notes) {
+      const n = document.createElement('div');
+      n.className = 'f-meta';
+      n.textContent = f.ai_notes;
+      row.appendChild(n);
+    }
+    filesEl.appendChild(row);
+  });
+
+  openModal('project');
 }
 
 function changeResultsPage(delta) {
   const next = resultsPage + delta;
   if (next < 1) return;
-  if ((next - 1) * RESULTS_PAGE_SIZE >= resultsTotal && delta > 0) return;
+  if ((next - 1) * PROJECTS_PER_PAGE >= resultsTotal && delta > 0) return;
   resultsPage = next;
-  loadResultsTable();
+  loadProjects();
 }
 
 document.getElementById('resultsSearch').addEventListener('input', function() {
   clearTimeout(resultsSearchDebounce);
   resultsSearchDebounce = setTimeout(function() {
     resultsPage = 1;
-    loadResultsTable();
+    loadProjects();
   }, 300);
 });
 document.getElementById('resultsStatusFilter').addEventListener('change', function() {
   resultsPage = 1;
-  loadResultsTable();
+  loadProjects();
 });
 
 async function loadAllForCurrentDivision() {

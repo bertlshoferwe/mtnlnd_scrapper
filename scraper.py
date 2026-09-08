@@ -488,25 +488,25 @@ def find_document_links_via_listing(site, ai_client):
 def scan_site(site, ai_client):
     """
     Dispatch to the right document-finding strategy for a site and return a
-    uniform list of 4-tuples:
-        (label_or_None, url_or_None, filename, content_bytes_or_None)
+    uniform list of 5-tuples:
+        (label_or_None, url_or_None, filename, content_bytes_or_None, source_url_or_None)
     `content_bytes` is set only for files captured from a JavaScript download
     (no URL to fetch later); otherwise it's None and the caller downloads
-    `url`.
+    `url`. `source_url` is a link to the job/project page the file belongs to.
     """
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
         print(f"  Adapter: {adapter.label}")
-        return [(lbl, url, fn, None) for lbl, url, fn in adapter.find_documents(site)]
+        return [(lbl, url, fn, None, src) for lbl, url, fn, src in adapter.find_documents(site)]
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
         return []
 
     if site.get("listing") is not None:
-        return [(lbl, url, fn, None)
+        return [(lbl, url, fn, None, None)
                 for lbl, url, fn in find_document_links_via_listing(site, ai_client)]
     if site.get("tabs"):
-        return [(lbl, url, fn, None)
+        return [(lbl, url, fn, None, None)
                 for lbl, url, fn in find_document_links_across_tabs(site)]
 
     # Default: a real browser crawl — renders JS, follows links, clicks
@@ -515,7 +515,8 @@ def scan_site(site, ai_client):
     crawled = browser_crawl.crawl_site(site["url"])
     if crawled is not None:
         return crawled
-    return [(None, doc_url, fn, None) for doc_url, fn in find_document_links(site["url"])]
+    return [(None, doc_url, fn, None, site["url"])
+            for doc_url, fn in find_document_links(site["url"])]
 
 
 def download_document(url):
@@ -888,7 +889,7 @@ def _scan_division(division):
                 supabase_store.log_scan_row(division_id, *row)
                 continue
 
-            for label, doc_url, filename, content in doc_links:
+            for label, doc_url, filename, content, source_url in doc_links:
                 # For a URL-less capture, key the "already scanned" / logged
                 # URL off the site + filename so re-runs still skip it.
                 doc_key = doc_url or f"{url}#{filename}"
@@ -901,7 +902,7 @@ def _scan_division(division):
                 if raw is None:
                     row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
                     rows.append(row)
-                    supabase_store.log_scan_row(division_id, *row)
+                    supabase_store.log_scan_row(division_id, *row, source_url=source_url)
                     continue
 
                 pages, page_numbers_are_real = extract_pages(raw, filename)
@@ -948,7 +949,7 @@ def _scan_division(division):
                 row = [run_date, row_site_name, doc_key, filename,
                        ", ".join(matched), len(matched), locations, status, ai_notes]
                 rows.append(row)
-                supabase_store.log_scan_row(division_id, *row)
+                supabase_store.log_scan_row(division_id, *row, source_url=source_url)
                 already_scanned.add(doc_key)
                 print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
 
