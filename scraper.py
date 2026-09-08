@@ -134,6 +134,7 @@ HEADERS = {
 
 import supabase_store
 import adapters
+import browser_crawl
 
 
 def load_config(division_id):
@@ -486,8 +487,12 @@ def find_document_links_via_listing(site, ai_client):
 
 def scan_site(site, ai_client):
     """
-    Dispatch to the right link-finding strategy for a site and return a
-    uniform list of (label_or_None, absolute_document_url, filename).
+    Dispatch to the right document-finding strategy for a site and return a
+    uniform list of 4-tuples:
+        (label_or_None, url_or_None, filename, content_bytes_or_None)
+    `content_bytes` is set only for files captured from a JavaScript download
+    (no URL to fetch later); otherwise it's None and the caller downloads
+    `url`.
     """
     adapter_key = (site.get("adapter") or "").strip()
     if adapter_key:
@@ -496,12 +501,22 @@ def scan_site(site, ai_client):
             print(f"  ! Site '{site['name']}' has unknown adapter '{adapter_key}' — skipping")
             return []
         print(f"  Adapter: {adapter.label}")
-        return adapter.find_documents(site)
+        return [(lbl, url, fn, None) for lbl, url, fn in adapter.find_documents(site)]
+
     if site.get("listing") is not None:
-        return find_document_links_via_listing(site, ai_client)
+        return [(lbl, url, fn, None)
+                for lbl, url, fn in find_document_links_via_listing(site, ai_client)]
     if site.get("tabs"):
-        return find_document_links_across_tabs(site)
-    return [(None, doc_url, fn) for doc_url, fn in find_document_links(site["url"])]
+        return [(lbl, url, fn, None)
+                for lbl, url, fn in find_document_links_across_tabs(site)]
+
+    # Default: a real browser crawl — renders JS, follows links, clicks
+    # "Documents/Plans" tabs, captures JS downloads. Falls back to the plain
+    # requests link finder if Playwright/Chromium isn't available.
+    crawled = browser_crawl.crawl_site(site["url"])
+    if crawled is not None:
+        return crawled
+    return [(None, doc_url, fn, None) for doc_url, fn in find_document_links(site["url"])]
 
 
 def download_document(url):
@@ -874,15 +889,18 @@ def _scan_division(division):
                 supabase_store.log_scan_row(division_id, *row)
                 continue
 
-            for label, doc_url, filename in doc_links:
-                if doc_url in already_scanned:
+            for label, doc_url, filename, content in doc_links:
+                # For a URL-less capture, key the "already scanned" / logged
+                # URL off the site + filename so re-runs still skip it.
+                doc_key = doc_url or f"{url}#{filename}"
+                if doc_key in already_scanned:
                     skipped_seen += 1
                     continue
                 row_site_name = f"{name} — {label}" if label else name
 
-                raw = download_document(doc_url)
+                raw = content if content is not None else download_document(doc_url)
                 if raw is None:
-                    row = [run_date, row_site_name, doc_url, filename, "", 0, "", "Download failed", ""]
+                    row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
                     rows.append(row)
                     supabase_store.log_scan_row(division_id, *row)
                     continue
@@ -928,11 +946,11 @@ def _scan_division(division):
                 if ai_truncated:
                     ai_notes = (ai_notes + " " if ai_notes else "") + "[AI scan truncated — document longer than the per-call text budget]"
 
-                row = [run_date, row_site_name, doc_url, filename,
+                row = [run_date, row_site_name, doc_key, filename,
                        ", ".join(matched), len(matched), locations, status, ai_notes]
                 rows.append(row)
                 supabase_store.log_scan_row(division_id, *row)
-                already_scanned.add(doc_url)
+                already_scanned.add(doc_key)
                 print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
 
         if skipped_seen:

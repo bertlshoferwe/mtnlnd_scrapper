@@ -17,10 +17,9 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    # Generous timeout — GitHub Actions jobs can run far longer than a
-    # Vercel function ever could; this is the whole reason the scan lives
-    # here instead of on Vercel. Raise it if you have many sites/divisions.
-    timeout-minutes: 30
+    # Generous timeout — the browser crawler can spend minutes per site, and
+    # a big PDF haul plus AI scans adds up. GitHub allows up to 6 h per job.
+    timeout-minutes: 120
 
     steps:
       - name: Check out repo
@@ -38,6 +37,16 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -r requirements-scan.txt
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-scan.txt') }}
+
+      - name: Install Chromium for the crawler
+        run: python -m playwright install --with-deps chromium
 
       - name: Run scan
         run: python scraper.py "${{ github.event.inputs.division_id }}"

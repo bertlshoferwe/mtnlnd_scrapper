@@ -6,6 +6,11 @@ python-docx>=1.1
 python-dotenv>=1.0
 supabase>=2.9
 
+# Headless browser for the generic crawler (browser_crawl.py) — renders JS
+# sites, clicks document tabs, captures JS downloads. Needs a one-time
+# `playwright install chromium` (the workflow does this, cached).
+playwright>=1.44
+
 # AI providers — only the one matching your chosen AI_PROVIDER actually
 # gets used at runtime, but both are listed here so switching providers
 # later (via GitHub Actions secrets) doesn't require touching this file.
