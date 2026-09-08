@@ -494,14 +494,13 @@ def scan_site(site, ai_client):
     (no URL to fetch later); otherwise it's None and the caller downloads
     `url`.
     """
-    adapter_key = (site.get("adapter") or "").strip()
-    if adapter_key:
-        adapter = adapters.get_adapter(adapter_key)
-        if adapter is None:
-            print(f"  ! Site '{site['name']}' has unknown adapter '{adapter_key}' — skipping")
-            return []
+    adapter = adapters.adapter_for_site(site)
+    if adapter is not None:
         print(f"  Adapter: {adapter.label}")
         return [(lbl, url, fn, None) for lbl, url, fn in adapter.find_documents(site)]
+    if (site.get("adapter") or "").strip():
+        print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
+        return []
 
     if site.get("listing") is not None:
         return [(lbl, url, fn, None)

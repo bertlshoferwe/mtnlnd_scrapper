@@ -13,6 +13,8 @@ Adding a portal: subclass SiteAdapter, implement find_documents(), and add the
 class to the ADAPTERS list at the bottom.
 """
 
+from urllib.parse import urlparse
+
 import requests
 
 REQUEST_TIMEOUT = 30
@@ -21,9 +23,15 @@ DOC_EXTENSIONS = (".pdf", ".docx", ".doc")
 
 
 class SiteAdapter:
-    key = ""       # stable id stored in sites.adapter
-    label = ""     # shown in the dashboard dropdown
-    help = ""      # one-liner under the dropdown
+    key = ""        # stable id stored in sites.adapter
+    label = ""      # shown in the dashboard dropdown
+    help = ""       # one-liner under the dropdown
+    hosts = ()      # hostnames this adapter recognizes from a plain site URL
+
+    @classmethod
+    def matches_url(cls, url):
+        host = urlparse(url or "").netloc.lower()
+        return any(host == h or host.endswith("." + h) for h in cls.hosts)
 
     def find_documents(self, site):
         """Return [(label, absolute_document_url, filename), ...] for every
@@ -44,6 +52,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
     key = "udot_masterworks"
     label = "UDOT Contractor Zone (advertised projects)"
     help = "Pulls every advertised project's plan set / NTC / items PDFs straight from contractorzone.udot.utah.gov. The site URL field is ignored."
+    hosts = ("contractorzone.udot.utah.gov",)
 
     BASE = "https://contractorzone.udot.utah.gov"
     SECTION = "advertisements"
@@ -87,6 +96,20 @@ ADAPTERS = {cls.key: cls for cls in _ADAPTER_CLASSES}
 def get_adapter(key):
     cls = ADAPTERS.get(key)
     return cls() if cls else None
+
+
+def adapter_for_site(site):
+    """The adapter to use for a site: the one it explicitly selected, or —
+    failing that — one that recognizes the site's URL host (so a plain-URL
+    site pointed at a known portal still gets the fast path)."""
+    key = (site.get("adapter") or "").strip()
+    if key:
+        return get_adapter(key)
+    url = site.get("url") or ""
+    for cls in _ADAPTER_CLASSES:
+        if cls.matches_url(url):
+            return cls()
+    return None
 
 
 def list_adapters():

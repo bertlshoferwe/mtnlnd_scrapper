@@ -104,22 +104,29 @@ class GeminiEmbedder:
         self.client = genai.Client(api_key=api_key)
         self.model = model or os.environ.get("EMBED_MODEL", "gemini-embedding-001")
 
+    BATCH = 100  # Gemini caps batchEmbedContents at 100 requests per call
+
     def embed(self, texts):
         """texts: list[str] -> list[list[float]] (len EMBED_DIM each), or None
-        on any failure. Never raises."""
+        on any failure. Never raises. Sends in batches of 100."""
+        texts = list(texts)
         if not texts:
             return []
-        try:
-            from google.genai import types
-            resp = self.client.models.embed_content(
-                model=self.model,
-                contents=list(texts),
-                config=types.EmbedContentConfig(output_dimensionality=EMBED_DIM),
-            )
-            return [list(e.values) for e in resp.embeddings]
-        except Exception as e:
-            print(f"  ! Embedding call failed: {e}")
-            return None
+        from google.genai import types
+        out = []
+        for i in range(0, len(texts), self.BATCH):
+            chunk = texts[i:i + self.BATCH]
+            try:
+                resp = self.client.models.embed_content(
+                    model=self.model,
+                    contents=chunk,
+                    config=types.EmbedContentConfig(output_dimensionality=EMBED_DIM),
+                )
+                out.extend(list(e.values) for e in resp.embeddings)
+            except Exception as e:
+                print(f"  ! Embedding call failed (batch {i // self.BATCH + 1}): {e}")
+                return None
+        return out
 
 
 def get_embedder():

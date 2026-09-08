@@ -582,7 +582,7 @@ function refreshRunNowButton() {
   if (!btn) return;
   const ready = siteCount > 0 && keywordCount > 0;
   btn.disabled = scanRunning || runPending() || !ready;
-  btn.title = runPending() ? 'Scan requested — waiting for GitHub Actions to pick it up'
+  btn.title = runPending() ? 'Scan starting — please wait'
     : scanRunning
     ? 'A scan is already running'
     : (ready ? '' : 'Add at least one site and one keyword first');
@@ -1030,34 +1030,37 @@ async function loadStatus() {
 
   if (s.running) {
     dot.className = 'status-dot running';
-    text.textContent = 'Scan running\u2026';
-  } else if (runPending()) {
-    dot.className = 'status-dot running';
-    text.textContent = 'Scan requested\u2026';
-    detail.textContent = 'GitHub Actions is starting the scan \u2014 this can take a minute to show as running.';
+    text.textContent = 'Scanning for new documents…';
+    detail.textContent = "This can take a few minutes. New results appear below as they're found.";
     return;
+  }
+  if (runPending()) {
+    dot.className = 'status-dot running';
+    text.textContent = 'Starting scan…';
+    detail.textContent = 'This usually begins within a minute. You can close this page — the scan keeps running.';
+    return;
+  }
+
+  if (s.last_result === 'success') {
+    dot.className = 'status-dot success';
+    text.textContent = 'Scan complete';
+  } else if (s.last_result && s.last_result.startsWith('error')) {
+    dot.className = 'status-dot error';
+    text.textContent = "Last scan didn't finish";
   } else {
-    if (s.last_result === 'success') {
-      dot.className = 'status-dot success';
-      text.textContent = 'Last run succeeded';
-    } else if (s.last_result && s.last_result.startsWith('error')) {
-      dot.className = 'status-dot error';
-      text.textContent = 'Last run failed';
-    } else {
-      dot.className = 'status-dot idle';
-      text.textContent = 'Idle \u2014 no run yet this session';
-    }
+    dot.className = 'status-dot idle';
+    text.textContent = 'No scans yet';
   }
 
   let detailText = '';
   const lastRun = s.last_finished || s.last_started;
   if (lastRun) {
-    detailText = 'Last run ' + new Date(lastRun).toLocaleString([], {
+    detailText = 'Last scan ' + new Date(lastRun).toLocaleString([], {
       month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
     });
   }
   if (s.last_result && s.last_result.startsWith('error')) {
-    detailText += (detailText ? ' — ' : '') + s.last_result;
+    detailText = (detailText ? detailText + '. ' : '') + 'Try running it again.';
   }
   detail.textContent = detailText;
 }
@@ -1067,14 +1070,14 @@ async function runNow() {
   const text = document.getElementById('statusText');
   const dot = document.getElementById('statusDot');
   btn.disabled = true;
-  text.textContent = 'Requesting scan…';
+  text.textContent = 'Starting scan…';
   try {
     await api('/api/' + currentDivision + '/run-now', { method: 'POST' });
     runRequestedAt = Date.now();
     dot.className = 'status-dot running';
-    text.textContent = 'Scan requested…';
+    text.textContent = 'Starting scan…';
     document.getElementById('statusDetail').textContent =
-      'GitHub Actions is starting the scan — this can take a minute to show as running.';
+      'This usually begins within a minute. You can close this page — the scan keeps running.';
     refreshRunNowButton();
     // Poll faster than the normal 4s loop while we wait for the runner to boot.
     let tries = 0;
@@ -1084,9 +1087,10 @@ async function runNow() {
       loadResultsInfo();
     }, 3000);
   } catch (e) {
-    text.textContent = 'Idle';
+    runRequestedAt = 0;
+    loadStatus();
     refreshRunNowButton();
-    alert(e.message);
+    alert("Couldn't start the scan. " + e.message);
   }
 }
 
