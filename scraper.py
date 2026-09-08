@@ -867,9 +867,11 @@ def _scan_division(division):
 
         rows = []  # kept in memory too, just to build the daily summary at the end
         progress_done = progress_total = 0
-        for site in sites:
+        n_sites = len(sites)
+        for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
+            site_tag = f"{name}" + (f" ({site_i} of {n_sites})" if n_sites > 1 else "")
             print(f"Scanning site: {name}" + (f" ({url})" if url else ""))
 
             if site.get("listing") is not None:
@@ -877,14 +879,14 @@ def _scan_division(division):
             elif site.get("tabs"):
                 print(f"  {len(site['tabs'])} tab(s) configured")
 
-            supabase_store.update_run_progress(run_id, label=f"Checking {name}")
+            supabase_store.update_run_progress(run_id, label=f"Checking {site_tag}")
             doc_links = scan_site(site, ai_client)
             progress_total += sum(
                 1 for _, du, fn, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
             )
             supabase_store.update_run_progress(
-                run_id, done=progress_done, total=progress_total, label="Reading documents"
+                run_id, done=progress_done, total=progress_total, label=f"Scanning {site_tag}"
             )
 
             if site.get("tabs") and not os.environ.get("FIRECRAWL_API_KEY"):
@@ -915,7 +917,10 @@ def _scan_division(division):
                 row_site_name = f"{name} — {label}" if label else name
                 progress_done += 1
                 if progress_done % 3 == 0 or progress_done == progress_total:
-                    supabase_store.update_run_progress(run_id, done=progress_done, total=progress_total)
+                    supabase_store.update_run_progress(
+                        run_id, done=progress_done, total=progress_total,
+                        label=f"Scanning {site_tag}",
+                    )
 
                 raw = content if content is not None else download_document(doc_url)
                 if raw is None:

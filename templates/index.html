@@ -469,10 +469,10 @@
     <div class="row" style="margin-bottom: 6px;">
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
       <select id="resultsStatusFilter">
+        <option value="Matched" selected>Flagged only</option>
         <option value="">All projects</option>
-        <option value="Matched">Keyword matches</option>
         <option value="No match">No matches</option>
-        <option value="Download failed">Couldn't download</option>
+        <option value="Download failed">Download issues</option>
       </select>
     </div>
 
@@ -818,7 +818,7 @@ function switchDivision(id) {
   resultsPage = 1;
   currentResultsSite = '';
   document.getElementById('resultsSearch').value = '';
-  document.getElementById('resultsStatusFilter').value = '';
+  document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
   renderDivisionTabs();
   updateUrl();
@@ -1085,14 +1085,16 @@ async function loadStatus() {
     dot.className = 'status-dot running';
     prog.style.display = 'block';
     if (s.progress_total > 0) {
-      const pct = Math.min(100, Math.round(100 * s.progress_done / s.progress_total));
-      text.textContent = 'Scanning documents… ' + pct + '%';
-      detail.textContent = s.progress_done + ' of ' + s.progress_total + " documents. Results appear below as they're found.";
+      const done = s.progress_done, tot = s.progress_total;
+      const pct = Math.min(100, Math.round(100 * done / tot));
+      const left = Math.max(0, tot - done);
+      text.textContent = (s.progress_label || 'Scanning documents') + '… ' + pct + '%';
+      detail.textContent = done + ' of ' + tot + ' documents scanned · ' + left + ' to go';
       fill.classList.remove('indeterminate');
       fill.style.width = pct + '%';
     } else {
-      text.textContent = 'Scanning for new documents…';
-      detail.textContent = (s.progress_label || 'Getting started') + '…';
+      text.textContent = (s.progress_label || 'Getting started') + '…';
+      detail.textContent = "Looking for documents. Results appear below as they're found.";
       fill.classList.add('indeterminate');
     }
     return;
@@ -1248,7 +1250,11 @@ function renderResultsSiteTabs(sites) {
   if (!sites || sites.length < 2) { strip.style.display = 'none'; return; }
   strip.style.display = 'flex';
 
-  const total = sites.reduce(function(a, s) { return a + s.count; }, 0);
+  // Default view is flagged-only, so tab counts show flagged projects.
+  const flaggedOnly = document.getElementById('resultsStatusFilter').value === 'Matched';
+  const val = function(s) { return flaggedOnly ? s.flagged : s.count; };
+  const total = sites.reduce(function(a, s) { return a + val(s); }, 0);
+
   function tab(key, label, count) {
     const b = document.createElement('span');
     b.className = 'rtab' + (currentResultsSite === key ? ' active' : '');
@@ -1260,12 +1266,11 @@ function renderResultsSiteTabs(sites) {
     };
     strip.appendChild(b);
   }
-  tab('', 'All', total);
-  // keep the previously-selected site's tab even if it's now empty
   if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
     currentResultsSite = '';
   }
-  sites.forEach(function(s) { tab(s.name, s.name, s.count); });
+  tab('', 'All', total);
+  sites.forEach(function(s) { tab(s.name, s.name, val(s)); });
 }
 
 async function loadProjects() {
@@ -1286,9 +1291,13 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  empty.textContent = (search || status || currentResultsSite)
-    ? 'No projects match that filter.'
-    : 'No results yet — run a scan to see projects here.';
+  if (search || currentResultsSite || (status && status !== 'Matched')) {
+    empty.textContent = 'No projects match that filter.';
+  } else if (status === 'Matched') {
+    empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
+  } else {
+    empty.textContent = 'No results yet — run a scan to see projects here.';
+  }
 
   projectsData.forEach(function(p, i) {
     const li = document.createElement('li');
