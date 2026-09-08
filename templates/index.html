@@ -384,8 +384,13 @@
   .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
   .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; flex-shrink: 0; }
-  .file-row .f-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
-  .file-row .f-kw { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .file-row .f-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .file-row .kw-hits {
+    margin-top: 8px; display: grid; grid-template-columns: max-content 1fr;
+    gap: 4px 14px; align-items: baseline;
+  }
+  .file-row .kh-term { font-weight: 600; font-size: 12.5px; }
+  .file-row .kh-pages { font-size: 12px; color: var(--muted); word-spacing: 1px; }
 </style>
 </head>
 <body>
@@ -1418,6 +1423,17 @@ async function loadProjects() {
   document.getElementById('nextPageBtn').disabled = resultsPage * PROJECTS_PER_PAGE >= resultsTotal;
 }
 
+function parseLocations(str) {
+  // "MSE: p.30, p.74 | Silt fence: p.9" -> [{keyword, pages}]
+  const out = [];
+  (str || '').split(' | ').forEach(function(part) {
+    const idx = part.indexOf(': ');
+    if (idx === -1) { if (part.trim()) out.push({ keyword: part.trim(), pages: '' }); return; }
+    out.push({ keyword: part.slice(0, idx).trim(), pages: part.slice(idx + 2).trim() });
+  });
+  return out;
+}
+
 function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
@@ -1457,15 +1473,21 @@ function openProjectModal(i) {
     row.appendChild(top);
 
     if (f.keywords.length) {
-      const kw = document.createElement('div');
-      kw.className = 'f-kw';
-      f.keywords.forEach(function(k) {
-        const c = document.createElement('span');
-        c.className = 'tag';
-        c.textContent = k;
-        kw.appendChild(c);
+      const hits = parseLocations(f.locations);
+      const grid = document.createElement('div');
+      grid.className = 'kw-hits';
+      const list = hits.length ? hits : f.keywords.map(function(k) { return { keyword: k, pages: '' }; });
+      list.forEach(function(h) {
+        const term = document.createElement('div');
+        term.className = 'kh-term';
+        term.textContent = h.keyword;
+        const pages = document.createElement('div');
+        pages.className = 'kh-pages';
+        pages.textContent = h.pages || '—';
+        grid.appendChild(term);
+        grid.appendChild(pages);
       });
-      row.appendChild(kw);
+      row.appendChild(grid);
     } else {
       const m = document.createElement('div');
       m.className = 'f-meta';
@@ -1475,12 +1497,6 @@ function openProjectModal(i) {
       row.appendChild(m);
     }
 
-    if (f.locations && f.keywords.length) {
-      const loc = document.createElement('div');
-      loc.className = 'f-meta';
-      loc.textContent = 'Found at: ' + f.locations;
-      row.appendChild(loc);
-    }
     const note = (f.ai_notes || '').replace(/\s*\[AI scan truncated[^\]]*\]\s*/g, '').trim();
     if (note) {
       const n = document.createElement('div');
