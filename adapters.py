@@ -13,7 +13,8 @@ Adding a portal: subclass SiteAdapter, implement find_documents(), and add the
 class to the ADAPTERS list at the bottom.
 """
 
-from urllib.parse import urlparse
+import re
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -91,7 +92,75 @@ class UDOTMasterworksAdapter(SiteAdapter):
         return out
 
 
-_ADAPTER_CLASSES = [UDOTMasterworksAdapter]
+class ITDAdvertisedAdapter(SiteAdapter):
+    """Idaho Transportation Dept — itd.idaho.gov/contractor-bidding.
+
+    That page is a WordPress page with three TablePress tables:
+      - tablepress-2  "Currently Advertised Major Highways Projects" ($1M+)
+      - tablepress-4  "Currently Advertised SIA/IRP Highways Projects" ($50K-$5M)
+      - tablepress-1  "Bid Results for Highways Projects" — a 250+ row archive
+    Only the first two are live opportunities; the generic crawler otherwise
+    wanders the whole site and the huge results archive (every br*.pdf /
+    abst*.pdf), which is what made this site so slow. This adapter reads just
+    those two tables. Each row's "Project" cell links straight to the Notice
+    to Contractors PDF (apps.itd.idaho.gov/apps/contractors/NTC*.pdf); the
+    "Reference Files" cell holds any addenda/plans. Plain HTML, no JS.
+    The site URL field is ignored.
+    """
+
+    key = "itd_advertised"
+    label = "Idaho Transportation Dept (advertised projects)"
+    help = ("Reads only the two 'Currently Advertised' tables on "
+            "itd.idaho.gov/contractor-bidding (Major Highways + SIA/IRP) and "
+            "their linked PDFs. Skips the bid-results archive. The site URL is ignored.")
+    hosts = ("itd.idaho.gov",)
+
+    PAGE = "https://itd.idaho.gov/contractor-bidding/"
+    TABLE_IDS = ("tablepress-2", "tablepress-4")
+    # ITD key numbers look like 24502 / 23719q / 23733-24350. Rows whose "Key
+    # Number" cell doesn't (e.g. the "2026 Buy America" info handout parked in
+    # the Major Highways table) aren't real advertised projects — skip them.
+    _KEY_RE = re.compile(r"^\d[\d\-]*[a-z]?$", re.I)
+
+    def find_documents(self, site):
+        from bs4 import BeautifulSoup
+
+        r = requests.get(self.PAGE, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        out, seen = [], set()
+        for tid in self.TABLE_IDS:
+            table = soup.find("table", id=tid)
+            if table is None:
+                print(f"  ! ITD: table #{tid} not found — page layout may have changed")
+                continue
+            body = table.find("tbody") or table
+            for tr in body.find_all("tr"):
+                cells = tr.find_all(["td", "th"])
+                if len(cells) < 3:
+                    continue
+                key_no = cells[1].get_text(strip=True).strip("*").strip()
+                if key_no and not self._KEY_RE.match(key_no):
+                    continue
+                anchors = tr.find_all("a", href=True)
+                for a in anchors:
+                    href = urljoin(self.PAGE, a.get("href", "").strip())
+                    if not href.lower().split("?")[0].endswith(DOC_EXTENSIONS):
+                        continue
+                    if href in seen:
+                        continue
+                    seen.add(href)
+                    link_text = a.get_text(" ", strip=True).strip("*").strip()
+                    label = f"Key {key_no} — {link_text}" if key_no else (link_text or href)
+                    fn = href.split("/")[-1].split("?")[0]
+                    out.append((label, href, fn, self.PAGE))
+
+        print(f"  ITD: {len(out)} document link(s) from the advertised-project tables")
+        return out
+
+
+_ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter]
 ADAPTERS = {cls.key: cls for cls in _ADAPTER_CLASSES}
 
 
