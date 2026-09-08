@@ -316,19 +316,26 @@ def log_scan_row(division_id, run_date, site, document_url, filename,
 
 
 def already_scanned_urls(division_id):
-    """document_url of every document this division has already processed to a
-    terminal, non-failure status — so a re-run (especially an adapter that
-    re-lists every advertised project each day) skips them instead of
-    re-downloading and re-running the AI pass. 'Download failed' rows are
-    excluded so those get retried."""
+    """{document_url: source_url_or_None} for every document this division has
+    already processed to a non-failure status — so a re-run (especially an
+    adapter that re-lists every advertised project each day) skips them
+    instead of re-downloading and re-running the AI pass. 'Download failed'
+    rows are excluded so those get retried."""
     res = (
-        get_client().table("scan_results").select("document_url,status")
+        get_client().table("scan_results").select("document_url,status,source_url")
         .eq("division_id", division_id).execute()
     )
     return {
-        r["document_url"] for r in res.data
+        r["document_url"]: r.get("source_url")
+        for r in res.data
         if r.get("document_url") and r.get("status") != "Download failed"
     }
+
+
+def backfill_source_url(division_id, document_url, source_url):
+    """One-off: attach a source_url to already-logged rows that predate it."""
+    get_client().table("scan_results").update({"source_url": source_url}) \
+        .eq("division_id", division_id).eq("document_url", document_url).execute()
 
 
 def get_scan_results(division_id, limit=2000):

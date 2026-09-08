@@ -895,6 +895,10 @@ def _scan_division(division):
                 doc_key = doc_url or f"{url}#{filename}"
                 if doc_key in already_scanned:
                     skipped_seen += 1
+                    # Backfill a source_url onto rows logged before we tracked it.
+                    if source_url and not already_scanned.get(doc_key):
+                        supabase_store.backfill_source_url(division_id, doc_key, source_url)
+                        already_scanned[doc_key] = source_url
                     continue
                 row_site_name = f"{name} — {label}" if label else name
 
@@ -950,7 +954,7 @@ def _scan_division(division):
                        ", ".join(matched), len(matched), locations, status, ai_notes]
                 rows.append(row)
                 supabase_store.log_scan_row(division_id, *row, source_url=source_url)
-                already_scanned.add(doc_key)
+                already_scanned[doc_key] = source_url
                 print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
 
         if skipped_seen:
