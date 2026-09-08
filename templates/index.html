@@ -374,14 +374,17 @@
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
     font-size: 13px; line-height: 1.5;
   }
-  /* Results: per-site tabs + one row per project */
-  .rtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  /* Results: one row per project. Site switching + status filter both live in
+     the filter-menu now (every width); the search field / <select> are hidden
+     state holders shown only when the magnifier is toggled. */
+  .results-toolbar { display: none; }
+  .results-toolbar.search-open { display: flex; margin-top: 2px; }
+  .results-toolbar #resultsStatusFilter { display: none; }
+  .results-toolbar #resultsSearch { flex-basis: 100%; }
 
-  /* Results header icon actions. On desktop only the download button shows —
-     search is the inline field, filtering is the inline <select>, site
-     switching is the .rtabs strip. Mobile turns search + filter into buttons. */
+  /* Results header: search + filter + download, all icon buttons next to the heading. */
   .results-head-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-  #searchToggleBtn, #filterToggleBtn { display: none; }
+  #searchToggleBtn, #filterToggleBtn { display: inline-flex; }
   #searchToggleBtn.active, #filterToggleBtn.active { color: var(--accent); border-color: var(--accent); }
   .filter-wrap { position: relative; }
   .filter-menu {
@@ -405,14 +408,6 @@
     color: var(--muted); padding: 7px 10px 3px;
   }
   .filter-menu .fm-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 2px; }
-  .rtab {
-    font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
-    background: var(--surface-2); color: var(--muted); border: 1px solid transparent;
-    cursor: pointer; white-space: nowrap;
-  }
-  .rtab:hover { color: var(--text); }
-  .rtab.active { background: var(--accent); color: var(--accent-contrast); }
-  .rtab .rtab-count { opacity: .75; margin-left: 4px; font-weight: 400; }
   .project-list { list-style: none; margin: 0; padding: 0; }
   .project-list li {
     display: flex; align-items: center; gap: 12px;
@@ -495,22 +490,13 @@
     .pdf-modal .modal-body { flex: 1; }
     #pdfFrame { height: 100%; min-height: 55vh; }
 
-    /* Results header on mobile: search + filter (incl. site switch) become
-       buttons up by the download icon; the .rtabs strip moves into the filter
-       menu; most-flagged stays a swipeable line. */
+    /* Most-flagged keywords: one swipeable line instead of wrapping */
     .stat-keywords {
       flex-wrap: nowrap; overflow-x: auto; margin-bottom: 10px;
       scrollbar-width: none; -webkit-overflow-scrolling: touch;
     }
     .stat-keywords::-webkit-scrollbar { display: none; }
     .stat-keywords > * { flex-shrink: 0; }
-    .rtabs { display: none !important; }
-
-    #searchToggleBtn, #filterToggleBtn { display: inline-flex; }
-    .results-toolbar { display: none; }
-    .results-toolbar.search-open { display: flex; }
-    .results-toolbar #resultsStatusFilter { display: none; }
-    .results-toolbar #resultsSearch { flex-basis: 100%; }
   }
 </style>
 </head>
@@ -608,8 +594,6 @@
     <div class="stat-keywords" id="statKeywords" style="display:none;"></div>
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
-
-    <div class="rtabs" id="resultsSiteTabs" style="display:none;"></div>
 
     <div class="row results-toolbar" style="margin-bottom: 6px;">
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
@@ -1034,8 +1018,6 @@ function switchDivision(id) {
   syncFilterUI();
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
-  document.getElementById('resultsSiteTabs').innerHTML = '';
-  document.getElementById('resultsSiteTabs').style.display = 'none';
   document.getElementById('filterSiteOptions').innerHTML = '';
   document.getElementById('filterSiteGroup').hidden = true;
   document.getElementById('statKeywords').style.display = 'none';
@@ -1521,8 +1503,6 @@ async function loadResultsInfo() {
     btn.style.display = 'none';
     statsRow.style.display = 'none';
     document.getElementById('statKeywords').style.display = 'none';
-    document.getElementById('resultsSiteTabs').style.display = 'none';
-    document.getElementById('resultsSiteTabs').innerHTML = '';
     document.getElementById('filterSiteOptions').innerHTML = '';
     document.getElementById('filterSiteGroup').hidden = true;
     callout.style.display = 'none';
@@ -1577,23 +1557,19 @@ async function loadResultsInfo() {
   await loadProjects();
 }
 
-function renderResultsSiteTabs(sites) {
-  const strip = document.getElementById('resultsSiteTabs');
+function renderSiteFilterOptions(sites) {
   const menuOpts = document.getElementById('filterSiteOptions');
   const menuGroup = document.getElementById('filterSiteGroup');
-  strip.innerHTML = '';
   menuOpts.innerHTML = '';
 
   if (!sites || sites.length < 2) {
-    strip.style.display = 'none';
     menuGroup.hidden = true;
     syncFilterUI();
     return;
   }
-  strip.style.display = 'flex';
   menuGroup.hidden = false;
 
-  // Default view is flagged-only, so tab counts show flagged projects.
+  // Default view is flagged-only, so counts show flagged projects.
   const flaggedOnly = document.getElementById('resultsStatusFilter').value === 'Matched';
   const val = function(s) { return flaggedOnly ? s.flagged : s.count; };
   const total = sites.reduce(function(a, s) { return a + val(s); }, 0);
@@ -1603,12 +1579,6 @@ function renderResultsSiteTabs(sites) {
   }
 
   function opt(key, label, count) {
-    const pill = document.createElement('span');
-    pill.className = 'rtab' + (currentResultsSite === key ? ' active' : '');
-    pill.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
-    pill.onclick = function() { pickSite(key); };
-    strip.appendChild(pill);
-
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.site = key;
@@ -1633,7 +1603,7 @@ async function loadProjects() {
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
-  renderResultsSiteTabs(data.sites);
+  renderSiteFilterOptions(data.sites);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
