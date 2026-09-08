@@ -188,6 +188,9 @@
   }
   .icon-btn svg { width: 16px; height: 16px; }
   .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  a.icon-btn { text-decoration: none; }
+  .icon-btn.bordered { border: 1px solid var(--border-strong); padding: 7px; }
+  .icon-btn.bordered:hover { color: var(--accent); border-color: var(--accent); background: transparent; }
   .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
   .site-name { font-weight: 550; }
   .site-url { display: block; color: var(--muted); font-size: 12.5px; word-break: break-all; text-decoration: none; }
@@ -479,7 +482,7 @@
     <h2>Results</h2>
     <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
       <div class="status-line" id="resultsSummaryLine">Loading&hellip;</div>
-      <a id="downloadBtn" class="btn-primary" style="display:none; text-decoration:none;" href="#" title="Downloads only the documents that matched a keyword">Download matches (.xlsx)</a>
+      <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
@@ -1421,7 +1424,7 @@ async function loadResultsInfo() {
   const st = info.stats || {};
   btn.href = '/download/' + currentDivision + '/results';
   // The download is matches-only, so there's nothing to download with no hits.
-  btn.style.display = (st.documents_matched || 0) > 0 ? 'inline-block' : 'none';
+  btn.style.display = (st.documents_matched || 0) > 0 ? '' : 'none';
 
   document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
   document.getElementById('statFlaggedSub').textContent =
