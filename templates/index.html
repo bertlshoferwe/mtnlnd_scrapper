@@ -376,7 +376,35 @@
   }
   /* Results: per-site tabs + one row per project */
   .rtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  #searchToggleBtn { display: none; }  /* desktop shows the input directly */
+
+  /* Results header icon actions. On desktop only the download button shows —
+     search is the inline field, filtering is the inline <select>, site
+     switching is the .rtabs strip. Mobile turns search + filter into buttons. */
+  .results-head-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  #searchToggleBtn, #filterToggleBtn { display: none; }
+  #searchToggleBtn.active, #filterToggleBtn.active { color: var(--accent); border-color: var(--accent); }
+  .filter-wrap { position: relative; }
+  .filter-menu {
+    display: none;
+    position: absolute; top: 100%; right: 0; margin-top: 6px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow-md); padding: 4px; z-index: 30;
+    min-width: 190px; max-height: 62vh; overflow-y: auto;
+  }
+  .filter-menu.open { display: block; }
+  .filter-menu button {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--text);
+    padding: 8px 10px; font-size: 13px; font-weight: 500; border-radius: 5px;
+  }
+  .filter-menu button:hover { background: var(--bg); }
+  .filter-menu button.sel { color: var(--accent); font-weight: 650; }
+  .filter-menu button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
+  .filter-menu .fm-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--muted); padding: 7px 10px 3px;
+  }
+  .filter-menu .fm-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 2px; }
   .rtab {
     font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
     background: var(--surface-2); color: var(--muted); border: 1px solid transparent;
@@ -467,21 +495,22 @@
     .pdf-modal .modal-body { flex: 1; }
     #pdfFrame { height: 100%; min-height: 55vh; }
 
-    /* Results header: one swipeable line each, search behind a button */
-    .stat-keywords, .rtabs {
+    /* Results header on mobile: search + filter (incl. site switch) become
+       buttons up by the download icon; the .rtabs strip moves into the filter
+       menu; most-flagged stays a swipeable line. */
+    .stat-keywords {
       flex-wrap: nowrap; overflow-x: auto; margin-bottom: 10px;
       scrollbar-width: none; -webkit-overflow-scrolling: touch;
     }
-    .stat-keywords::-webkit-scrollbar, .rtabs::-webkit-scrollbar { display: none; }
-    .stat-keywords > *, .rtabs > * { flex-shrink: 0; }
+    .stat-keywords::-webkit-scrollbar { display: none; }
+    .stat-keywords > * { flex-shrink: 0; }
+    .rtabs { display: none !important; }
 
-    .results-toolbar { flex-wrap: nowrap; gap: 8px; }
-    #searchToggleBtn { display: inline-flex; }
-    .results-toolbar #resultsSearch { display: none; }
-    .results-toolbar #resultsStatusFilter { flex: 1; min-width: 0; }
-    .results-toolbar.search-open { flex-wrap: wrap; }
-    .results-toolbar.search-open #resultsSearch { display: block; order: 3; flex-basis: 100%; }
-    #searchToggleBtn.active { color: var(--accent); border-color: var(--accent); }
+    #searchToggleBtn, #filterToggleBtn { display: inline-flex; }
+    .results-toolbar { display: none; }
+    .results-toolbar.search-open { display: flex; }
+    .results-toolbar #resultsStatusFilter { display: none; }
+    .results-toolbar #resultsSearch { flex-basis: 100%; }
   }
 </style>
 </head>
@@ -544,8 +573,25 @@
   <div class="card">
     <h2>Results</h2>
     <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
-      <div class="status-line" id="resultsSummaryLine">Loading&hellip;</div>
-      <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
+      <div class="status-line" id="resultsSummaryLine" style="min-width:0;">Loading&hellip;</div>
+      <div class="results-head-actions">
+        <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleResultsSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+        <div class="filter-wrap">
+          <button type="button" id="filterToggleBtn" class="icon-btn bordered" aria-label="Filter projects" aria-expanded="false" onclick="toggleFilterMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
+          <div class="filter-menu" id="filterMenu">
+            <div class="fm-label">Show</div>
+            <button type="button" data-val="Matched" onclick="pickFilter(this)">Flagged only</button>
+            <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
+            <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
+            <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
+            <div class="fm-sep" id="filterSiteGroup" hidden>
+              <div class="fm-label">Site</div>
+              <div id="filterSiteOptions"></div>
+            </div>
+          </div>
+        </div>
+        <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
+      </div>
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
@@ -567,9 +613,8 @@
     <div class="rtabs" id="resultsSiteTabs" style="display:none;"></div>
 
     <div class="row results-toolbar" style="margin-bottom: 6px;">
-      <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleResultsSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
-      <select id="resultsStatusFilter">
+      <select id="resultsStatusFilter" onchange="syncFilterUI()">
         <option value="Matched" selected>Flagged only</option>
         <option value="">All projects</option>
         <option value="No match">No matches</option>
@@ -816,6 +861,8 @@ function openPdfPreview(url, filename) {
 }
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
+  const fm = document.getElementById('filterMenu');
+  if (fm && fm.classList.contains('open')) { closeFilterMenu(); return; }
   if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
   closeModal();
 });
@@ -984,10 +1031,14 @@ function switchDivision(id) {
   document.getElementById('keywordFilter').value = '';
   document.querySelector('.results-toolbar').classList.remove('search-open');
   document.getElementById('searchToggleBtn').classList.remove('active');
+  closeFilterMenu();
+  syncFilterUI();
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('resultsSiteTabs').innerHTML = '';
   document.getElementById('resultsSiteTabs').style.display = 'none';
+  document.getElementById('filterSiteOptions').innerHTML = '';
+  document.getElementById('filterSiteGroup').hidden = true;
   document.getElementById('statKeywords').style.display = 'none';
   document.getElementById('statsRow').style.display = 'none';
   renderDivisionTabs();
@@ -1475,6 +1526,8 @@ async function loadResultsInfo() {
     document.getElementById('statKeywords').style.display = 'none';
     document.getElementById('resultsSiteTabs').style.display = 'none';
     document.getElementById('resultsSiteTabs').innerHTML = '';
+    document.getElementById('filterSiteOptions').innerHTML = '';
+    document.getElementById('filterSiteGroup').hidden = true;
     callout.style.display = 'none';
     document.getElementById('projectList').innerHTML = '';
     const emptyEl = document.getElementById('resultsEmpty');
@@ -1532,31 +1585,46 @@ async function loadResultsInfo() {
 
 function renderResultsSiteTabs(sites) {
   const strip = document.getElementById('resultsSiteTabs');
+  const menuOpts = document.getElementById('filterSiteOptions');
+  const menuGroup = document.getElementById('filterSiteGroup');
   strip.innerHTML = '';
-  if (!sites || sites.length < 2) { strip.style.display = 'none'; return; }
+  menuOpts.innerHTML = '';
+
+  if (!sites || sites.length < 2) {
+    strip.style.display = 'none';
+    menuGroup.hidden = true;
+    syncFilterUI();
+    return;
+  }
   strip.style.display = 'flex';
+  menuGroup.hidden = false;
 
   // Default view is flagged-only, so tab counts show flagged projects.
   const flaggedOnly = document.getElementById('resultsStatusFilter').value === 'Matched';
   const val = function(s) { return flaggedOnly ? s.flagged : s.count; };
   const total = sites.reduce(function(a, s) { return a + val(s); }, 0);
 
-  function tab(key, label, count) {
-    const b = document.createElement('span');
-    b.className = 'rtab' + (currentResultsSite === key ? ' active' : '');
-    b.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
-    b.onclick = function() {
-      currentResultsSite = key;
-      resultsPage = 1;
-      loadProjects();
-    };
-    strip.appendChild(b);
-  }
   if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
     currentResultsSite = '';
   }
-  tab('', 'All', total);
-  sites.forEach(function(s) { tab(s.name, s.name, val(s)); });
+
+  function opt(key, label, count) {
+    const pill = document.createElement('span');
+    pill.className = 'rtab' + (currentResultsSite === key ? ' active' : '');
+    pill.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
+    pill.onclick = function() { pickSite(key); };
+    strip.appendChild(pill);
+
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.site = key;
+    b.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
+    b.onclick = function() { pickSite(key); };
+    menuOpts.appendChild(b);
+  }
+  opt('', 'All sites', total);
+  sites.forEach(function(s) { opt(s.name, s.name, val(s)); });
+  syncFilterUI();
 }
 
 async function loadProjects() {
@@ -1785,6 +1853,57 @@ document.getElementById('resultsStatusFilter').addEventListener('change', functi
   loadProjects();
 });
 
+// ---- Filter menu (mobile): status filter + site switch behind one button ----
+function toggleFilterMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('filterMenu');
+  if (menu.classList.contains('open')) { closeFilterMenu(); return; }
+  // don't leave the search field open behind the menu
+  const bar = document.querySelector('.results-toolbar');
+  if (bar.classList.contains('search-open')) toggleResultsSearch();
+  menu.classList.add('open');
+  document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'true');
+  setTimeout(function() { document.addEventListener('click', onFilterOutside); }, 0);
+}
+function closeFilterMenu() {
+  document.getElementById('filterMenu').classList.remove('open');
+  document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onFilterOutside);
+}
+function onFilterOutside(e) {
+  if (!e.target.closest('.filter-wrap')) closeFilterMenu();
+}
+function pickFilter(el) {
+  const sel = document.getElementById('resultsStatusFilter');
+  if (sel.value !== el.dataset.val) {
+    sel.value = el.dataset.val;
+    resultsPage = 1;
+    loadProjects();
+  }
+  syncFilterUI();
+  closeFilterMenu();
+}
+function pickSite(key) {
+  if (currentResultsSite !== key) {
+    currentResultsSite = key;
+    resultsPage = 1;
+    loadProjects();
+  }
+  syncFilterUI();
+  closeFilterMenu();
+}
+function syncFilterUI() {
+  const status = document.getElementById('resultsStatusFilter').value;
+  const btn = document.getElementById('filterToggleBtn');
+  if (btn) btn.classList.toggle('active', status !== 'Matched' || !!currentResultsSite);
+  document.querySelectorAll('#filterMenu > button[data-val]').forEach(function(b) {
+    b.classList.toggle('sel', b.dataset.val === status);
+  });
+  document.querySelectorAll('#filterSiteOptions button').forEach(function(b) {
+    b.classList.toggle('sel', (b.dataset.site || '') === currentResultsSite);
+  });
+}
+
 async function loadAllForCurrentDivision() {
   if (!currentDivision) return;
   siteCount = 0;
@@ -1809,6 +1928,7 @@ function localizeSchedule() {
 
 async function init() {
   localizeSchedule();
+  syncFilterUI();
   await loadAdapters();
   await loadDivisions();
   await loadAllForCurrentDivision();
