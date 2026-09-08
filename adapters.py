@@ -160,7 +160,90 @@ class ITDAdvertisedAdapter(SiteAdapter):
         return out
 
 
-_ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter]
+class WYDOTExevisionAdapter(SiteAdapter):
+    """Wyoming DOT — wydot.exevision.com/ws.
+
+    Plain server-rendered HTML (one GET, no JS). Each advertised project is a
+    `<table border="1">` block: Call Order / Project Number / Description /
+    County on the left, a list of document links on the right. Those links —
+    "E-79 (Invitation For Bids)", "View Bid Items", "View Addendum # N" — point
+    at Google Drive share URLs (`drive.google.com/file/d/<id>/view`), so the
+    generic crawler's ".pdf/.docx" href filter skips every one of them and the
+    site scans nothing. This adapter pulls the Drive file id out of each link
+    and rewrites it to a direct-download URL. The full plan sets live on
+    QuestCDN behind a paywall and are not reachable here; the E-79 + bid items
+    + addenda are. "View Planholder's List" is an HTML roster, not a document,
+    and is skipped. The site URL field is ignored.
+    """
+
+    key = "wydot_exevision"
+    label = "Wyoming DOT (advertised projects)"
+    help = ("Reads wydot.exevision.com/ws and follows each project's Google "
+            "Drive links (E-79, bid items, addenda). Full plans are on QuestCDN "
+            "and not included. The site URL is ignored.")
+    hosts = ("wydot.exevision.com",)
+
+    PAGE = "https://wydot.exevision.com/ws/"
+    _DRIVE_ID = re.compile(r"drive\.google\.com/file/d/([A-Za-z0-9_-]+)")
+    _PROJ = re.compile(r"Project Number:\s*([A-Za-z0-9\-]+)")
+    _DESC = re.compile(r"Description:\s*(.+?)\s*(?:County:|Engineer:|$)", re.S)
+
+    @staticmethod
+    def _drive_download_url(file_id):
+        return (f"https://drive.usercontent.google.com/download"
+                f"?id={file_id}&export=download&confirm=t")
+
+    @staticmethod
+    def _filename(proj, link_text):
+        t = re.sub(r"\s+", " ", link_text or "").strip()
+        low = t.lower()
+        if "e-79" in low or "e79" in low:
+            name = "E-79"
+        elif "bid item" in low:
+            name = "Bid Items"
+        elif t.lstrip().startswith("#"):
+            name = "Addendum " + t.lstrip("# ").strip()
+        else:
+            name = re.sub(r"[^A-Za-z0-9 .\-]", "", t) or "document"
+        return f"{proj} {name}.pdf"
+
+    def find_documents(self, site):
+        from bs4 import BeautifulSoup
+
+        r = requests.get(self.PAGE, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        out, seen = [], set()
+        for block in soup.find_all("table", border="1"):
+            text = block.get_text(" ", strip=True)
+            m = self._PROJ.search(text)
+            if not m:
+                continue
+            proj = m.group(1)
+            desc = self._DESC.search(text)
+            label = f"{proj} {desc.group(1).strip()}" if desc else proj
+
+            for a in block.find_all("a", href=True):
+                dm = self._DRIVE_ID.search(a["href"])
+                if not dm:
+                    continue
+                file_id = dm.group(1)
+                if file_id in seen:
+                    continue
+                seen.add(file_id)
+                out.append((
+                    label,
+                    self._drive_download_url(file_id),
+                    self._filename(proj, a.get_text(" ", strip=True)),
+                    self.PAGE,
+                ))
+
+        print(f"  WYDOT: {len(out)} document(s) across the advertised projects")
+        return out
+
+
+_ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter, WYDOTExevisionAdapter]
 ADAPTERS = {cls.key: cls for cls in _ADAPTER_CLASSES}
 
 
