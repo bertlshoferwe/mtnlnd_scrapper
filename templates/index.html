@@ -408,6 +408,16 @@
     color: var(--muted); padding: 7px 10px 3px;
   }
   .filter-menu .fm-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 2px; }
+  .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .pager button {
+    min-width: 32px; height: 32px; padding: 0 8px;
+    background: transparent; border: 1px solid var(--border-strong); color: var(--muted);
+    border-radius: 7px; font-size: 13px; font-weight: 600;
+  }
+  .pager button:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+  .pager button.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .pager .pager-gap { min-width: 18px; text-align: center; color: var(--muted); align-self: center; font-size: 13px; }
   .project-list { list-style: none; margin: 0; padding: 0; }
   .project-list li {
     display: flex; align-items: center; gap: 12px;
@@ -511,6 +521,10 @@
       display: inline-flex; align-items: center; justify-content: center;
     }
     .pdf-actions .modal-close { font-size: 26px; padding: 0; }
+
+    .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
+    .pager { justify-content: center; }
+    .pager button { min-width: 36px; height: 36px; }
 
     /* Most-flagged keywords: one swipeable line instead of wrapping */
     .stat-keywords {
@@ -630,12 +644,9 @@
     <ul class="project-list" id="projectList"></ul>
     <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
 
-    <div class="row" style="justify-content: space-between; margin-top: 10px;">
+    <div class="row results-pagerbar" style="justify-content: space-between; margin-top: 12px; gap: 10px;">
       <span class="status-line" id="resultsPageInfo"></span>
-      <div class="row">
-        <button class="btn-ghost" id="prevPageBtn" onclick="changeResultsPage(-1)">Previous</button>
-        <button class="btn-ghost" id="nextPageBtn" onclick="changeResultsPage(1)">Next</button>
-      </div>
+      <div class="pager" id="resultsPager"></div>
     </div>
   </div>
 
@@ -1620,6 +1631,7 @@ async function loadResultsInfo() {
     emptyEl.textContent = 'No scans yet — run a scan to see projects here.';
     emptyEl.style.display = 'block';
     document.getElementById('resultsPageInfo').textContent = '';
+    document.getElementById('resultsPager').innerHTML = '';
     return;
   }
 
@@ -1770,8 +1782,52 @@ async function loadProjects() {
     const end = Math.min(resultsPage * PROJECTS_PER_PAGE, resultsTotal);
     pageInfo.textContent = 'Showing ' + start + '–' + end + ' of ' + resultsTotal + ' project' + (resultsTotal === 1 ? '' : 's');
   }
-  document.getElementById('prevPageBtn').disabled = resultsPage <= 1;
-  document.getElementById('nextPageBtn').disabled = resultsPage * PROJECTS_PER_PAGE >= resultsTotal;
+  renderPager();
+}
+
+function renderPager() {
+  const pager = document.getElementById('resultsPager');
+  pager.innerHTML = '';
+  const totalPages = Math.max(1, Math.ceil(resultsTotal / PROJECTS_PER_PAGE));
+  if (resultsTotal === 0 || totalPages <= 1) return;
+
+  const cur = resultsPage;
+  const addBtn = function(label, page, opts) {
+    opts = opts || {};
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (opts.active) { b.className = 'active'; b.setAttribute('aria-current', 'page'); }
+    if (opts.disabled) b.disabled = true;
+    else b.onclick = function() { goToResultsPage(page); };
+    if (opts.aria) b.setAttribute('aria-label', opts.aria);
+    pager.appendChild(b);
+  };
+  const addGap = function() {
+    const s = document.createElement('span');
+    s.className = 'pager-gap';
+    s.textContent = '…';
+    pager.appendChild(s);
+  };
+
+  addBtn('‹', cur - 1, { disabled: cur <= 1, aria: 'Previous page' });
+
+  let prev = 0;
+  for (let p = 1; p <= totalPages; p++) {
+    if (p !== 1 && p !== totalPages && (p < cur - 1 || p > cur + 1)) continue;
+    if (p - prev > 1) addGap();
+    addBtn(String(p), p, { active: p === cur });
+    prev = p;
+  }
+
+  addBtn('›', cur + 1, { disabled: cur >= totalPages, aria: 'Next page' });
+}
+
+function goToResultsPage(page) {
+  const totalPages = Math.max(1, Math.ceil(resultsTotal / PROJECTS_PER_PAGE));
+  page = Math.min(Math.max(1, page), totalPages);
+  if (page === resultsPage) return;
+  resultsPage = page;
+  loadProjects();
 }
 
 function parseLocations(str) {
@@ -1873,14 +1929,6 @@ function openProjectModal(i) {
   });
 
   openModal('project');
-}
-
-function changeResultsPage(delta) {
-  const next = resultsPage + delta;
-  if (next < 1) return;
-  if ((next - 1) * PROJECTS_PER_PAGE >= resultsTotal && delta > 0) return;
-  resultsPage = next;
-  loadProjects();
 }
 
 document.getElementById('resultsSearch').addEventListener('input', function() {
