@@ -502,7 +502,11 @@ def scan_site(site, ai_client):
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
         return []
 
-    if site.get("listing") is not None:
+    listing = site.get("listing") or {}
+    if listing.get("link_selector") or listing.get("link_pattern"):
+        # Only a *configured* listing (has a selector or URL pattern) uses the
+        # targeted listing crawl. An empty {} — left over from the old
+        # "let AI find the links" checkbox — falls through to the browser crawler.
         return [(lbl, url, fn, None, None)
                 for lbl, url, fn in find_document_links_via_listing(site, ai_client)]
     if site.get("tabs"):
@@ -873,7 +877,8 @@ def _scan_division(division):
             url = site.get("url") or ""
             print(f"Scanning site: {name}" + (f" ({url})" if url else ""))
 
-            if site.get("listing") is not None:
+            _l = site.get("listing") or {}
+            if _l.get("link_selector") or _l.get("link_pattern"):
                 print("  Listing mode: crawling item pages for documents")
             elif site.get("tabs"):
                 print(f"  {len(site['tabs'])} tab(s) configured")
