@@ -459,8 +459,7 @@ def api_results_info(division_id):
     return jsonify({
         "exists": True,
         "latest_run_date": rows[0]["run_date"],
-        "documents_scanned": stats["documents_scanned"],
-        "matches_found": stats["matches_found"],
+        "stats": stats,
         "latest_summary": supabase_store.get_latest_summary_text(division_id),
     })
 

@@ -339,9 +339,15 @@
   .kw-count { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .chip mark { background: var(--accent); color: var(--accent-contrast); border-radius: 2px; padding: 0 1px; }
 
-  .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 16px; flex: 1; }
+  .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 11px 16px; flex: 1; min-width: 150px; }
   .stat-tile .stat-label { font-size: 12px; color: var(--muted); }
-  .stat-tile .stat-value { font-size: 20px; font-weight: 700; }
+  .stat-tile .stat-value { font-size: 22px; font-weight: 700; line-height: 1.15; }
+  .stat-tile .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .stat-tile.stat-tile-primary { background: var(--accent-soft); }
+  .stat-tile.stat-tile-primary .stat-value { color: var(--accent-soft-text); }
+  .stat-keywords { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+  .stat-keywords .sk-label { margin-right: 2px; }
+  .stat-keywords .tag { cursor: pointer; }
   .callout {
     background: var(--accent-soft); color: var(--accent-soft-text);
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
@@ -433,16 +439,19 @@
       <a id="downloadBtn" class="btn-primary" style="display:none; text-decoration:none;" href="#">Download .xlsx</a>
     </div>
 
-    <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 14px;">
+    <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
+      <div class="stat-tile stat-tile-primary">
+        <div class="stat-label">Projects flagged</div>
+        <div class="stat-value" id="statFlagged">0</div>
+        <div class="stat-sub" id="statFlaggedSub"></div>
+      </div>
       <div class="stat-tile">
         <div class="stat-label">Documents scanned</div>
         <div class="stat-value" id="statDocs">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Matches found</div>
-        <div class="stat-value" id="statMatches">0</div>
+        <div class="stat-sub" id="statDocsSub"></div>
       </div>
     </div>
+    <div class="stat-keywords" id="statKeywords" style="display:none;"></div>
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
 
@@ -1163,6 +1172,7 @@ async function loadResultsInfo() {
     line.textContent = 'No scans yet.';
     btn.style.display = 'none';
     statsRow.style.display = 'none';
+    document.getElementById('statKeywords').style.display = 'none';
     callout.style.display = 'none';
     document.getElementById('projectList').innerHTML = '';
     document.getElementById('resultsEmpty').style.display = 'block';
@@ -1176,9 +1186,38 @@ async function loadResultsInfo() {
   btn.href = '/download/' + currentDivision + '/results';
   btn.style.display = 'inline-block';
 
-  document.getElementById('statDocs').textContent = info.documents_scanned;
-  document.getElementById('statMatches').textContent = info.matches_found;
+  const st = info.stats || {};
+  document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
+  document.getElementById('statFlaggedSub').textContent =
+    'of ' + (st.projects_scanned || 0) + ' scanned';
+  document.getElementById('statDocs').textContent = st.documents_scanned || 0;
+  document.getElementById('statDocsSub').textContent =
+    (st.documents_matched || 0) + ' with keyword hits';
   statsRow.style.display = 'flex';
+
+  const skEl = document.getElementById('statKeywords');
+  skEl.innerHTML = '';
+  if ((st.top_keywords || []).length) {
+    const lbl = document.createElement('span');
+    lbl.className = 'sk-label';
+    lbl.textContent = 'Most-flagged:';
+    skEl.appendChild(lbl);
+    st.top_keywords.forEach(function(kv) {
+      const t = document.createElement('span');
+      t.className = 'tag';
+      t.textContent = kv[0] + ' · ' + kv[1];
+      t.title = 'Filter results by "' + kv[0] + '"';
+      t.onclick = function() {
+        document.getElementById('resultsSearch').value = kv[0];
+        resultsPage = 1;
+        loadProjects();
+      };
+      skEl.appendChild(t);
+    });
+    skEl.style.display = 'flex';
+  } else {
+    skEl.style.display = 'none';
+  }
 
   if (info.latest_summary) {
     callout.textContent = info.latest_summary;

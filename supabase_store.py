@@ -490,20 +490,40 @@ def get_results_grouped(division_id, search=None, status=None, page=1, page_size
 
 
 def get_stats(division_id):
-    """Documents scanned (rows with an actual filename) and matches found
-    (rows with match_count > 0), for the dashboard's summary cards."""
-    client = get_client()
-    total = (
-        client.table("scan_results").select("id", count="exact")
-        .eq("division_id", division_id).neq("filename", "").execute()
-    )
-    matches = (
-        client.table("scan_results").select("id", count="exact")
-        .eq("division_id", division_id).gt("match_count", 0).execute()
-    )
+    """Project- and document-level counts for the Results summary, plus the
+    keywords hitting the most projects."""
+    rows = (
+        get_client().table("scan_results")
+        .select("site,filename,match_count,matched_keywords,status")
+        .eq("division_id", division_id).execute()
+    ).data
+
+    projects_all, projects_flagged = set(), set()
+    docs_scanned = docs_matched = 0
+    kw_projects = {}
+    for r in rows:
+        site = r.get("site")
+        fn = r.get("filename") or ""
+        hit = (r.get("match_count") or 0) > 0
+        if fn:
+            docs_scanned += 1
+            projects_all.add(site)
+        if hit:
+            docs_matched += 1
+            projects_flagged.add(site)
+            for k in (r.get("matched_keywords") or "").split(","):
+                k = k.strip()
+                if k:
+                    kw_projects.setdefault(k, set()).add(site)
+
+    top = sorted(((k, len(v)) for k, v in kw_projects.items()),
+                 key=lambda kv: (-kv[1], kv[0].lower()))[:6]
     return {
-        "documents_scanned": total.count or 0,
-        "matches_found": matches.count or 0,
+        "projects_scanned": len(projects_all),
+        "projects_flagged": len(projects_flagged),
+        "documents_scanned": docs_scanned,
+        "documents_matched": docs_matched,
+        "top_keywords": top,
     }
 
 
