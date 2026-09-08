@@ -375,6 +375,16 @@ def already_scanned_urls(division_id):
     }
 
 
+def scanned_document_urls_all(division_id):
+    """Every document_url this division has ever logged (any status). Used to
+    gate the PDF proxy so it can't be pointed at an arbitrary URL."""
+    res = (
+        get_client().table("scan_results").select("document_url")
+        .eq("division_id", division_id).execute()
+    )
+    return {r["document_url"] for r in res.data if r.get("document_url")}
+
+
 def backfill_source_url(division_id, document_url, source_url):
     """One-off: attach a source_url to already-logged rows that predate it."""
     get_client().table("scan_results").update({"source_url": source_url}) \

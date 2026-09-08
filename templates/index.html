@@ -383,7 +383,10 @@
   .file-row:last-child { border-bottom: none; }
   .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
-  .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+  .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
+  .file-row .f-dl:hover { text-decoration: underline; }
+  .pdf-modal { max-width: 920px; }
+  #pdfFrame { width: 100%; height: 74vh; border: none; display: block; background: var(--surface-2); }
   .file-row .f-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
   .kw-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
   .kw-table th {
@@ -611,6 +614,22 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="pdfModal" onclick="if(event.target===this) closePdfModal()">
+  <div class="modal pdf-modal">
+    <div class="modal-header">
+      <div style="min-width:0;"><h2 id="pdfModalTitle" style="word-break:break-all;"></h2></div>
+      <div class="row" style="gap:8px; flex-shrink:0; align-items:center;">
+        <a id="pdfModalDownload" class="btn-primary" style="text-decoration:none;">Download</a>
+        <a id="pdfModalNewTab" class="btn-ghost" style="text-decoration:none;" target="_blank" rel="noopener">Open in tab</a>
+        <button class="modal-close" onclick="closePdfModal()" aria-label="Close">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:0; flex:1;">
+      <iframe id="pdfFrame" title="PDF preview"></iframe>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---- Theme: light / dark / auto ------------------------------------------
    Every page load starts on "auto" (follow the OS). The toggle overrides
@@ -693,9 +712,26 @@ function openModal(name) {
 }
 function closeModal() {
   document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+  document.getElementById('pdfFrame').src = 'about:blank';
+}
+function closePdfModal() {
+  document.getElementById('pdfModal').classList.remove('open');
+  document.getElementById('pdfFrame').src = 'about:blank';
+}
+function openPdfPreview(url, filename) {
+  const src = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(url);
+  document.getElementById('pdfModalTitle').textContent = filename || 'Document';
+  document.getElementById('pdfFrame').src = src;
+  const dl = document.getElementById('pdfModalDownload');
+  dl.href = src + '&download=1';
+  if (filename) dl.setAttribute('download', filename);
+  document.getElementById('pdfModalNewTab').href = src;
+  document.getElementById('pdfModal').classList.add('open');
 }
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeModal();
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
+  closeModal();
 });
 
 function escapeHtml(str) {
@@ -1468,12 +1504,18 @@ function openProjectModal(i) {
     nm.className = 'f-name';
     nm.textContent = f.filename || '(document)';
     top.appendChild(nm);
-    if (f.url && /^https?:/.test(f.url)) {
-      const dl = document.createElement('a');
-      dl.className = 'f-dl';
-      dl.href = f.url; dl.target = '_blank'; dl.rel = 'noopener';
-      dl.textContent = 'Open PDF ↗';
-      top.appendChild(dl);
+    if (f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'f-dl';
+      btn.textContent = 'View PDF';
+      btn.onclick = function() { openPdfPreview(f.url, f.filename); };
+      top.appendChild(btn);
+    } else if (f.url && /^https?:/.test(f.url)) {
+      const a = document.createElement('a');
+      a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'Open ↗';
+      top.appendChild(a);
     }
     row.appendChild(top);
 

@@ -43,7 +43,7 @@ import re
 import requests
 from datetime import datetime
 
-from flask import Flask, jsonify, request, render_template, send_file, abort
+from flask import Flask, jsonify, request, render_template, send_file, abort, Response
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
 import pypdf
@@ -608,6 +608,61 @@ def _build_results_workbook(division_id, division_name):
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+PROXY_MAX_BYTES = 30 * 1024 * 1024
+
+
+@app.route("/api/<division_id>/pdf", methods=["GET"])
+def api_proxy_pdf(division_id):
+    """Stream a scanned document through this origin so the dashboard can show
+    it in an <iframe> (cross-origin PDFs and X-Frame-Options make direct
+    framing unreliable). `?download=1` forces a save instead of inline view.
+
+    SSRF guard: only proxies a URL this division has actually logged in
+    scan_results — never an arbitrary URL.
+    """
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    target = request.args.get("url", "")
+    if not target.startswith(("http://", "https://")):
+        abort(400, description="bad url")
+    if target not in supabase_store.scanned_document_urls_all(division_id):
+        abort(403, description="not a document from this division's scans")
+
+    try:
+        upstream = requests.get(target, timeout=20, stream=True,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; BidScoutBot/1.0)"})
+        upstream.raise_for_status()
+    except requests.RequestException as e:
+        abort(502, description=f"couldn't fetch the file: {e}")
+
+    filename = _filename_from(target)
+    disp = "attachment" if request.args.get("download") else "inline"
+
+    def stream():
+        total = 0
+        for chunk in upstream.iter_content(65536):
+            total += len(chunk)
+            if total > PROXY_MAX_BYTES:
+                break
+            yield chunk
+
+    return Response(stream(), mimetype="application/pdf", headers={
+        "Content-Disposition": f'{disp}; filename="{filename}"',
+        "Cache-Control": "private, max-age=300",
+    })
+
+
+def _filename_from(url):
+    from urllib.parse import unquote, urlparse, parse_qs
+    q = parse_qs(urlparse(url).query)
+    if "file_name" in q:
+        return unquote(q["file_name"][0])
+    tail = unquote(urlparse(url).path.rstrip("/").split("/")[-1])
+    return tail or "document.pdf"
 
 
 @app.route("/download/<division_id>/results", methods=["GET"])
