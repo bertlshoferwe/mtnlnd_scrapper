@@ -77,11 +77,16 @@ def rename_division(division_id, name):
 
 
 def delete_division(division_id):
-    """Removes the division and (via ON DELETE CASCADE) all its sites,
-    keywords, results, summaries, and run history. Unlike the local-file
-    version of this app, there's no 'keep the data around just in case' — a
-    delete here is final. The dashboard confirms before calling this."""
-    res = get_client().table("divisions").delete().eq("id", division_id).execute()
+    """Wipe a division completely: every site, keyword, scan result, daily
+    summary, and run-history row, then the division itself. The schema's
+    ON DELETE CASCADE would handle the children, but we delete them
+    explicitly too so it still works on a database whose foreign keys were
+    set up differently. A delete here is final — the dashboard confirms
+    first."""
+    client = get_client()
+    for table in ("scan_results", "daily_summaries", "scan_runs", "sites", "keywords"):
+        client.table(table).delete().eq("division_id", division_id).execute()
+    res = client.table("divisions").delete().eq("id", division_id).execute()
     if not res.data:
         raise ValueError("division not found")
 

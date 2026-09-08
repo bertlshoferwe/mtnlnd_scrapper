@@ -800,7 +800,7 @@ async function deleteDivision(d) {
     alert("Can't delete the only remaining division.");
     return;
   }
-  if (!confirm('Delete "' + d.name + '"? Its sites, keywords, and results are permanently removed. Past results already downloaded are unaffected.')) return;
+  if (!confirm('Delete "' + d.name + '" and everything in it — all sites, keywords, scan results, and history? This cannot be undone.')) return;
   try {
     await api('/api/divisions/' + d.id, { method: 'DELETE' });
     if (currentDivision === d.id) currentDivision = null;
