@@ -168,16 +168,16 @@ def api_add_site(division_id):
     if not url and not adapter:
         return jsonify({"error": "url is required (unless a portal adapter is selected)"}), 400
 
+    # No adapter and no manual selector/pattern -> the generic browser crawler
+    # discovers the plan links itself (the "Let AI find the plan links" default).
+    # A selector/pattern switches to the targeted listing crawl instead.
     listing = None
-    if not adapter:
-        if data.get("link_selector") or data.get("link_pattern"):
-            listing = {}
-            if data.get("link_selector"):
-                listing["link_selector"] = data["link_selector"].strip()
-            if data.get("link_pattern"):
-                listing["link_pattern"] = data["link_pattern"].strip()
-        elif data.get("use_ai_listing"):
-            listing = {}
+    if not adapter and (data.get("link_selector") or data.get("link_pattern")):
+        listing = {}
+        if data.get("link_selector"):
+            listing["link_selector"] = data["link_selector"].strip()
+        if data.get("link_pattern"):
+            listing["link_pattern"] = data["link_pattern"].strip()
 
     site = supabase_store.add_site(
         division_id, name, url, listing=listing, adapter=adapter or None
