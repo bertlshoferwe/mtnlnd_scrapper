@@ -571,9 +571,8 @@
   </div>
 
   <div class="card">
-    <h2>Results</h2>
-    <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
-      <div class="status-line" id="resultsSummaryLine" style="min-width:0;">Loading&hellip;</div>
+    <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 14px;">
+      <h2 style="margin:0;">Results</h2>
       <div class="results-head-actions">
         <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleResultsSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
         <div class="filter-wrap">
@@ -1514,13 +1513,11 @@ let currentResultsSite = '';
 async function loadResultsInfo() {
   if (!currentDivision) return;
   const info = await api('/api/' + currentDivision + '/results-info');
-  const line = document.getElementById('resultsSummaryLine');
   const btn = document.getElementById('downloadBtn');
   const statsRow = document.getElementById('statsRow');
   const callout = document.getElementById('summaryCallout');
 
   if (!info.exists) {
-    line.textContent = 'No scans yet.';
     btn.style.display = 'none';
     statsRow.style.display = 'none';
     document.getElementById('statKeywords').style.display = 'none';
@@ -1537,9 +1534,6 @@ async function loadResultsInfo() {
     return;
   }
 
-  line.textContent = 'Last scan ' + new Date(info.latest_run_date).toLocaleString([], {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-  });
   const st = info.stats || {};
   btn.href = '/download/' + currentDivision + '/results';
   // The download is matches-only, so there's nothing to download with no hits.
