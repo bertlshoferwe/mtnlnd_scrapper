@@ -1222,6 +1222,9 @@ async function loadStatus() {
   if (s.last_result === 'success') {
     dot.className = 'status-dot success';
     text.textContent = 'Scan complete';
+  } else if (s.last_result === 'partial') {
+    dot.className = 'status-dot success';
+    text.textContent = 'Scan complete (partial)';
   } else if (s.last_result === 'cancelled') {
     dot.className = 'status-dot idle';
     text.textContent = 'Scan cancelled';
@@ -1242,6 +1245,9 @@ async function loadStatus() {
   }
   if (s.last_result && s.last_result.startsWith('error')) {
     detailText = (detailText ? detailText + '. ' : '') + 'Try running it again.';
+  } else if (s.last_result === 'partial') {
+    detailText = (detailText ? detailText + '. ' : '') +
+      'Ran out of time — remaining sites are picked up on the next run.';
   }
   detail.textContent = detailText;
 }

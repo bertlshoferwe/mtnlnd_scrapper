@@ -31,6 +31,20 @@ provider-specific error handling.
 import os
 
 
+def _genai_http_options():
+    """Per-request timeout for the google-genai SDK, which otherwise has no
+    default timeout at all — a stuck socket blocks the scan until the job is
+    killed. Returns kwargs to splat into genai.Client(...) — an
+    {"http_options": HttpOptions(timeout=<ms>)}, or {} if the SDK is too old
+    to accept it."""
+    try:
+        from google.genai import types
+        secs = float(os.environ.get("AI_HTTP_TIMEOUT", "90"))
+        return {"http_options": types.HttpOptions(timeout=int(secs * 1000))}
+    except Exception:
+        return {}
+
+
 class AIProvider:
     name = "unknown"
 
@@ -44,7 +58,15 @@ class AnthropicProvider(AIProvider):
 
     def __init__(self, api_key, model=None):
         import anthropic
-        self.client = anthropic.Anthropic(api_key=api_key)
+        # Bound every call: without an explicit timeout the SDK waits up to
+        # 10 min per request and retries twice, so one wedged connection can
+        # stall a scan for half an hour. A scan job has a hard wall-clock
+        # budget (see scraper.py), and a hung AI call must not eat it.
+        self.client = anthropic.Anthropic(
+            api_key=api_key,
+            timeout=float(os.environ.get("AI_HTTP_TIMEOUT", "90")),
+            max_retries=1,
+        )
         self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
     def complete(self, prompt, max_tokens):
@@ -64,7 +86,7 @@ class GeminiProvider(AIProvider):
 
     def __init__(self, api_key, model=None):
         from google import genai
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, **_genai_http_options())
         # Google retires Gemini model names often (gemini-2.5-flash was pulled
         # for new projects in 2026). If this default stops working, set the
         # GEMINI_MODEL env var to the current one from https://ai.google.dev
@@ -101,7 +123,7 @@ EMBED_DIM = 768
 class GeminiEmbedder:
     def __init__(self, api_key, model=None):
         from google import genai
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, **_genai_http_options())
         self.model = model or os.environ.get("EMBED_MODEL", "gemini-embedding-001")
 
     BATCH = 100  # Gemini caps batchEmbedContents at 100 requests per call

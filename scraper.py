@@ -95,6 +95,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import requests
 import ai_provider
 from datetime import datetime, timezone
@@ -125,6 +126,16 @@ MAX_LISTING_ANCHORS_FOR_AI = 300  # cap on links sent per AI job-link identifica
 AI_PREFILTER_SEND_ALL_MAX = int(os.environ.get("AI_PREFILTER_SEND_ALL_MAX", "60"))
 AI_PREFILTER_TOP_N = int(os.environ.get("AI_PREFILTER_TOP_N", "50"))
 EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
+# Hard wall-clock budget for one division's scan. The GitHub Actions job caps
+# out at 120 min (see .github/workflows/daily-scan.yml); if the scan runs past
+# that the runner is killed mid-flight and finish_run() never fires, leaving
+# the dashboard showing a phantom "Checking …" forever. Stopping ourselves
+# before then means the run always closes cleanly (as a partial success) and
+# the next run resumes where this one left off (already-scanned docs are
+# skipped). Scanning every division shares one job, so keep this well under
+# 120 min. Override with SCAN_DIVISION_BUDGET_S.
+SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S", str(95 * 60)))
+
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
 FIRECRAWL_TIMEOUT = 60  # seconds — headless rendering is slower than a plain request
 
@@ -872,9 +883,21 @@ def _scan_division(division):
         rows = []  # kept in memory too, just to build the daily summary at the end
         n_sites = len(sites)
         overall_done = 0
+        deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
+        stopped_early = False
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
+
+            if time.monotonic() > deadline:
+                remaining = n_sites - site_i + 1
+                print(f"! Wall-clock budget ({SCAN_DIVISION_BUDGET_S}s) reached — "
+                      f"stopping with {remaining} site(s) unscanned "
+                      f"({', '.join(s['name'] for s in sites[site_i - 1:])}). "
+                      f"The next run picks these up.")
+                stopped_early = True
+                break
+
             print(f"Scanning site: {name}" + (f" ({url})" if url else ""))
 
             _l = site.get("listing") or {}
@@ -999,8 +1022,10 @@ def _scan_division(division):
         summary = generate_daily_summary(ai_client, rows)
         supabase_store.log_summary(division_id, run_date, summary)
 
-        supabase_store.finish_run(run_id, "success")
-        print(f"=== Division '{division_id}' done: {len(rows)} new row(s) logged, "
+        supabase_store.finish_run(run_id, "partial" if stopped_early else "success")
+        print(f"=== Division '{division_id}' "
+              f"{'stopped early (budget)' if stopped_early else 'done'}: "
+              f"{len(rows)} new row(s) logged, "
               f"{skipped_seen} skipped as already scanned ===")
     except Exception as e:
         supabase_store.finish_run(run_id, f"error: {e}")

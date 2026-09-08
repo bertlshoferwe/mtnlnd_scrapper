@@ -41,7 +41,16 @@ import os
 import io
 import re
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# A scan_runs row can be left showing status='running' forever if the GitHub
+# Actions job that owns it is killed without warning — it hits the workflow's
+# timeout-minutes cap, the runner OOMs, or the process gets SIGKILLed — so
+# _scan_division's finish_run() never executes. The workflow caps a job at
+# 120 min, so any "running" row older than this is definitely dead, not slow;
+# the status endpoint reports those as a failed run instead of a live one so
+# the dashboard stops showing a phantom "Checking …" indefinitely.
+STALE_RUN_AFTER = timedelta(minutes=150)
 
 from flask import Flask, jsonify, request, render_template, send_file, abort, Response
 from openpyxl import Workbook
@@ -351,6 +360,21 @@ def api_delete_keywords(division_id):
 # Status + Run Now (via GitHub Actions workflow_dispatch)
 # ---------------------------------------------------------------------------
 
+def _run_is_stale(run):
+    """True if a still-'running' scan_runs row is old enough that its GitHub
+    Actions job cannot still be alive (see STALE_RUN_AFTER)."""
+    started = run.get("started_at")
+    if not started:
+        return False
+    try:
+        ts = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - ts > STALE_RUN_AFTER
+
+
 @app.route("/api/<division_id>/status", methods=["GET"])
 def api_status(division_id):
     _, err = _require_division(division_id)
@@ -359,11 +383,22 @@ def api_status(division_id):
     run = supabase_store.get_latest_run(division_id)
     if run is None:
         return jsonify({"running": False, "last_started": None, "last_finished": None, "last_result": None})
+
+    running = run["status"] == "running"
+    if running and _run_is_stale(run):
+        # The owning job is long gone — surface it as a failed run and mark the
+        # row so it doesn't keep tripping this check (and so "Run now" isn't
+        # blocked by a scan that will never finish).
+        running = False
+        supabase_store.finish_run(run["id"], "error: timed out")
+        run = {**run, "status": "error: timed out",
+               "finished_at": datetime.now(timezone.utc).isoformat()}
+
     return jsonify({
-        "running": run["status"] == "running",
+        "running": running,
         "last_started": run["started_at"],
         "last_finished": run["finished_at"],
-        "last_result": None if run["status"] == "running" else run["status"],
+        "last_result": None if running else run["status"],
         "progress_done": run.get("progress_done") or 0,
         "progress_total": run.get("progress_total") or 0,
         "progress_label": run.get("progress_label") or "",
