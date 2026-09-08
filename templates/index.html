@@ -847,6 +847,8 @@ function closePdfModal() {
 }
 function teardownPdf() {
   pdfRenderToken++;                       // cancel any in-flight page renders
+  if (pdfCurrentDoc) { try { pdfCurrentDoc.destroy(); } catch (e) {} pdfCurrentDoc = null; }
+  if (pdfCurrentIO) { pdfCurrentIO.disconnect(); pdfCurrentIO = null; }
   document.getElementById('pdfPages').innerHTML = '';
   document.getElementById('pdfStatus').textContent = '';
 }
@@ -854,6 +856,8 @@ function teardownPdf() {
 // ---- pdf.js viewer -------------------------------------------------------
 let pdfLibPromise = null;
 let pdfRenderToken = 0;
+let pdfCurrentDoc = null;
+let pdfCurrentIO = null;
 
 function loadPdfLib() {
   if (!pdfLibPromise) {
@@ -877,11 +881,11 @@ function openPdfPreview(url, filename) {
 }
 
 async function renderPdf(src) {
+  teardownPdf();
   const token = ++pdfRenderToken;
   const pagesEl = document.getElementById('pdfPages');
   const statusEl = document.getElementById('pdfStatus');
   const scrollEl = document.getElementById('pdfScroll');
-  pagesEl.innerHTML = '';
   scrollEl.scrollTop = 0;
   statusEl.textContent = 'Loading…';
 
@@ -889,7 +893,8 @@ async function renderPdf(src) {
     const lib = await loadPdfLib();
     if (token !== pdfRenderToken) return;
     const pdf = await lib.getDocument({ url: src }).promise;
-    if (token !== pdfRenderToken) return;
+    if (token !== pdfRenderToken) { try { pdf.destroy(); } catch (e) {} return; }
+    pdfCurrentDoc = pdf;
     statusEl.textContent = '';
 
     // Lazy-render: only pages near the viewport get drawn (handles 200+ pages).
@@ -898,6 +903,7 @@ async function renderPdf(src) {
         if (entry.isIntersecting) { io.unobserve(entry.target); renderPdfPage(pdf, entry.target, token); }
       });
     }, { root: scrollEl, rootMargin: '800px 0px' });
+    pdfCurrentIO = io;
 
     const first = await pdf.getPage(1);
     const ratio = first.getViewport({ scale: 1 }).height / first.getViewport({ scale: 1 }).width;
