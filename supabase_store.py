@@ -115,6 +115,26 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
     return res.data[0]
 
 
+def update_site(division_id, site_id, name, url, listing=None, adapter=None):
+    """Overwrite an existing site's config. `listing` and `adapter` are
+    written as given (including None, to clear a previously-set value) so the
+    dashboard's edit form can move a site between strategies. `tabs` is left
+    untouched — it has no dashboard UI."""
+    patch = {
+        "name": name,
+        "url": url,
+        "listing": listing,
+        "adapter": adapter,
+    }
+    res = (
+        get_client().table("sites").update(patch)
+        .eq("division_id", division_id).eq("id", site_id).execute()
+    )
+    if not res.data:
+        raise ValueError("site not found")
+    return res.data[0]
+
+
 def delete_site(division_id, site_id):
     res = (
         get_client().table("sites").delete()
@@ -391,13 +411,17 @@ def backfill_source_url(division_id, document_url, source_url):
         .eq("division_id", division_id).eq("document_url", document_url).execute()
 
 
-def get_scan_results(division_id, limit=2000):
-    """Most recent rows first, for building the downloadable spreadsheet."""
-    res = (
+def get_scan_results(division_id, limit=2000, matches_only=False):
+    """Most recent rows first, for building the downloadable spreadsheet.
+    matches_only=True returns only documents that hit a keyword (match_count > 0),
+    so the filter happens in the DB rather than after a truncated fetch."""
+    query = (
         get_client().table("scan_results").select("*")
-        .eq("division_id", division_id).order("run_date", desc=True).limit(limit).execute()
+        .eq("division_id", division_id).order("run_date", desc=True).limit(limit)
     )
-    return res.data
+    if matches_only:
+        query = query.gt("match_count", 0)
+    return query.execute().data
 
 
 def get_scan_results_page(division_id, search=None, status=None, page=1, page_size=20):

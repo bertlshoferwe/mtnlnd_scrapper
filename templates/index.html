@@ -168,12 +168,33 @@
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
-    display: flex; justify-content: space-between; align-items: center;
     padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   ul.list li:last-child { border-bottom: none; }
+  .site-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  }
+  .site-edit-slot:empty { display: none; }
+  .site-actions {
+    display: flex; gap: 2px; flex-shrink: 0;
+    opacity: 0; transition: opacity .12s ease;
+  }
+  ul.list li:hover .site-actions,
+  .site-actions:focus-within { opacity: 1; }
+  @media (hover: none) { .site-actions { opacity: 1; } }
+  .icon-btn {
+    background: transparent; border: none; padding: 6px; border-radius: 6px;
+    color: var(--muted); cursor: pointer; display: inline-flex; line-height: 0;
+  }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  a.icon-btn { text-decoration: none; }
+  .icon-btn.bordered { border: 1px solid var(--border-strong); padding: 7px; }
+  .icon-btn.bordered:hover { color: var(--accent); border-color: var(--accent); background: transparent; }
+  .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
   .site-name { font-weight: 550; }
-  .site-url { color: var(--muted); font-size: 12.5px; word-break: break-all; }
+  .site-url { display: block; color: var(--muted); font-size: 12.5px; word-break: break-all; text-decoration: none; }
+  a.site-url:hover { color: var(--accent); text-decoration: underline; }
   .site-tags { margin-top: 3px; }
   .tag {
     display: inline-block; font-size: 11px; font-weight: 600;
@@ -399,6 +420,48 @@
   .kw-table th:first-child, .kw-table .kt-term { width: 1%; white-space: nowrap; }
   .kw-table .kt-term { font-weight: 600; padding-right: 20px; }
   .kw-table .kt-pages { color: var(--muted); }
+
+  @media (max-width: 640px) {
+    .masthead-inner { padding: 16px 14px; }
+    .wrap { padding: 16px 13px 44px; }
+    h1 { font-size: 19px; }
+    .subtitle { font-size: 12.5px; }
+
+    .card { padding: 15px 14px; margin-bottom: 15px; }
+    .tabs { margin-bottom: 16px; }
+
+    .summary-grid { flex-direction: column; gap: 12px; margin-bottom: 15px; }
+    .summary-card { padding: 15px 16px; min-width: 0; }
+    .summary-card .summary-count { font-size: 20px; }
+
+    /* Modals go full-screen — no wasted margin, close button always reachable */
+    .modal-overlay { padding: 0; align-items: stretch; }
+    .modal {
+      max-width: 100%; min-height: 100vh; border-radius: 0; border: none;
+      max-height: 100vh; max-height: 100dvh;
+    }
+    .modal-header { padding: 16px 16px 12px; }
+    .modal-body { padding: 14px 16px 22px; }
+
+    .stat-tile { min-width: 130px; padding: 10px 12px; }
+    .stat-tile .stat-value { font-size: 19px; }
+
+    /* Stack label-over-field in the site form's advanced section */
+    .adv-fields .row { flex-direction: column; align-items: stretch; gap: 4px; }
+    .adv-fields label { width: auto; }
+    .adv-fields .row input, .adv-fields .row select { width: 100%; }
+
+    #siteName, #siteUrl { flex: 1 1 100% !important; min-width: 0 !important; }
+
+    .kw-table th, .kw-table td { padding: 4px 7px; }
+    .kw-table .kt-term { padding-right: 10px; }
+
+    /* PDF preview fills the full-screen modal */
+    .pdf-modal .modal-header { flex-wrap: wrap; }
+    .pdf-modal .modal-header h2 { font-size: 14px; }
+    .pdf-modal .modal-body { flex: 1; }
+    #pdfFrame { height: 100%; min-height: 55vh; }
+  }
 </style>
 </head>
 <body>
@@ -461,7 +524,7 @@
     <h2>Results</h2>
     <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
       <div class="status-line" id="resultsSummaryLine">Loading&hellip;</div>
-      <a id="downloadBtn" class="btn-primary" style="display:none; text-decoration:none;" href="#">Download .xlsx</a>
+      <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
@@ -517,12 +580,10 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <ul class="list" id="sitesList"></ul>
-      <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
+      <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-bottom:14px;">+ Add a site</button>
 
-      <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-top:14px;">+ Add a site</button>
-
-      <div id="addSiteForm" style="display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:16px;">
+      <div id="addSiteForm" style="display:none; margin:0 0 18px; border:1px solid var(--border); border-radius:8px; padding:16px;">
+        <h3 id="siteFormTitle" style="margin:0 0 12px; font-size:15px;">Add a site</h3>
         <div class="row">
           <input type="text" id="siteName" placeholder="Site name" style="flex:1; min-width:160px;">
           <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
@@ -551,10 +612,13 @@
           </div>
         </div>
         <div class="row" style="margin-top:14px;">
-          <button class="btn-primary" onclick="addSite()">Add site</button>
+          <button class="btn-primary" id="siteSaveBtn" onclick="saveSite()">Add site</button>
           <button class="btn-ghost" onclick="hideAddSite()">Cancel</button>
         </div>
       </div>
+
+      <ul class="list" id="sitesList"></ul>
+      <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
     </div>
   </div>
 </div>
@@ -929,8 +993,24 @@ async function createDivision() {
   }
 }
 
+let sitesCache = [];
+let editingSiteId = null;
+
+const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
+
+// The edit form is a single shared node: its home is at the top under the
+// "+ Add a site" button (used for adding), editSite() moves it into the row
+// being edited. parkFormHome() also keeps it clear of list.innerHTML wipes.
+function parkFormHome() {
+  const btn = document.getElementById('showAddSiteBtn');
+  btn.insertAdjacentElement('afterend', document.getElementById('addSiteForm'));
+}
+
 async function loadSites() {
+  parkFormHome();  // detach from any row about to be destroyed
   const sites = await api('/api/' + currentDivision + '/sites');
+  sitesCache = sites;
   const list = document.getElementById('sitesList');
   const empty = document.getElementById('sitesEmpty');
   list.innerHTML = '';
@@ -944,15 +1024,43 @@ async function loadSites() {
     if (site.adapter) tags += '<span class="tag tag-adapter">' + escapeHtml(adapterLabel(site.adapter)) + '</span>';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
+    const linkable = /^https?:\/\//i.test(site.url || '');
+    const urlHtml = site.url
+      ? (linkable
+          ? '<a class="site-url" href="' + escapeHtml(site.url) + '" target="_blank" rel="noopener">' + escapeHtml(site.url) + '</a>'
+          : '<div class="site-url">' + escapeHtml(site.url) + '</div>')
+      : '<div class="site-url" style="font-style:italic;">no URL — adapter decides where to look</div>';
     li.innerHTML =
-      '<div>' +
-        '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
-        '<div class="site-url">' + escapeHtml(site.url) + '</div>' +
-        '<div class="site-tags">' + tags + '</div>' +
+      '<div class="site-row">' +
+        '<div style="min-width:0;">' +
+          '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
+          urlHtml +
+          '<div class="site-tags">' + tags + '</div>' +
+        '</div>' +
+        '<div class="site-actions">' +
+          '<button class="icon-btn" title="Edit" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
+          '<button class="icon-btn danger" title="Remove" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
+        '</div>' +
       '</div>' +
-      '<button class="btn-danger" onclick="deleteSite(' + site.id + ')">Remove</button>';
+      '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
     list.appendChild(li);
   });
+
+  // A re-render mid-edit (e.g. deleting another site): re-mount the open form
+  // under its row, or drop out of edit mode if that row is gone.
+  if (editingSiteId != null) {
+    if (sites.some(function(s) { return s.id === editingSiteId; })) mountEditForm(editingSiteId);
+    else hideAddSite();
+  }
+}
+
+function mountEditForm(siteId) {
+  const slot = document.getElementById('edit-slot-' + siteId);
+  const form = document.getElementById('addSiteForm');
+  if (!slot) return;
+  slot.appendChild(form);
+  form.style.display = 'block';
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 let adapterList = [];
@@ -992,13 +1100,41 @@ function onAdapterChange() {
 }
 
 function showAddSite() {
-  document.getElementById('showAddSiteBtn').style.display = 'none';
+  editingSiteId = null;
+  parkFormHome();
+  document.getElementById('siteFormTitle').textContent = 'Add a site';
+  document.getElementById('siteSaveBtn').textContent = 'Add site';
   document.getElementById('addSiteForm').style.display = 'block';
   document.getElementById('siteName').focus();
 }
+
+function editSite(siteId) {
+  const site = sitesCache.find(function(s) { return s.id === siteId; });
+  if (!site) return;
+  editingSiteId = siteId;
+
+  document.getElementById('siteName').value = site.name || '';
+  document.getElementById('siteUrl').value = site.url || '';
+  document.getElementById('siteAdapter').value = site.adapter || '';
+  const sel = (site.listing && site.listing.link_selector) || '';
+  const pat = (site.listing && site.listing.link_pattern) || '';
+  document.getElementById('linkSelector').value = sel;
+  document.getElementById('linkPattern').value = pat;
+  document.getElementById('useAiListing').checked = !site.adapter && !sel && !pat;
+
+  // Show Advanced whenever this site isn't on the plain "let AI find it" default.
+  document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat));
+  onAdapterChange();
+
+  document.getElementById('siteFormTitle').textContent = 'Edit ' + site.name;
+  document.getElementById('siteSaveBtn').textContent = 'Save changes';
+  mountEditForm(siteId);
+}
+
 function hideAddSite() {
+  editingSiteId = null;
+  parkFormHome();
   document.getElementById('addSiteForm').style.display = 'none';
-  document.getElementById('showAddSiteBtn').style.display = '';
   document.getElementById('siteName').value = '';
   document.getElementById('siteUrl').value = '';
   document.getElementById('siteAdapter').value = '';
@@ -1009,7 +1145,7 @@ function hideAddSite() {
   onAdapterChange();
 }
 
-async function addSite() {
+async function saveSite() {
   const name = document.getElementById('siteName').value.trim();
   const url = document.getElementById('siteUrl').value.trim();
   const adapter = document.getElementById('siteAdapter').value;
@@ -1021,8 +1157,14 @@ async function addSite() {
     link_pattern: document.getElementById('linkPattern').value.trim(),
     use_ai_listing: document.getElementById('useAiListing').checked,
   };
+  const editing = editingSiteId != null;
+  const path = '/api/' + currentDivision + '/sites' + (editing ? '/' + editingSiteId : '');
   try {
-    await api('/api/' + currentDivision + '/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    await api(path, {
+      method: editing ? 'PATCH' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
   } catch (e) {
     alert(e.message);
     return;
@@ -1222,6 +1364,9 @@ async function loadStatus() {
   if (s.last_result === 'success') {
     dot.className = 'status-dot success';
     text.textContent = 'Scan complete';
+  } else if (s.last_result === 'partial') {
+    dot.className = 'status-dot success';
+    text.textContent = 'Scan complete (partial)';
   } else if (s.last_result === 'cancelled') {
     dot.className = 'status-dot idle';
     text.textContent = 'Scan cancelled';
@@ -1242,6 +1387,9 @@ async function loadStatus() {
   }
   if (s.last_result && s.last_result.startsWith('error')) {
     detailText = (detailText ? detailText + '. ' : '') + 'Try running it again.';
+  } else if (s.last_result === 'partial') {
+    detailText = (detailText ? detailText + '. ' : '') +
+      'Ran out of time — remaining sites are picked up on the next run.';
   }
   detail.textContent = detailText;
 }
@@ -1315,10 +1463,11 @@ async function loadResultsInfo() {
   line.textContent = 'Last scan ' + new Date(info.latest_run_date).toLocaleString([], {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
-  btn.href = '/download/' + currentDivision + '/results';
-  btn.style.display = 'inline-block';
-
   const st = info.stats || {};
+  btn.href = '/download/' + currentDivision + '/results';
+  // The download is matches-only, so there's nothing to download with no hits.
+  btn.style.display = (st.documents_matched || 0) > 0 ? '' : 'none';
+
   document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
   document.getElementById('statFlaggedSub').textContent =
     'of ' + (st.projects_scanned || 0) + ' scanned';

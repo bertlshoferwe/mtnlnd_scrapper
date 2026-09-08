@@ -18,6 +18,7 @@ Routes:
   DEL  /api/divisions/<division_id>          delete a division (cascades in Supabase)
   GET  /api/<division_id>/sites              list sites
   POST /api/<division_id>/sites              add a site
+  PATCH /api/<division_id>/sites/<site_id>   edit a site (name, url, adapter, selector/pattern)
   DEL  /api/<division_id>/sites/<site_id>     remove a site
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
@@ -41,7 +42,16 @@ import os
 import io
 import re
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# A scan_runs row can be left showing status='running' forever if the GitHub
+# Actions job that owns it is killed without warning — it hits the workflow's
+# timeout-minutes cap, the runner OOMs, or the process gets SIGKILLed — so
+# _scan_division's finish_run() never executes. The workflow caps a job at
+# 120 min, so any "running" row older than this is definitely dead, not slow;
+# the status endpoint reports those as a failed run instead of a live one so
+# the dashboard stops showing a phantom "Checking …" indefinitely.
+STALE_RUN_AFTER = timedelta(minutes=150)
 
 from flask import Flask, jsonify, request, render_template, send_file, abort, Response
 from openpyxl import Workbook
@@ -152,23 +162,21 @@ def api_get_sites(division_id):
     return jsonify(supabase_store.load_sites(division_id))
 
 
-@app.route("/api/<division_id>/sites", methods=["POST"])
-def api_add_site(division_id):
-    _, err = _require_division(division_id)
-    if err:
-        return err
-
-    data = request.get_json(force=True, silent=True) or {}
+def _parse_site_payload(data):
+    """Turn the add/edit form's JSON into (name, url, listing, adapter) or
+    raise ValueError with a user-facing message. Same rules for both routes
+    so a site can be edited into any strategy it could be created in."""
     name = (data.get("name") or "").strip()
     url = (data.get("url") or "").strip()
     adapter = (data.get("adapter") or "").strip()
     if adapter and adapter not in adapters.ADAPTERS:
-        return jsonify({"error": f"unknown adapter '{adapter}'"}), 400
+        raise ValueError(f"unknown adapter '{adapter}'")
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        raise ValueError("name is required")
     if not url and not adapter:
-        return jsonify({"error": "url is required (unless a portal adapter is selected)"}), 400
+        raise ValueError("url is required (unless a portal adapter is selected)")
 
+    # Adapter set -> the adapter knows where to look, listing/pattern ignored.
     # No adapter and no manual selector/pattern -> the generic browser crawler
     # discovers the plan links itself (the "Let AI find the plan links" default).
     # A selector/pattern switches to the targeted listing crawl instead.
@@ -180,9 +188,47 @@ def api_add_site(division_id):
         if data.get("link_pattern"):
             listing["link_pattern"] = data["link_pattern"].strip()
 
+    return name, url, listing, (adapter or None)
+
+
+@app.route("/api/<division_id>/sites", methods=["POST"])
+def api_add_site(division_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    try:
+        name, url, listing, adapter = _parse_site_payload(
+            request.get_json(force=True, silent=True) or {}
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     site = supabase_store.add_site(
-        division_id, name, url, listing=listing, adapter=adapter or None
+        division_id, name, url, listing=listing, adapter=adapter
     )
+    return jsonify({"ok": True, "site": site})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>", methods=["PATCH"])
+def api_update_site(division_id, site_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+
+    try:
+        name, url, listing, adapter = _parse_site_payload(
+            request.get_json(force=True, silent=True) or {}
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        site = supabase_store.update_site(
+            division_id, site_id, name, url, listing=listing, adapter=adapter
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     return jsonify({"ok": True, "site": site})
 
 
@@ -351,6 +397,21 @@ def api_delete_keywords(division_id):
 # Status + Run Now (via GitHub Actions workflow_dispatch)
 # ---------------------------------------------------------------------------
 
+def _run_is_stale(run):
+    """True if a still-'running' scan_runs row is old enough that its GitHub
+    Actions job cannot still be alive (see STALE_RUN_AFTER)."""
+    started = run.get("started_at")
+    if not started:
+        return False
+    try:
+        ts = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - ts > STALE_RUN_AFTER
+
+
 @app.route("/api/<division_id>/status", methods=["GET"])
 def api_status(division_id):
     _, err = _require_division(division_id)
@@ -359,11 +420,22 @@ def api_status(division_id):
     run = supabase_store.get_latest_run(division_id)
     if run is None:
         return jsonify({"running": False, "last_started": None, "last_finished": None, "last_result": None})
+
+    running = run["status"] == "running"
+    if running and _run_is_stale(run):
+        # The owning job is long gone — surface it as a failed run and mark the
+        # row so it doesn't keep tripping this check (and so "Run now" isn't
+        # blocked by a scan that will never finish).
+        running = False
+        supabase_store.finish_run(run["id"], "error: timed out")
+        run = {**run, "status": "error: timed out",
+               "finished_at": datetime.now(timezone.utc).isoformat()}
+
     return jsonify({
-        "running": run["status"] == "running",
+        "running": running,
         "last_started": run["started_at"],
         "last_finished": run["finished_at"],
-        "last_result": None if run["status"] == "running" else run["status"],
+        "last_result": None if running else run["status"],
         "progress_done": run.get("progress_done") or 0,
         "progress_total": run.get("progress_total") or 0,
         "progress_label": run.get("progress_label") or "",
@@ -568,12 +640,15 @@ def api_get_results_grouped(division_id):
 
 
 def _build_results_workbook(division_id, division_name):
-    rows = supabase_store.get_scan_results(division_id)
+    # The download is a worklist — only documents that hit a keyword. "No
+    # match" / "Download failed" / "No documents found" rows stay visible in
+    # the dashboard but aren't exported.
+    rows = supabase_store.get_scan_results(division_id, matches_only=True)
     summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Scan Results"
+    ws.title = "Keyword Matches"
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
@@ -581,7 +656,12 @@ def _build_results_workbook(division_id, division_name):
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
 
+    # Only export documents that actually matched a keyword — the spreadsheet
+    # is a worklist, not a scan log. "No match" / "No documents found" /
+    # "Download failed" rows stay in the dashboard but out of the download.
     for r in rows:
+        if (r.get("match_count") or 0) <= 0:
+            continue
         ws.append([
             r["run_date"], r["site"], r["document_url"], r["filename"],
             r["matched_keywords"], r["match_count"], r["keyword_locations"],
@@ -671,9 +751,9 @@ def download_results(division_id):
     if err:
         return err
 
-    rows = supabase_store.get_scan_results(division_id, limit=1)
+    rows = supabase_store.get_scan_results(division_id, limit=1, matches_only=True)
     if not rows:
-        abort(404, description="No results yet — run a scan first.")
+        abort(404, description="No keyword matches yet — nothing to download.")
 
     buf = _build_results_workbook(division_id, division["name"])
     download_name = f"{division['name']}-scan-results.xlsx"
