@@ -175,13 +175,31 @@
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
   }
   .site-edit-slot:empty { display: none; }
+  .site-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .site-actions {
-    display: flex; gap: 2px; flex-shrink: 0;
+    display: flex; gap: 2px;
     opacity: 0; transition: opacity .12s ease;
   }
   ul.list li:hover .site-actions,
   .site-actions:focus-within { opacity: 1; }
   @media (hover: none) { .site-actions { opacity: 1; } }
+  ul.list li.site-off .site-name,
+  ul.list li.site-off .site-url,
+  ul.list li.site-off .site-tags { opacity: .4; }
+
+  .switch { position: relative; display: inline-block; width: 34px; height: 20px; flex-shrink: 0; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .slider {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border-strong); transition: .15s;
+  }
+  .switch .slider::before {
+    content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px;
+    background: var(--muted); border-radius: 50%; transition: .15s;
+  }
+  .switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(14px); background: #fff; }
+  .switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
   .icon-btn {
     background: transparent; border: none; padding: 6px; border-radius: 6px;
     color: var(--muted); cursor: pointer; display: inline-flex; line-height: 0;
@@ -1196,6 +1214,7 @@ async function loadSites() {
   refreshRunNowButton();
   sites.forEach(function(site, i) {
     const li = document.createElement('li');
+    if (site.active === false) li.className = 'site-off';
     let tags = '';
     if (site.adapter) tags += '<span class="tag tag-adapter">' + escapeHtml(adapterLabel(site.adapter)) + '</span>';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
@@ -1213,9 +1232,16 @@ async function loadSites() {
           urlHtml +
           '<div class="site-tags">' + tags + '</div>' +
         '</div>' +
-        '<div class="site-actions">' +
-          '<button class="icon-btn" title="Edit" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
-          '<button class="icon-btn danger" title="Remove" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
+        '<div class="site-right">' +
+          '<div class="site-actions">' +
+            '<button class="icon-btn" title="Edit" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
+            '<button class="icon-btn danger" title="Remove" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
+          '</div>' +
+          '<label class="switch" title="' + (site.active === false ? 'Inactive — not scanned' : 'Active — scanned daily') + '">' +
+            '<input type="checkbox" ' + (site.active === false ? '' : 'checked') +
+            ' aria-label="Scan this site" onchange="toggleSiteActive(' + site.id + ', this.checked, this)">' +
+            '<span class="slider"></span>' +
+          '</label>' +
         '</div>' +
       '</div>' +
       '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
@@ -1353,6 +1379,27 @@ async function deleteSite(siteId) {
   if (!confirm('Remove this site?')) return;
   await api('/api/' + currentDivision + '/sites/' + siteId, { method: 'DELETE' });
   loadSites();
+}
+
+async function toggleSiteActive(siteId, active, input) {
+  const li = input.closest('li');
+  input.disabled = true;
+  try {
+    await api('/api/' + currentDivision + '/sites/' + siteId + '/active', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ active: active }),
+    });
+    li.classList.toggle('site-off', !active);
+    const label = input.closest('.switch');
+    if (label) label.title = active ? 'Active — scanned daily' : 'Inactive — not scanned';
+    const s = sitesCache.find(function(x) { return x.id === siteId; });
+    if (s) s.active = active;
+  } catch (e) {
+    input.checked = !active;   // revert on failure
+    alert(e.message);
+  } finally {
+    input.disabled = false;
+  }
 }
 
 let allKeywords = [];

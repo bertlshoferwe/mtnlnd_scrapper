@@ -853,6 +853,13 @@ def _scan_division(division):
     try:
         supabase_store.update_run_progress(run_id, label="Getting started")
         sites, keywords = load_config(division_id)
+
+        # Sites toggled off in the dashboard stay configured but are skipped.
+        inactive = [s["name"] for s in sites if not s.get("active", True)]
+        if inactive:
+            print(f"Skipping {len(inactive)} inactive site(s): {', '.join(inactive)}")
+        sites = [s for s in sites if s.get("active", True)]
+
         if not keywords:
             print(f"No keywords configured for division '{division_id}' — nothing to check for.")
         run_date = datetime.now(timezone.utc).isoformat()

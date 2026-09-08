@@ -15,10 +15,12 @@ create table if not exists sites (
   listing jsonb,          -- null = not a listing site; {} = AI-detected; {"link_selector": "..."} = manual
   tabs jsonb,              -- null = no tabs; otherwise a list of {"label": "...", "selector": "..."}
   adapter text,            -- null = generic HTML crawl; otherwise a key from adapters.py (portal-specific API)
+  active boolean not null default true,  -- false = kept in the list but skipped by every scan
   created_at timestamptz default now()
 );
 -- Migration for existing databases:
 --   alter table sites add column if not exists adapter text;
+--   alter table sites add column if not exists active boolean not null default true;
 
 create table if not exists keywords (
   id bigint generated always as identity primary key,

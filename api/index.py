@@ -20,6 +20,7 @@ Routes:
   GET  /api/<division_id>/sites              list sites
   POST /api/<division_id>/sites              add a site
   PATCH /api/<division_id>/sites/<site_id>   edit a site (name, url, adapter, selector/pattern)
+  POST /api/<division_id>/sites/<site_id>/active   toggle whether the site is scanned
   DEL  /api/<division_id>/sites/<site_id>     remove a site
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
@@ -245,6 +246,22 @@ def api_update_site(division_id, site_id):
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    return jsonify({"ok": True, "site": site})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/active", methods=["POST"])
+def api_set_site_active(division_id, site_id):
+    """Toggle whether a site is scanned. Body: {"active": true|false}."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    active = bool(data.get("active"))
+    try:
+        site = supabase_store.set_site_active(division_id, site_id, active)
+    except ValueError as e:
+        msg = str(e)
+        return jsonify({"error": msg}), (404 if msg == "site not found" else 400)
     return jsonify({"ok": True, "site": site})
 
 

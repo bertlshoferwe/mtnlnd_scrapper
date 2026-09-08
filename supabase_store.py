@@ -100,7 +100,32 @@ def load_sites(division_id):
         get_client().table("sites").select("*")
         .eq("division_id", division_id).order("id").execute()
     )
+    # `active` may be absent on a DB that skipped the migration — default it
+    # so both the dashboard and the scan worker see every site as active.
+    for row in res.data:
+        row.setdefault("active", True)
+        if row.get("active") is None:
+            row["active"] = True
     return res.data
+
+
+def set_site_active(division_id, site_id, active):
+    """Flip a site's active flag. Inactive sites stay in the list but no scan
+    touches them. Raises ValueError with a migration hint if the column is
+    missing."""
+    try:
+        res = (
+            get_client().table("sites").update({"active": bool(active)})
+            .eq("division_id", division_id).eq("id", site_id).execute()
+        )
+    except Exception as e:
+        raise ValueError(
+            "couldn't update 'active' — run the migration in schema.sql: "
+            "alter table sites add column if not exists active boolean not null default true"
+        ) from e
+    if not res.data:
+        raise ValueError("site not found")
+    return res.data[0]
 
 
 def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
