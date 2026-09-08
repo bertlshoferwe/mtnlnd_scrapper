@@ -866,12 +866,11 @@ def _scan_division(division):
         skipped_seen = 0
 
         rows = []  # kept in memory too, just to build the daily summary at the end
-        progress_done = progress_total = 0
         n_sites = len(sites)
+        overall_done = 0
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
-            site_tag = f"{name}" + (f" ({site_i} of {n_sites})" if n_sites > 1 else "")
             print(f"Scanning site: {name}" + (f" ({url})" if url else ""))
 
             if site.get("listing") is not None:
@@ -879,14 +878,21 @@ def _scan_division(division):
             elif site.get("tabs"):
                 print(f"  {len(site['tabs'])} tab(s) configured")
 
-            supabase_store.update_run_progress(run_id, label=f"Checking {site_tag}")
+            # Discovery phase — doc count unknown, so total=0 (dashboard shows
+            # an indeterminate bar until we can count this site's documents).
+            supabase_store.update_run_progress(
+                run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
+                done=0, total=0, overall=overall_done,
+            )
             doc_links = scan_site(site, ai_client)
-            progress_total += sum(
+            site_total = sum(
                 1 for _, du, fn, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
             )
+            site_done = 0
             supabase_store.update_run_progress(
-                run_id, done=progress_done, total=progress_total, label=f"Scanning {site_tag}"
+                run_id, label=f"Scanning {name}", site_i=site_i, site_n=n_sites,
+                done=0, total=site_total, overall=overall_done,
             )
 
             if site.get("tabs") and not os.environ.get("FIRECRAWL_API_KEY"):
@@ -915,11 +921,12 @@ def _scan_division(division):
                         already_scanned[doc_key] = source_url
                     continue
                 row_site_name = f"{name} — {label}" if label else name
-                progress_done += 1
-                if progress_done % 3 == 0 or progress_done == progress_total:
+                site_done += 1
+                overall_done += 1
+                if site_done % 3 == 0 or site_done == site_total:
                     supabase_store.update_run_progress(
-                        run_id, done=progress_done, total=progress_total,
-                        label=f"Scanning {site_tag}",
+                        run_id, label=f"Scanning {name}", site_i=site_i, site_n=n_sites,
+                        done=site_done, total=site_total, overall=overall_done,
                     )
 
                 raw = content if content is not None else download_document(doc_url)
@@ -981,7 +988,8 @@ def _scan_division(division):
             print(f"  Skipped {skipped_seen} document(s) already scanned in a previous run")
 
         supabase_store.update_run_progress(
-            run_id, done=progress_total, total=progress_total, label="Wrapping up"
+            run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
+            done=0, total=0, overall=overall_done,
         )
         summary = generate_daily_summary(ai_client, rows)
         supabase_store.log_summary(division_id, run_date, summary)

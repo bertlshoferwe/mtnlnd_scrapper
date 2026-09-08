@@ -290,9 +290,12 @@ def finish_run(run_id, status):
     }).eq("id", run_id).execute()
 
 
-def update_run_progress(run_id, done=None, total=None, label=None):
-    """Lightweight progress ping for the dashboard's live status. Any of the
-    three fields may be omitted."""
+def update_run_progress(run_id, done=None, total=None, label=None,
+                        site_i=None, site_n=None, overall=None):
+    """Lightweight progress ping for the dashboard's live status. `done`/
+    `total` are per the CURRENT site; `overall` is documents scanned across
+    all sites so far; `site_i`/`site_n` are the current/total site count.
+    Any field may be omitted."""
     patch = {}
     if done is not None:
         patch["progress_done"] = done
@@ -300,6 +303,12 @@ def update_run_progress(run_id, done=None, total=None, label=None):
         patch["progress_total"] = total
     if label is not None:
         patch["progress_label"] = label
+    if site_i is not None:
+        patch["progress_site_i"] = site_i
+    if site_n is not None:
+        patch["progress_site_n"] = site_n
+    if overall is not None:
+        patch["progress_overall"] = overall
     if patch:
         try:
             get_client().table("scan_runs").update(patch).eq("id", run_id).execute()

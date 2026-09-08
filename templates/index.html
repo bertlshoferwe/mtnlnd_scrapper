@@ -1109,18 +1109,30 @@ async function loadStatus() {
   if (s.running) {
     dot.className = 'status-dot running';
     prog.style.display = 'block';
+
+    const si = s.progress_site_i || 0, sn = s.progress_site_n || 0;
+    const sitePart = (sn > 1 && si) ? 'Site ' + si + ' of ' + sn : '';
+    const overall = s.progress_overall || 0;
+    text.textContent = (s.progress_label || 'Scanning') + '…';
+
     if (s.progress_total > 0) {
       const done = s.progress_done, tot = s.progress_total;
       const pct = Math.min(100, Math.round(100 * done / tot));
-      const left = Math.max(0, tot - done);
-      text.textContent = (s.progress_label || 'Scanning documents') + '… ' + pct + '%';
-      detail.textContent = done + ' of ' + tot + ' documents scanned · ' + left + ' to go';
+      const bits = [];
+      if (sitePart) bits.push(sitePart);
+      bits.push(done + ' of ' + tot + (sn > 1 ? ' files in this site' : ' documents'));
+      if (sn > 1 && overall > done) bits.push(overall + ' scanned so far');
+      detail.textContent = bits.join('  ·  ');
       fill.classList.remove('indeterminate');
       fill.style.width = pct + '%';
     } else {
-      text.textContent = (s.progress_label || 'Getting started') + '…';
-      detail.textContent = "Looking for documents. Results appear below as they're found.";
+      const bits = [];
+      if (sitePart) bits.push(sitePart);
+      bits.push('looking for documents');
+      if (overall > 0) bits.push(overall + ' scanned so far');
+      detail.textContent = bits.join('  ·  ');
       fill.classList.add('indeterminate');
+      fill.style.width = '';
     }
     return;
   }

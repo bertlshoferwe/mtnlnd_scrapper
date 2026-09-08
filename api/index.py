@@ -366,6 +366,9 @@ def api_status(division_id):
         "progress_done": run.get("progress_done") or 0,
         "progress_total": run.get("progress_total") or 0,
         "progress_label": run.get("progress_label") or "",
+        "progress_site_i": run.get("progress_site_i") or 0,
+        "progress_site_n": run.get("progress_site_n") or 0,
+        "progress_overall": run.get("progress_overall") or 0,
     })
 
 
