@@ -1115,7 +1115,11 @@ async function loadStatus() {
     const overall = s.progress_overall || 0;
     text.textContent = (s.progress_label || 'Scanning') + '…';
 
-    if (s.progress_total > 0) {
+    // A count only means something while actually scanning a site's docs.
+    // In any other phase, ignore it (an older run may have left a stale total).
+    const scanningDocs = /^scanning\b/i.test(s.progress_label || '');
+
+    if (scanningDocs && s.progress_total > 0) {
       const done = s.progress_done, tot = s.progress_total;
       const pct = Math.min(100, Math.round(100 * done / tot));
       const bits = [];
