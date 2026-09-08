@@ -432,6 +432,7 @@
   .file-row .f-dl:hover { text-decoration: underline; }
   .pdf-modal { max-width: 940px; }
   .pdf-modal .modal-body { flex: 1 1 auto; }
+  .pdf-actions { gap: 8px; }
   #pdfScroll {
     padding: 12px; overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: var(--surface-2); min-height: 45vh;
@@ -501,6 +502,15 @@
     .pdf-modal .modal-header h2 { font-size: 14px; }
     #pdfScroll { padding: 6px; }
     .pdf-page-wrap { max-width: 100%; }
+
+    /* Bigger, better-spaced tap targets in the PDF header */
+    .pdf-actions { gap: 14px; }
+    .pdf-actions .icon-btn,
+    .pdf-actions .modal-close {
+      min-width: 42px; min-height: 42px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .pdf-actions .modal-close { font-size: 26px; padding: 0; }
 
     /* Most-flagged keywords: one swipeable line instead of wrapping */
     .stat-keywords {
@@ -744,7 +754,7 @@
   <div class="modal pdf-modal">
     <div class="modal-header">
       <div style="min-width:0;"><h2 id="pdfModalTitle" style="word-break:break-all;"></h2></div>
-      <div class="row" style="gap:6px; flex-shrink:0; align-items:center;">
+      <div class="row pdf-actions" style="flex-shrink:0; align-items:center;">
         <a id="pdfModalDownload" class="icon-btn bordered" title="Download" aria-label="Download this file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
         <a id="pdfModalNewTab" class="icon-btn bordered" title="Open in new tab" aria-label="Open in a new browser tab" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
         <button class="modal-close" onclick="closePdfModal()" aria-label="Close">&times;</button>
