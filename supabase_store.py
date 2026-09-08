@@ -401,10 +401,12 @@ def _split_site(site):
     return "", (site or "").strip()
 
 
-def get_results_grouped(division_id, search=None, status=None, page=1, page_size=15):
+def get_results_grouped(division_id, search=None, status=None, site=None, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
-    over the grouped projects. Returns (projects, total_project_count).
+    over the grouped projects. Returns (projects, total_project_count,
+    site_tabs) where site_tabs is [{"name", "count", "flagged"}] over ALL
+    projects (unaffected by the current filters), for the per-site tabs.
     """
     rows = (
         get_client().table("scan_results").select("*")
@@ -468,6 +470,18 @@ def get_results_grouped(division_id, search=None, status=None, page=1, page_size
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
 
+    # Per-site tab list, computed over every project (before any filter).
+    site_tabs = {}
+    for p in projects:
+        name = p["source_prefix"] or "Other"
+        t = site_tabs.setdefault(name, {"name": name, "count": 0, "flagged": 0})
+        t["count"] += 1
+        if p["status"] == "Matched":
+            t["flagged"] += 1
+    site_tabs = sorted(site_tabs.values(), key=lambda t: (-t["flagged"], t["name"].lower()))
+
+    if site:
+        projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if status:
         projects = [p for p in projects if p["status"].startswith(status)]
     if search:
@@ -486,7 +500,7 @@ def get_results_grouped(division_id, search=None, status=None, page=1, page_size
     page = max(1, page)
     page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
-    return projects[start:start + page_size], total
+    return projects[start:start + page_size], total, site_tabs
 
 
 def get_stats(division_id):

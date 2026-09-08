@@ -353,7 +353,16 @@
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
     font-size: 13px; line-height: 1.5;
   }
-  /* Results: one row per project */
+  /* Results: per-site tabs + one row per project */
+  .rtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .rtab {
+    font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid transparent;
+    cursor: pointer; white-space: nowrap;
+  }
+  .rtab:hover { color: var(--text); }
+  .rtab.active { background: var(--accent); color: var(--accent-contrast); }
+  .rtab .rtab-count { opacity: .75; margin-left: 4px; font-weight: 400; }
   .project-list { list-style: none; margin: 0; padding: 0; }
   .project-list li {
     display: flex; align-items: center; gap: 12px;
@@ -454,6 +463,8 @@
     <div class="stat-keywords" id="statKeywords" style="display:none;"></div>
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
+
+    <div class="rtabs" id="resultsSiteTabs" style="display:none;"></div>
 
     <div class="row" style="margin-bottom: 6px;">
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
@@ -805,6 +816,7 @@ function switchDivision(id) {
   if (id === currentDivision) return;
   currentDivision = id;
   resultsPage = 1;
+  currentResultsSite = '';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = '';
   document.getElementById('keywordFilter').value = '';
@@ -1159,6 +1171,7 @@ let resultsTotal = 0;
 const PROJECTS_PER_PAGE = 15;
 let projectsData = [];
 let resultsSearchDebounce = null;
+let currentResultsSite = '';
 
 async function loadResultsInfo() {
   if (!currentDivision) return;
@@ -1229,6 +1242,32 @@ async function loadResultsInfo() {
   await loadProjects();
 }
 
+function renderResultsSiteTabs(sites) {
+  const strip = document.getElementById('resultsSiteTabs');
+  strip.innerHTML = '';
+  if (!sites || sites.length < 2) { strip.style.display = 'none'; return; }
+  strip.style.display = 'flex';
+
+  const total = sites.reduce(function(a, s) { return a + s.count; }, 0);
+  function tab(key, label, count) {
+    const b = document.createElement('span');
+    b.className = 'rtab' + (currentResultsSite === key ? ' active' : '');
+    b.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
+    b.onclick = function() {
+      currentResultsSite = key;
+      resultsPage = 1;
+      loadProjects();
+    };
+    strip.appendChild(b);
+  }
+  tab('', 'All', total);
+  // keep the previously-selected site's tab even if it's now empty
+  if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
+    currentResultsSite = '';
+  }
+  sites.forEach(function(s) { tab(s.name, s.name, s.count); });
+}
+
 async function loadProjects() {
   if (!currentDivision) return;
   const search = document.getElementById('resultsSearch').value.trim();
@@ -1236,16 +1275,18 @@ async function loadProjects() {
   const params = new URLSearchParams({ page: resultsPage, page_size: PROJECTS_PER_PAGE });
   if (search) params.set('search', search);
   if (status) params.set('status', status);
+  if (currentResultsSite) params.set('site', currentResultsSite);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
+  renderResultsSiteTabs(data.sites);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  empty.textContent = (search || status)
+  empty.textContent = (search || status || currentResultsSite)
     ? 'No projects match that filter.'
     : 'No results yet — run a scan to see projects here.';
 

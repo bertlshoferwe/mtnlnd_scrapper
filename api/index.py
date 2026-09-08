@@ -496,17 +496,19 @@ def api_get_results_grouped(division_id):
         return err
     search = (request.args.get("search") or "").strip()
     status = (request.args.get("status") or "").strip()
+    site = (request.args.get("site") or "").strip()
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(50, int(request.args.get("page_size", 15))))
     except ValueError:
         return jsonify({"error": "page and page_size must be integers"}), 400
 
-    projects, total = supabase_store.get_results_grouped(
-        division_id, search=search or None, status=status or None,
+    projects, total, sites = supabase_store.get_results_grouped(
+        division_id, search=search or None, status=status or None, site=site or None,
         page=page, page_size=page_size,
     )
-    return jsonify({"projects": projects, "total": total, "page": page, "page_size": page_size})
+    return jsonify({"projects": projects, "total": total, "sites": sites,
+                    "page": page, "page_size": page_size})
 
 
 def _build_results_workbook(division_id, division_name):
