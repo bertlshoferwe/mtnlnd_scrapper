@@ -655,29 +655,39 @@ def api_get_results_grouped(division_id):
                     "page": page, "page_size": page_size})
 
 
-def _build_results_workbook(division_id, division_name):
-    # The download is a worklist — only documents that hit a keyword. "No
-    # match" / "Download failed" / "No documents found" rows stay visible in
-    # the dashboard but aren't exported.
-    rows = supabase_store.get_scan_results(division_id, matches_only=True)
-    summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
+_BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Keyword Matches"
+
+def _site_group(site):
+    """The site a result belongs to, for grouping into per-site sheets.
+    scan_results.site is either "<site name> — <project>" or just the site
+    name; either way the part before " — " (or the whole value) is the site."""
+    parts = (site or "").split(" — ", 1)
+    name = parts[0] if len(parts) == 2 else (site or "")
+    return name.strip() or "Other"
+
+
+def _unique_sheet_name(name, used):
+    """A workbook-legal, <=31 char, unique sheet title."""
+    base = _BAD_SHEET_CHARS.sub(" ", name).strip()[:31] or "Other"
+    candidate, n = base, 2
+    while candidate.lower() in used:
+        tag = f" ({n})"
+        candidate = base[:31 - len(tag)] + tag
+        n += 1
+    used.add(candidate.lower())
+    return candidate
+
+
+def _write_matches_sheet(ws, rows):
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
     widths = [22, 24, 45, 30, 30, 14, 40, 22, 60]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
-
-    # Only export documents that actually matched a keyword — the spreadsheet
-    # is a worklist, not a scan log. "No match" / "No documents found" /
-    # "Download failed" rows stay in the dashboard but out of the download.
+    ws.freeze_panes = "A2"
     for r in rows:
-        if (r.get("match_count") or 0) <= 0:
-            continue
         ws.append([
             r["run_date"], r["site"], r["document_url"], r["filename"],
             r["matched_keywords"], r["match_count"], r["keyword_locations"],
@@ -686,6 +696,28 @@ def _build_results_workbook(division_id, division_name):
         for cell in ws[ws.max_row]:
             cell.font = Font(name="Arial")
             cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
+def _build_results_workbook(division_id, division_name):
+    # The download is a worklist — only documents that hit a keyword. "No
+    # match" / "Download failed" / "No documents found" rows stay visible in
+    # the dashboard but aren't exported. One sheet per site.
+    rows = supabase_store.get_scan_results(division_id, matches_only=True)
+    summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
+
+    groups = {}
+    for r in rows:
+        groups.setdefault(_site_group(r.get("site")), []).append(r)
+
+    wb = Workbook()
+    wb.remove(wb.active)  # drop the default empty sheet
+
+    if not groups:
+        _write_matches_sheet(wb.create_sheet("Keyword Matches"), [])
+    else:
+        used = set()
+        for name in sorted(groups, key=str.lower):
+            _write_matches_sheet(wb.create_sheet(_unique_sheet_name(name, used)), groups[name])
 
     if summaries:
         sws = wb.create_sheet("Daily Summary")
