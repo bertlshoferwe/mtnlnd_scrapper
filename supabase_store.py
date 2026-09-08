@@ -425,9 +425,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, page=1
 
     groups = {}
     for r in latest:
-        site = r.get("site") or "(unknown)"
-        prefix, project = _split_site(site)
-        g = groups.setdefault(site, {
+        site_key = r.get("site") or "(unknown)"
+        prefix, project = _split_site(site_key)
+        g = groups.setdefault(site_key, {
             "project": project, "source_prefix": prefix,
             "source_url": None, "latest_date": r.get("run_date") or "", "files": [],
         })
