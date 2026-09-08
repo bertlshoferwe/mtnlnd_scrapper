@@ -479,7 +479,7 @@
     <h2>Results</h2>
     <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
       <div class="status-line" id="resultsSummaryLine">Loading&hellip;</div>
-      <a id="downloadBtn" class="btn-primary" style="display:none; text-decoration:none;" href="#">Download .xlsx</a>
+      <a id="downloadBtn" class="btn-primary" style="display:none; text-decoration:none;" href="#" title="Downloads only the documents that matched a keyword">Download matches (.xlsx)</a>
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
@@ -1418,10 +1418,11 @@ async function loadResultsInfo() {
   line.textContent = 'Last scan ' + new Date(info.latest_run_date).toLocaleString([], {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
-  btn.href = '/download/' + currentDivision + '/results';
-  btn.style.display = 'inline-block';
-
   const st = info.stats || {};
+  btn.href = '/download/' + currentDivision + '/results';
+  // The download is matches-only, so there's nothing to download with no hits.
+  btn.style.display = (st.documents_matched || 0) > 0 ? 'inline-block' : 'none';
+
   document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
   document.getElementById('statFlaggedSub').textContent =
     'of ' + (st.projects_scanned || 0) + ' scanned';

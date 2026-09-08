@@ -640,12 +640,15 @@ def api_get_results_grouped(division_id):
 
 
 def _build_results_workbook(division_id, division_name):
-    rows = supabase_store.get_scan_results(division_id)
+    # The download is a worklist — only documents that hit a keyword. "No
+    # match" / "Download failed" / "No documents found" rows stay visible in
+    # the dashboard but aren't exported.
+    rows = supabase_store.get_scan_results(division_id, matches_only=True)
     summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Scan Results"
+    ws.title = "Keyword Matches"
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
@@ -653,7 +656,12 @@ def _build_results_workbook(division_id, division_name):
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
 
+    # Only export documents that actually matched a keyword — the spreadsheet
+    # is a worklist, not a scan log. "No match" / "No documents found" /
+    # "Download failed" rows stay in the dashboard but out of the download.
     for r in rows:
+        if (r.get("match_count") or 0) <= 0:
+            continue
         ws.append([
             r["run_date"], r["site"], r["document_url"], r["filename"],
             r["matched_keywords"], r["match_count"], r["keyword_locations"],
@@ -743,9 +751,9 @@ def download_results(division_id):
     if err:
         return err
 
-    rows = supabase_store.get_scan_results(division_id, limit=1)
+    rows = supabase_store.get_scan_results(division_id, limit=1, matches_only=True)
     if not rows:
-        abort(404, description="No results yet — run a scan first.")
+        abort(404, description="No keyword matches yet — nothing to download.")
 
     buf = _build_results_workbook(division_id, division["name"])
     download_name = f"{division['name']}-scan-results.xlsx"

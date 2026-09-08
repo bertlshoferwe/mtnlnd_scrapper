@@ -411,13 +411,17 @@ def backfill_source_url(division_id, document_url, source_url):
         .eq("division_id", division_id).eq("document_url", document_url).execute()
 
 
-def get_scan_results(division_id, limit=2000):
-    """Most recent rows first, for building the downloadable spreadsheet."""
-    res = (
+def get_scan_results(division_id, limit=2000, matches_only=False):
+    """Most recent rows first, for building the downloadable spreadsheet.
+    matches_only=True returns only documents that hit a keyword (match_count > 0),
+    so the filter happens in the DB rather than after a truncated fetch."""
+    query = (
         get_client().table("scan_results").select("*")
-        .eq("division_id", division_id).order("run_date", desc=True).limit(limit).execute()
+        .eq("division_id", division_id).order("run_date", desc=True).limit(limit)
     )
-    return res.data
+    if matches_only:
+        query = query.gt("match_count", 0)
+    return query.execute().data
 
 
 def get_scan_results_page(division_id, search=None, status=None, page=1, page_size=20):
