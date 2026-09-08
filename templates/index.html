@@ -393,8 +393,8 @@
   }
   .kw-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .kw-table tr:last-child td { border-bottom: none; }
-  .kw-table .kt-term { font-weight: 600; white-space: nowrap; }
-  .kw-table .kt-num { width: 1%; text-align: right; color: var(--muted); white-space: nowrap; }
+  .kw-table th:first-child, .kw-table .kt-term { width: 1%; white-space: nowrap; }
+  .kw-table .kt-term { font-weight: 600; padding-right: 20px; }
   .kw-table .kt-pages { color: var(--muted); }
 </style>
 </head>
@@ -1487,14 +1487,13 @@ function openProjectModal(i) {
 
       const table = document.createElement('table');
       table.className = 'kw-table';
-      table.innerHTML = '<thead><tr><th>Keyword</th><th class="kt-num">Pages</th><th>Where</th></tr></thead>';
+      table.innerHTML = '<thead><tr><th>Keyword</th><th>Pages</th></tr></thead>';
       const tbody = document.createElement('tbody');
       hits.forEach(function(h) {
         const tr = document.createElement('tr');
         const td1 = document.createElement('td'); td1.className = 'kt-term'; td1.textContent = h.keyword;
-        const td2 = document.createElement('td'); td2.className = 'kt-num'; td2.textContent = h.count || '';
         const td3 = document.createElement('td'); td3.className = 'kt-pages'; td3.textContent = h.pages || '—';
-        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+        tr.appendChild(td1); tr.appendChild(td3);
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
