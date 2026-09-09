@@ -1929,8 +1929,12 @@ async function loadResultsInfo() {
 
   renderKeywordFilterOptions(st.top_keywords || []);
 
-  if (info.latest_summary) {
-    callout.textContent = info.latest_summary;
+  // Strip a legacy "📄 New documents added to N previously-seen projects: …"
+  // prefix that older scans baked into the stored summary.
+  const summaryText = (info.latest_summary || '')
+    .replace(/^\s*📄[^\n]*\n*/, '').trim();
+  if (summaryText) {
+    callout.textContent = summaryText;
     callout.style.display = 'block';
   } else {
     callout.style.display = 'none';
