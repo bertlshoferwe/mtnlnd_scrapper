@@ -464,6 +464,20 @@
   .fm-body button:hover { background: var(--bg); }
   .fm-body button.sel { color: var(--accent); font-weight: 650; }
   .fm-body button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
+  .fm-toggle {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    background: transparent; border: none; border-top: 1px solid var(--border);
+    cursor: pointer; font-family: inherit;
+    padding: 10px; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .fm-toggle:hover { background: var(--bg); }
+  .fm-check {
+    width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px;
+    border: 1px solid var(--border-strong); color: transparent;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .fm-check svg { width: 11px; height: 11px; }
+  .fm-toggle.on .fm-check { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
   .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .pager button {
     min-width: 32px; height: 32px; padding: 0 8px;
@@ -490,10 +504,13 @@
   .project-list li.p-done .p-name,
   .project-list li.p-done .p-count { opacity: .5; }
   .project-list li.p-done .pill { opacity: .55; }
+  .project-list li.p-closed .p-name,
+  .project-list li.p-closed .p-count { opacity: .45; }
   .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .pill.match { background: var(--accent); color: var(--accent-contrast); }
   .pill.nomatch { background: var(--surface-2); color: var(--muted); }
   .pill.fail { background: var(--danger-soft); color: var(--danger); }
+  .pill.closed { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); font-weight: 600; }
 
   .file-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .file-row:last-child { border-bottom: none; }
@@ -676,6 +693,10 @@
               </button>
               <div class="fm-body" id="filterKeywordOptions"></div>
             </div>
+            <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
+              <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              Show closed projects
+            </button>
           </div>
         </div>
         <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
@@ -1199,6 +1220,7 @@ function switchDivision(id) {
   projectsData = [];
   currentResultsSite = '';
   currentResultsKeyword = '';
+  currentResultsClosed = false;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
@@ -1713,6 +1735,7 @@ let projectsData = [];
 let resultsSearchDebounce = null;
 let currentResultsSite = '';
 let currentResultsKeyword = '';
+let currentResultsClosed = false;   // "Show closed projects" toggle
 
 async function loadResultsInfo() {
   if (!currentDivision) return;
@@ -1851,6 +1874,7 @@ async function loadProjects() {
   if (status) params.set('status', status);
   if (currentResultsSite) params.set('site', currentResultsSite);
   if (currentResultsKeyword) params.set('keyword', currentResultsKeyword);
+  if (currentResultsClosed) params.set('include_closed', '1');
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
@@ -1861,7 +1885,7 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || (status && status !== 'Matched')) {
+  if (search || currentResultsSite || currentResultsKeyword || currentResultsClosed || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
@@ -1871,7 +1895,8 @@ async function loadProjects() {
 
   projectsData.forEach(function(p, i) {
     const li = document.createElement('li');
-    if (p.done) li.className = 'p-done';
+    if (p.done) li.classList.add('p-done');
+    if (p.closed) li.classList.add('p-closed');
     li.onclick = function() { openProjectModal(i); };
 
     if (p.done) {
@@ -1897,7 +1922,10 @@ async function loadProjects() {
     count.textContent = p.file_count + (p.file_count === 1 ? ' file' : ' files');
 
     const pill = document.createElement('span');
-    if (p.status === 'Matched') {
+    if (p.closed) {
+      pill.className = 'pill closed';
+      pill.textContent = 'no longer listed';
+    } else if (p.status === 'Matched') {
       pill.className = 'pill match';
       pill.textContent = p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords');
     } else if (p.status === 'Download failed') {
@@ -1994,6 +2022,11 @@ function openProjectModal(i) {
   meta.push(p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned');
   if (p.status === 'Matched') {
     meta.push(p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords') + ' found');
+  }
+  if (p.closed) {
+    let m = 'no longer listed on the source site';
+    if (p.last_seen_at) m += ' — last seen ' + new Date(p.last_seen_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    meta.push(m);
   }
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
 
@@ -2186,11 +2219,18 @@ function pickSite(key) {
   syncFilterUI();
   closeFilterMenu();
 }
+function toggleClosedFilter() {
+  currentResultsClosed = !currentResultsClosed;
+  resultsPage = 1;
+  syncFilterUI();
+  loadProjects();
+}
 function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
-  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword;
+  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword || currentResultsClosed;
   if (btn) btn.classList.toggle('active', anyFilter);
+  document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
 
   let showLabel = '';
   document.querySelectorAll('#filterShowGroup .fm-body button[data-val]').forEach(function(b) {

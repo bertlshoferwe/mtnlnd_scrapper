@@ -136,6 +136,11 @@ EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
 # 120 min. Override with SCAN_DIVISION_BUDGET_S.
 SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S", str(95 * 60)))
 
+# After each scan, reconcile which advertised documents are still listed so a
+# project that drops off the source site can be flagged "no longer listed"
+# (see supabase_store.reconcile_seen). Set SEEN_TRACKING=0 to disable.
+SEEN_TRACKING = os.environ.get("SEEN_TRACKING", "1") != "0"
+
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
 FIRECRAWL_TIMEOUT = 60  # seconds — headless rendering is slower than a plain request
 
@@ -892,6 +897,7 @@ def _scan_division(division):
         overall_done = 0
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
         stopped_early = False
+        advertised_by_site = {}  # site name -> {doc_key} for seen-tracking reconcile
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
@@ -920,6 +926,15 @@ def _scan_division(division):
                 done=0, total=0, overall=overall_done,
             )
             doc_links = scan_site(site, ai_client)
+
+            # Seen-tracking: only reconcile a site whose discovery actually
+            # returned something — an empty result may just mean the adapter
+            # broke, and we don't want that to mark projects "no longer listed".
+            if SEEN_TRACKING and site.get("active", True) and doc_links:
+                advertised_by_site[name] = {
+                    (du or f"{url}#{fn}") for _, du, fn, _, _ in doc_links
+                }
+
             site_total = sum(
                 1 for _, du, fn, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
@@ -1021,6 +1036,10 @@ def _scan_division(division):
 
         if skipped_seen:
             print(f"  Skipped {skipped_seen} document(s) already scanned in a previous run")
+
+        if SEEN_TRACKING and advertised_by_site:
+            supabase_store.update_run_progress(run_id, label="Checking listings")
+            supabase_store.reconcile_seen(division_id, advertised_by_site, run_date)
 
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,

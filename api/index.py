@@ -30,7 +30,7 @@ Routes:
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
-  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
@@ -660,6 +660,7 @@ def api_get_results_grouped(division_id):
     status = (request.args.get("status") or "").strip()
     site = (request.args.get("site") or "").strip()
     keyword = (request.args.get("keyword") or "").strip()
+    include_closed = request.args.get("include_closed") in ("1", "true")
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(50, int(request.args.get("page_size", 15))))
@@ -668,7 +669,8 @@ def api_get_results_grouped(division_id):
 
     projects, total, sites = supabase_store.get_results_grouped(
         division_id, search=search or None, status=status or None, site=site or None,
-        keyword=keyword or None, page=page, page_size=page_size,
+        keyword=keyword or None, include_closed=include_closed,
+        page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "page": page, "page_size": page_size})
@@ -735,10 +737,13 @@ def _write_matches_sheet(ws, rows):
 
 
 def _build_results_workbook(division_id, division_name):
-    # The download is a worklist — only documents that hit a keyword. "No
-    # match" / "Download failed" / "No documents found" rows stay visible in
-    # the dashboard but aren't exported. One sheet per site.
+    # The download is a worklist — only documents that hit a keyword, and only
+    # for projects the source site still lists. "No match" / "Download failed"
+    # / closed projects stay visible in the dashboard but aren't exported.
+    # One sheet per site.
     rows = supabase_store.get_scan_results(division_id, matches_only=True)
+    closed = supabase_store.closed_project_keys(division_id)
+    rows = [r for r in rows if r.get("site") not in closed]
     summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
 
     groups = {}

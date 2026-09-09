@@ -50,10 +50,19 @@ create table if not exists scan_results (
   keyword_locations text,
   status text,
   ai_notes text,
+  -- "Still advertised?" tracking. last_seen_at is the run_date of the most
+  -- recent scan where the source site still listed this document; misses is
+  -- how many consecutive reconciles of its site have gone by without it.
+  -- A project whose every (non-failed) document has misses >= 2 is treated
+  -- as "no longer listed" and hidden from the dashboard by default.
+  last_seen_at timestamptz,
+  misses int default 0,
   created_at timestamptz default now()
 );
 -- Migration for existing databases:
 --   alter table scan_results add column if not exists source_url text;
+--   alter table scan_results add column if not exists last_seen_at timestamptz;
+--   alter table scan_results add column if not exists misses int default 0;
 create index if not exists scan_results_division_idx on scan_results(division_id, run_date desc);
 
 -- User-set "done" flag per project (keyed by the scan_results.site value),

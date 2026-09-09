@@ -18,6 +18,10 @@ from supabase import create_client
 
 _client = None
 
+# A project whose every non-failed document has missed this many consecutive
+# site reconciles is treated as "no longer listed" (see reconcile_seen).
+CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES", "2"))
+
 
 def get_client():
     global _client
@@ -490,6 +494,86 @@ def _split_site(site):
 
 
 # ---------------------------------------------------------------------------
+# "Still advertised?" tracking
+# ---------------------------------------------------------------------------
+
+def reconcile_seen(division_id, advertised_by_site, run_date):
+    """After a scan, refresh the 'still advertised' state on scan_results.
+
+    advertised_by_site: {site_name: {doc_key, ...}} — one entry per site whose
+    discovery *succeeded and returned at least one document* this run (a site
+    that errored or came back empty is left out, so a broken adapter can't
+    mark projects closed). For those sites: rows whose document_url is still
+    in the listing get last_seen_at=run_date, misses=0; rows that aren't get
+    misses += 1. No-ops if the columns aren't there yet."""
+    if not advertised_by_site:
+        return
+    client = get_client()
+    try:
+        rows = (
+            client.table("scan_results").select("id,site,document_url,misses,status")
+            .eq("division_id", division_id).execute()
+        ).data
+    except Exception as e:
+        print(f"  ! seen-tracking skipped ({e})")
+        return
+
+    def owning_site(site_val):
+        for name in advertised_by_site:
+            if site_val == name or (site_val or "").startswith(name + " — "):
+                return name
+        return None
+
+    seen_ids, missed = [], []
+    for r in rows:
+        name = owning_site(r.get("site"))
+        if name is None:
+            continue
+        du = r.get("document_url")
+        if du and du in advertised_by_site[name]:
+            seen_ids.append(r["id"])
+        elif r.get("status") != "Download failed":
+            missed.append(r)
+
+    try:
+        for i in range(0, len(seen_ids), 200):
+            client.table("scan_results").update(
+                {"last_seen_at": run_date, "misses": 0}
+            ).in_("id", seen_ids[i:i + 200]).execute()
+        for r in missed:
+            client.table("scan_results").update(
+                {"misses": (r.get("misses") or 0) + 1}
+            ).eq("id", r["id"]).execute()
+    except Exception as e:
+        print(f"  ! seen-tracking write failed ({e})")
+        return
+    print(f"  Seen-tracking: {len(seen_ids)} still listed, {len(missed)} absent this run")
+
+
+def closed_project_keys(division_id):
+    """Set of scan_results.site values whose every non-failed document has
+    misses >= CLOSED_AFTER_MISSES — the source site no longer lists them.
+    Empty set if the misses column isn't there yet."""
+    try:
+        rows = (
+            get_client().table("scan_results").select("site,filename,misses,status")
+            .eq("division_id", division_id).execute()
+        ).data
+    except Exception:
+        return set()
+    by_project = {}
+    for r in rows:
+        site = r.get("site")
+        if not site or not r.get("filename") or r.get("status") == "Download failed":
+            continue
+        by_project.setdefault(site, []).append(r.get("misses") or 0)
+    return {
+        s for s, ms in by_project.items()
+        if ms and all(m >= CLOSED_AFTER_MISSES for m in ms)
+    }
+
+
+# ---------------------------------------------------------------------------
 # Project "done" flags (user-set)
 # ---------------------------------------------------------------------------
 
@@ -522,12 +606,16 @@ def set_project_done(division_id, project_key, done):
         ) from e
 
 
-def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None, page=1, page_size=15):
+def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
+                        include_closed=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
     site_tabs) where site_tabs is [{"name", "count", "flagged"}] over ALL
     projects (unaffected by the current filters), for the per-site tabs.
+
+    Projects the source site no longer lists ("closed") are dropped unless
+    include_closed is set, in which case each carries closed=True.
     """
     rows = (
         get_client().table("scan_results").select("*")
@@ -563,6 +651,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "keywords": [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()],
             "locations": r.get("keyword_locations") or "",
             "ai_notes": r.get("ai_notes") or "",
+            "misses": r.get("misses") or 0,
+            "last_seen_at": r.get("last_seen_at"),
         })
 
     done_keys = load_done_projects(division_id)
@@ -570,6 +660,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     projects = []
     for site_key, g in groups.items():
         real_files = [f for f in g["files"] if f["filename"]]
+        gradeable = [f for f in real_files if f["status"] != "Download failed"]
+        closed = bool(gradeable) and all(f["misses"] >= CLOSED_AFTER_MISSES for f in gradeable)
+        last_seen = max((f["last_seen_at"] for f in g["files"] if f["last_seen_at"]), default=None)
         matched = sum(1 for f in g["files"] if f["status"].startswith("Matched"))
         failed = sum(1 for f in real_files if f["status"] == "Download failed")
         kws = []
@@ -592,10 +685,16 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
             "done": site_key in done_keys,
+            "closed": closed, "last_seen_at": last_seen,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
 
-    # Per-site tab list, computed over every project (before any filter).
+    # Closed projects are out of the picture entirely unless asked for — so
+    # they don't inflate the per-site tab counts either.
+    if not include_closed:
+        projects = [p for p in projects if not p["closed"]]
+
+    # Per-site tab list, computed over every (visible) project, before filters.
     site_tabs = {}
     for p in projects:
         name = p["source_prefix"] or "Other"
