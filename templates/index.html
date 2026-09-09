@@ -521,11 +521,33 @@
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
   .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
   .file-row .f-dl:hover { text-decoration: underline; }
-  .pdf-modal { max-width: 940px; }
+  .pdf-modal { max-width: 940px; position: relative; }
   .pdf-modal .modal-body { flex: 1 1 auto; }
   .pdf-actions { gap: 8px; }
+  #pdfPager[hidden] { display: none; }
+  #pdfPager {
+    position: absolute; left: 50%; transform: translateX(-50%); z-index: 5;
+    bottom: 14px; bottom: max(14px, env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(15,17,23,.92); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 999px; padding: 4px 6px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    color: #fff; font-size: 13px;
+  }
+  #pdfPager button {
+    background: transparent; border: none; color: #fff; cursor: pointer;
+    font-size: 17px; line-height: 1; padding: 3px 8px; border-radius: 999px;
+  }
+  #pdfPager button:hover:not(:disabled) { background: rgba(255,255,255,.14); }
+  #pdfPager button:disabled { opacity: .35; cursor: default; }
+  #pdfPageInput {
+    width: 2.6em; text-align: center; background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 6px; color: #fff;
+    font-size: 13px; font-family: inherit; padding: 3px 2px;
+  }
+  #pdfPageInput:focus { outline: 1px solid var(--accent); }
+  #pdfPageTotal { color: rgba(255,255,255,.7); padding-right: 4px; white-space: nowrap; }
   #pdfScroll {
-    padding: 12px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 12px 12px 56px; overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: var(--surface-2); min-height: 45vh;
   }
   #pdfPages { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -896,6 +918,12 @@
       <div id="pdfPages"></div>
       <div id="pdfStatus"></div>
     </div>
+    <div id="pdfPager" hidden>
+      <button type="button" id="pdfPrevPage" aria-label="Previous page" onclick="stepPdfPage(-1)">&#8249;</button>
+      <input type="text" inputmode="numeric" id="pdfPageInput" aria-label="Page number">
+      <span id="pdfPageTotal">/ 1</span>
+      <button type="button" id="pdfNextPage" aria-label="Next page" onclick="stepPdfPage(1)">&#8250;</button>
+    </div>
   </div>
 </div>
 
@@ -991,8 +1019,11 @@ function teardownPdf() {
   pdfRenderToken++;                       // cancel any in-flight page renders
   if (pdfCurrentDoc) { try { pdfCurrentDoc.destroy(); } catch (e) {} pdfCurrentDoc = null; }
   if (pdfCurrentIO) { pdfCurrentIO.disconnect(); pdfCurrentIO = null; }
+  document.getElementById('pdfScroll').removeEventListener('scroll', onPdfScroll);
   document.getElementById('pdfPages').innerHTML = '';
   document.getElementById('pdfStatus').textContent = '';
+  document.getElementById('pdfPager').hidden = true;
+  pdfTotalPages = 0;
 }
 
 // ---- pdf.js viewer -------------------------------------------------------
@@ -1000,6 +1031,42 @@ let pdfLibPromise = null;
 let pdfRenderToken = 0;
 let pdfCurrentDoc = null;
 let pdfCurrentIO = null;
+let pdfTotalPages = 0;
+let pdfScrollTick = false;
+
+function currentPdfPage() {
+  const scrollEl = document.getElementById('pdfScroll');
+  const line = scrollEl.getBoundingClientRect().top + scrollEl.clientHeight * 0.3;
+  let cur = 1;
+  document.querySelectorAll('#pdfPages .pdf-page-wrap').forEach(function(w) {
+    if (w.getBoundingClientRect().top <= line) cur = parseInt(w.dataset.page, 10);
+  });
+  return cur;
+}
+function syncPdfPager(n) {
+  if (n == null) n = currentPdfPage();
+  const input = document.getElementById('pdfPageInput');
+  if (document.activeElement !== input) input.value = n;
+  document.getElementById('pdfPrevPage').disabled = n <= 1;
+  document.getElementById('pdfNextPage').disabled = n >= pdfTotalPages;
+}
+function goToPdfPage(n) {
+  if (!pdfTotalPages) return;
+  n = Math.max(1, Math.min(pdfTotalPages, n | 0));
+  const w = document.querySelector('#pdfPages .pdf-page-wrap[data-page="' + n + '"]');
+  if (w) w.scrollIntoView({ block: 'start' });
+  syncPdfPager(n);
+}
+function stepPdfPage(delta) { goToPdfPage(currentPdfPage() + delta); }
+function onPdfScroll() {
+  if (pdfScrollTick) return;
+  pdfScrollTick = true;
+  requestAnimationFrame(function() { pdfScrollTick = false; syncPdfPager(); });
+}
+document.getElementById('pdfPageInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); goToPdfPage(parseInt(this.value, 10) || 1); this.blur(); }
+});
+document.getElementById('pdfPageInput').addEventListener('blur', function() { syncPdfPager(); });
 
 function loadPdfLib() {
   if (!pdfLibPromise) {
@@ -1057,6 +1124,12 @@ async function renderPdf(src) {
       pagesEl.appendChild(wrap);
       io.observe(wrap);
     }
+
+    pdfTotalPages = pdf.numPages;
+    document.getElementById('pdfPageTotal').textContent = '/ ' + pdf.numPages;
+    document.getElementById('pdfPager').hidden = pdf.numPages < 2;
+    syncPdfPager(1);
+    scrollEl.addEventListener('scroll', onPdfScroll, { passive: true });
   } catch (err) {
     if (token !== pdfRenderToken) return;
     statusEl.innerHTML =
