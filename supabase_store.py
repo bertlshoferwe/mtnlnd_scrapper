@@ -622,7 +622,6 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
-    projects.sort(key=lambda p: 1 if p["done"] else 0)  # finished ones sink
 
     total = len(projects)
     page = max(1, page)
