@@ -848,6 +848,25 @@ def generate_daily_summary(client, rows):
     return text.strip() if text else ""
 
 
+def _prepend_update_note(summary, flagged_keys, reopened_keys):
+    """Lead the daily summary with a plain line naming the previously-seen
+    projects that just gained a document (an addendum, a revised bid form).
+    Returns summary unchanged when there are none."""
+    if not flagged_keys:
+        return summary
+    reopened = set(reopened_keys or [])
+
+    def name(key):
+        proj = key.split(" — ", 1)[1] if " — " in key else key
+        return proj + (" (was marked done)" if key in reopened else "")
+
+    names = ", ".join(sorted(name(k) for k in flagged_keys))
+    n = len(flagged_keys)
+    note = (f"\U0001f4c4 New document{'s' if n != 1 else ''} added to "
+            f"{n} previously-seen project{'s' if n != 1 else ''}: {names}.")
+    return f"{note}\n\n{summary}".strip() if summary else note
+
+
 # ---------------------------------------------------------------------------
 # Local Excel file
 # ---------------------------------------------------------------------------
@@ -1054,11 +1073,19 @@ def _scan_division(division):
         if bid_dates:
             supabase_store.save_project_bid_dates(division_id, bid_dates)
 
+        # Flag already-tracked projects that just got a new document (e.g. an
+        # addendum) so the dashboard surfaces it until the user marks it done.
+        new_doc_projects = {r[1] for r in rows if r[3]}
+        flagged_updates, reopened_updates = supabase_store.apply_document_updates(
+            division_id, run_date, new_doc_projects
+        )
+
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
             done=0, total=0, overall=overall_done,
         )
         summary = generate_daily_summary(ai_client, rows)
+        summary = _prepend_update_note(summary, flagged_updates, reopened_updates)
         supabase_store.log_summary(division_id, run_date, summary)
 
         supabase_store.finish_run(run_id, "partial" if stopped_early else "success")

@@ -413,7 +413,7 @@
   .callout {
     background: var(--accent-soft); color: var(--accent-soft-text);
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
-    font-size: 13px; line-height: 1.5;
+    font-size: 13px; line-height: 1.5; white-space: pre-line;
   }
   /* Results: one row per project. Site switching + status filter both live in
      the filter-menu now (every width); the search field / <select> are hidden
@@ -514,6 +514,28 @@
   .pill.nomatch { background: var(--surface-2); color: var(--muted); }
   .pill.fail { background: var(--danger-soft); color: var(--danger); }
   .pill.closed { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); font-weight: 600; }
+  .pill.updated { background: var(--warning-soft); border: 1px solid var(--warning); color: var(--warning); }
+  .project-list li.p-updated { box-shadow: inset 3px 0 0 var(--warning); }
+  .project-list li.p-updated.p-done .p-name,
+  .project-list li.p-updated.p-done .p-count,
+  .project-list li.p-updated.p-done .pill { opacity: 1; }
+  .project-list li.p-reopened .p-check { color: var(--warning); }
+  .updates-badge {
+    background: var(--warning-soft); border: 1px solid var(--warning); color: var(--warning);
+    font-family: inherit; font-size: 12px; font-weight: 700; padding: 3px 10px;
+    border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .updates-badge:hover { filter: brightness(1.06); }
+  .updates-badge.on { background: var(--warning); color: #fff; }
+  .file-row.f-new {
+    background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning);
+    border-radius: 4px; padding-left: 10px;
+  }
+  .f-new-tag {
+    font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--warning); border: 1px solid var(--warning); border-radius: 4px;
+    padding: 1px 5px; margin-left: 8px; margin-right: auto; flex-shrink: 0; align-self: center;
+  }
 
   .file-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .file-row:last-child { border-bottom: none; }
@@ -689,7 +711,10 @@
 
   <div class="card">
     <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 14px;">
-      <h2 style="margin:0;">Results</h2>
+      <div class="row" style="gap:10px; align-items:center; margin:0;">
+        <h2 style="margin:0;">Results</h2>
+        <button type="button" id="updatesBadge" class="updates-badge" style="display:none;" onclick="showUpdatedOnly()"></button>
+      </div>
       <div class="results-head-actions">
         <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleResultsSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
         <div class="filter-wrap">
@@ -704,6 +729,10 @@
                 <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
                 <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
                 <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
+                <button type="button" class="fm-toggle" id="fmUpdatedToggle" onclick="toggleUpdatedFilter()">
+                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  New documents only
+                </button>
                 <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   Show closed projects
@@ -1328,6 +1357,7 @@ function switchDivision(id) {
   currentResultsKeyword = '';
   currentResultsBid = '';
   currentResultsClosed = false;
+  currentResultsUpdated = false;
   currentResultsSort = 'flagged';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
@@ -1847,6 +1877,7 @@ let currentResultsSite = '';
 let currentResultsKeyword = '';
 let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
+let currentResultsUpdated = false;  // "New documents only" toggle
 let currentResultsSort = 'flagged'; // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
@@ -1988,18 +2019,20 @@ async function loadProjects() {
   if (currentResultsKeyword) params.set('keyword', currentResultsKeyword);
   if (currentResultsBid) params.set('bid_window', currentResultsBid);
   if (currentResultsClosed) params.set('include_closed', '1');
+  if (currentResultsUpdated) params.set('updated', '1');
   if (currentResultsSort && currentResultsSort !== 'flagged') params.set('sort', currentResultsSort);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
+  renderUpdatesBadge(data.updated_total || 0);
   renderSiteFilterOptions(data.sites);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || (status && status !== 'Matched')) {
+  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
@@ -2011,12 +2044,14 @@ async function loadProjects() {
     const li = document.createElement('li');
     if (p.done) li.classList.add('p-done');
     if (p.closed) li.classList.add('p-closed');
+    if (p.updated) li.classList.add('p-updated');
+    if (p.reopened) li.classList.add('p-reopened');
     li.onclick = function() { openProjectModal(i); };
 
-    if (p.done) {
+    if (p.done || p.reopened) {
       const chk = document.createElement('span');
       chk.className = 'p-check';
-      chk.title = 'Marked done';
+      chk.title = p.reopened ? 'Was marked done — new document since' : 'Marked done';
       chk.innerHTML = ICON_CHECK;
       li.appendChild(chk);
     }
@@ -2056,6 +2091,16 @@ async function loadProjects() {
 
     li.appendChild(name);
     li.appendChild(count);
+    if (p.updated) {
+      const u = document.createElement('span');
+      u.className = 'pill updated';
+      const n = p.new_file_count || 0;
+      u.textContent = n ? '+' + n + ' new' : 'new document';
+      u.title = p.reopened
+        ? 'New document(s) added since you marked this project done'
+        : 'New document(s) added to this project';
+      li.appendChild(u);
+    }
     li.appendChild(pill);
     list.appendChild(li);
   });
@@ -2151,6 +2196,11 @@ function openProjectModal(i) {
     if (p.last_seen_at) m += ' — last seen ' + new Date(p.last_seen_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
     meta.push(m);
   }
+  if (p.updated) {
+    meta.push((p.reopened ? 'reopened — ' : '')
+      + (p.new_file_count || 0) + ' new document' + ((p.new_file_count === 1) ? '' : 's')
+      + ' (mark done to clear)');
+  }
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
 
   const stats = [p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned'];
@@ -2167,9 +2217,12 @@ function openProjectModal(i) {
 
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
-  p.files.forEach(function(f) {
+  const orderedFiles = p.files.slice().sort(function(a, b) {
+    return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0);
+  });
+  orderedFiles.forEach(function(f) {
     const row = document.createElement('div');
-    row.className = 'file-row';
+    row.className = 'file-row' + (f.is_new ? ' f-new' : '');
 
     const top = document.createElement('div');
     top.className = 'f-top';
@@ -2177,6 +2230,12 @@ function openProjectModal(i) {
     nm.className = 'f-name';
     nm.textContent = f.filename || '(document)';
     top.appendChild(nm);
+    if (f.is_new) {
+      const tag = document.createElement('span');
+      tag.className = 'f-new-tag';
+      tag.textContent = 'New';
+      top.appendChild(tag);
+    }
     if (f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url)) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2256,6 +2315,12 @@ async function toggleProjectDone() {
       body: JSON.stringify({ project_key: p.key, done: next }),
     });
     p.done = next;
+    if (next) {
+      // Marking done acknowledges any "new document" notification.
+      p.updated = false;
+      p.reopened = false;
+      p.new_file_count = 0;
+    }
     renderProjectDoneBtn(p);
     loadProjects();  // reflect the check + re-sort in the list behind the modal
   } catch (e) {
@@ -2394,6 +2459,25 @@ function toggleClosedFilter() {
   syncFilterUI();
   loadProjects();
 }
+function toggleUpdatedFilter() {
+  currentResultsUpdated = !currentResultsUpdated;
+  resultsPage = 1;
+  syncFilterUI();
+  loadProjects();
+}
+function renderUpdatesBadge(n) {
+  const b = document.getElementById('updatesBadge');
+  if (!b) return;
+  if (n > 0) {
+    b.textContent = n === 1 ? '1 project · new docs' : n + ' projects · new docs';
+    b.style.display = '';
+    b.classList.toggle('on', currentResultsUpdated);
+  } else {
+    b.style.display = 'none';
+    if (currentResultsUpdated) { currentResultsUpdated = false; syncFilterUI(); }
+  }
+}
+function showUpdatedOnly() { toggleUpdatedFilter(); }
 function pickBid(el) {
   const v = el.dataset.bid || '';
   if (currentResultsBid !== v) {
@@ -2408,9 +2492,12 @@ function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
   const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword
-    || !!currentResultsBid || currentResultsClosed;
+    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
+  document.getElementById('fmUpdatedToggle').classList.toggle('on', currentResultsUpdated);
+  const badge = document.getElementById('updatesBadge');
+  if (badge) badge.classList.toggle('on', currentResultsUpdated);
 
   let showLabel = '';
   document.querySelectorAll('#filterShowGroup .fm-body button[data-val]').forEach(function(b) {

@@ -591,19 +591,143 @@ def load_done_projects(division_id):
 
 
 def set_project_done(division_id, project_key, done):
-    """Upsert a project's done flag. Raises ValueError with a migration hint
-    if the table is missing."""
+    """Upsert a project's done flag. Marking a project done also acknowledges
+    any "new document" notification on it (clears update_since / reopened_at).
+    Raises ValueError with a migration hint if the table is missing."""
+    payload = {
+        "division_id": division_id,
+        "project_key": project_key,
+        "done": bool(done),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if done:
+        payload["update_since"] = None
+        payload["reopened_at"] = None
     try:
-        get_client().table("project_flags").upsert({
-            "division_id": division_id,
-            "project_key": project_key,
-            "done": bool(done),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+        get_client().table("project_flags").upsert(payload).execute()
     except Exception as e:
+        # The update_since/reopened_at columns may not exist yet — retry without.
+        if done and ("update_since" in payload or "reopened_at" in payload):
+            payload.pop("update_since", None)
+            payload.pop("reopened_at", None)
+            try:
+                get_client().table("project_flags").upsert(payload).execute()
+                return
+            except Exception:
+                pass
         raise ValueError(
             "couldn't save — create the project_flags table from schema.sql"
         ) from e
+
+
+def load_project_updates(division_id):
+    """{project_key: {"since": iso, "reopened": bool}} for every project with an
+    unacknowledged "new document" notification. Empty if the columns aren't
+    there yet."""
+    try:
+        res = (
+            get_client().table("project_flags")
+            .select("project_key,update_since,reopened_at")
+            .eq("division_id", division_id).execute()
+        )
+    except Exception:
+        return {}
+    out = {}
+    for r in res.data:
+        if r.get("update_since"):
+            out[r["project_key"]] = {
+                "since": r["update_since"],
+                "reopened": bool(r.get("reopened_at")),
+            }
+    return out
+
+
+def apply_document_updates(division_id, run_date, new_doc_project_keys):
+    """After a scan: flag every already-tracked project that just got a new
+    document, so the dashboard surfaces the added file(s). The flag persists
+    until the user marks the project done.
+
+    new_doc_project_keys: scan_results.site values that got >= 1 new file logged
+    this run. A project qualifies only if it existed before this run (a
+    brand-new project is just "new", not "updated") and at least one of its
+    documents has ever matched keywords (a new file on a project we never cared
+    about stays silent). A qualifying project that the user had marked done is
+    re-opened (done -> false) with reopened_at set for a distinct colour.
+
+    Returns (flagged_keys, reopened_keys) for the run summary. Never raises —
+    prints and returns ([], []) if the table/columns aren't there yet."""
+    keys = {k for k in (new_doc_project_keys or []) if k}
+    if not keys:
+        return [], []
+    client = get_client()
+    try:
+        rows = (
+            client.table("scan_results").select("site,status,run_date")
+            .eq("division_id", division_id).execute()
+        ).data
+    except Exception as e:
+        print(f"  ! document-update flags skipped ({e})")
+        return [], []
+
+    first_seen, ever_matched = {}, {}
+    for r in rows:
+        s = r.get("site")
+        if not s:
+            continue
+        rd = r.get("run_date") or ""
+        if s not in first_seen or rd < first_seen[s]:
+            first_seen[s] = rd
+        if (r.get("status") or "").startswith("Matched"):
+            ever_matched[s] = True
+
+    qualifying = [
+        k for k in keys
+        if k in first_seen and first_seen[k] < run_date and ever_matched.get(k)
+    ]
+    if not qualifying:
+        return [], []
+
+    try:
+        existing = {
+            r["project_key"]: r
+            for r in (
+                client.table("project_flags")
+                .select("project_key,done,update_since")
+                .eq("division_id", division_id)
+                .in_("project_key", qualifying).execute()
+            ).data
+        }
+    except Exception as e:
+        print(f"  ! document-update flags skipped ({e})")
+        return [], []
+
+    now = datetime.now(timezone.utc).isoformat()
+    flagged, reopened, payloads = [], [], []
+    for k in qualifying:
+        prior = existing.get(k, {})
+        if prior.get("update_since"):
+            # Already flagged and not yet acknowledged — leave the baseline be.
+            flagged.append(k)
+            continue
+        p = {"division_id": division_id, "project_key": k,
+             "update_since": run_date, "updated_at": now}
+        if prior.get("done"):
+            p["done"] = False
+            p["reopened_at"] = run_date
+            reopened.append(k)
+        payloads.append(p)
+        flagged.append(k)
+
+    if payloads:
+        try:
+            client.table("project_flags").upsert(payloads).execute()
+        except Exception as e:
+            print(f"  ! couldn't write document-update flags ({e})")
+            return [], []
+    if flagged:
+        print(f"  Document updates: {len(flagged)} project(s) flagged"
+              + (f", {len(reopened)} re-opened" if reopened else ""))
+    return flagged, reopened
 
 
 def load_project_bid_dates(division_id):
@@ -637,12 +761,14 @@ def save_project_bid_dates(division_id, mapping):
 
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
-                        bid_window=None, sort=None, include_closed=False, page=1, page_size=15):
+                        bid_window=None, sort=None, include_closed=False,
+                        updated_only=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
-    site_tabs) where site_tabs is [{"name", "count", "flagged"}] over ALL
-    projects (unaffected by the current filters), for the per-site tabs.
+    site_tabs, updated_total) where site_tabs is [{"name", "count", "flagged"}]
+    over ALL projects (unaffected by the current filters) and updated_total is
+    the count of projects with an unacknowledged "new document" notification.
 
     Projects the source site no longer lists ("closed") are dropped unless
     include_closed is set, in which case each carries closed=True.
@@ -678,6 +804,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "filename": r.get("filename") or "",
             "url": r.get("document_url") or "",
             "status": r.get("status") or "",
+            "run_date": r.get("run_date") or "",
             "keywords": [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()],
             "locations": r.get("keyword_locations") or "",
             "ai_notes": r.get("ai_notes") or "",
@@ -687,6 +814,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     done_keys = load_done_projects(division_id)
     bid_dates = load_project_bid_dates(division_id)
+    updates = load_project_updates(division_id)
 
     projects = []
     for site_key, g in groups.items():
@@ -709,6 +837,15 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             proj_status = "Download failed"
         else:
             proj_status = "No match"
+
+        upd = updates.get(site_key)
+        new_file_count = 0
+        for f in g["files"]:
+            f["is_new"] = bool(upd and f["filename"]
+                               and f["run_date"] and f["run_date"] >= upd["since"])
+            if f["is_new"]:
+                new_file_count += 1
+
         projects.append({
             "key": site_key,
             "project": g["project"], "source_prefix": g["source_prefix"],
@@ -716,6 +853,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
             "done": site_key in done_keys,
+            "updated": bool(upd), "new_file_count": new_file_count,
+            "reopened": bool(upd and upd["reopened"]),
             "closed": closed, "last_seen_at": last_seen,
             "bid_date": bid_dates.get(site_key),
             "files": sorted(g["files"], key=lambda f: f["filename"]),
@@ -736,6 +875,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             t["flagged"] += 1
     site_tabs = sorted(site_tabs.values(), key=lambda t: (-t["flagged"], t["name"].lower()))
 
+    # "New document" notifications outstanding, over every visible project.
+    updated_total = sum(1 for p in projects if p["updated"])
+
+    if updated_only:
+        projects = [p for p in projects if p["updated"]]
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if keyword:
@@ -777,15 +921,19 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     elif sort == "name":
         projects.sort(key=lambda p: p["project"].lower())
-    else:  # "flagged" (default): matched first, then most-recently-scanned
+    else:  # "flagged" (default): projects with new docs first, then matched,
+           # then most-recently-scanned
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
-        projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
+        projects.sort(key=lambda p: (
+            0 if p["status"] == "Matched" else 1,
+            0 if p["updated"] else 1,
+        ))
 
     total = len(projects)
     page = max(1, page)
     page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
-    return projects[start:start + page_size], total, site_tabs
+    return projects[start:start + page_size], total, site_tabs, updated_total
 
 
 def get_stats(division_id):

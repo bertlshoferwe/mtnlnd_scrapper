@@ -663,18 +663,21 @@ def api_get_results_grouped(division_id):
     bid_window = (request.args.get("bid_window") or "").strip()
     sort = (request.args.get("sort") or "").strip()
     include_closed = request.args.get("include_closed") in ("1", "true")
+    updated_only = request.args.get("updated") in ("1", "true")
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(50, int(request.args.get("page_size", 15))))
     except ValueError:
         return jsonify({"error": "page and page_size must be integers"}), 400
 
-    projects, total, sites = supabase_store.get_results_grouped(
+    projects, total, sites, updated_total = supabase_store.get_results_grouped(
         division_id, search=search or None, status=status or None, site=site or None,
         keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
-        include_closed=include_closed, page=page, page_size=page_size,
+        include_closed=include_closed, updated_only=updated_only,
+        page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
+                    "updated_total": updated_total,
                     "page": page, "page_size": page_size})
 
 
