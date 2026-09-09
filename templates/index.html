@@ -165,6 +165,15 @@
   .btn-danger:hover { background: var(--danger-soft); }
   .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
   .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+  .ext-link {
+    display: none; align-items: center; gap: 7px; width: fit-content;
+    margin-bottom: 16px; padding: 7px 13px;
+    background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px;
+    color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+    transition: border-color .12s, color .12s;
+  }
+  .ext-link:hover { border-color: var(--accent); color: var(--accent); }
+  .ext-link svg { width: 14px; height: 14px; flex-shrink: 0; }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
@@ -791,7 +800,7 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <a id="projectModalLink" class="btn-primary" style="display:none; text-decoration:none; margin-bottom:14px;" target="_blank" rel="noopener">Open project page &#8599;</a>
+      <a id="projectModalLink" class="ext-link" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
       <div id="projectModalFiles"></div>
     </div>
   </div>
@@ -1952,7 +1961,7 @@ function openProjectModal(i) {
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
 
   const link = document.getElementById('projectModalLink');
-  if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-block'; }
+  if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-flex'; }
   else { link.style.display = 'none'; }
 
   const filesEl = document.getElementById('projectModalFiles');
