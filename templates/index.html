@@ -415,9 +415,25 @@
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
     font-size: 13px; line-height: 1.5; white-space: pre-line;
   }
-  /* Results: one row per project. Site switching + status filter both live in
-     the filter-menu now (every width); the search field / <select> are hidden
-     state holders shown only when the magnifier is toggled. */
+  .site-tabs {
+    display: flex; gap: 2px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none;
+  }
+  .site-tabs::-webkit-scrollbar { display: none; }
+  .site-tab {
+    flex-shrink: 0; background: none; border: none; font-family: inherit; cursor: pointer;
+    padding: 8px 12px; margin-bottom: -1px;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .site-tab:hover { color: var(--text); }
+  .site-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .site-tab .rtab-count { margin-left: 6px; font-weight: 500; opacity: .55; font-size: 12px; }
+  .site-tab.active .rtab-count { opacity: .85; }
+
+  /* Results: one row per project. The status filter lives in the filter-menu
+     (every width); the search field / <select> are hidden state holders shown
+     only when the magnifier is toggled. Source-site switching is the tab row. */
   .results-toolbar { display: none; }
   .results-toolbar.search-open { display: flex; margin-top: 2px; }
   .results-toolbar #resultsStatusFilter { display: none; }
@@ -739,12 +755,6 @@
                 </button>
               </div>
             </div>
-            <div class="fm-group" id="filterSiteGroup" hidden>
-              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
-                <span class="fm-head-label">Site</span><span class="fm-head-val" id="fmSiteVal"></span><span class="fm-chev">&#9656;</span>
-              </button>
-              <div class="fm-body" id="filterSiteOptions"></div>
-            </div>
             <div class="fm-group" id="filterKeywordGroup" hidden>
               <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
                 <span class="fm-head-label">Keyword</span><span class="fm-head-val" id="fmKeywordVal"></span><span class="fm-chev">&#9656;</span>
@@ -796,6 +806,8 @@
         <div class="stat-sub" id="statDocsSub"></div>
       </div>
     </div>
+
+    <div class="site-tabs" id="siteTabs" style="display:none;" role="tablist" aria-label="Filter by source site"></div>
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
 
@@ -1370,8 +1382,7 @@ function switchDivision(id) {
   syncSortUI();
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
-  document.getElementById('filterSiteOptions').innerHTML = '';
-  document.getElementById('filterSiteGroup').hidden = true;
+  document.getElementById('siteTabs').style.display = 'none';
   document.getElementById('filterKeywordOptions').innerHTML = '';
   document.getElementById('filterKeywordGroup').hidden = true;
   document.getElementById('statsRow').style.display = 'none';
@@ -1890,8 +1901,7 @@ async function loadResultsInfo() {
   if (!info.exists) {
     btn.style.display = 'none';
     statsRow.style.display = 'none';
-    document.getElementById('filterSiteOptions').innerHTML = '';
-    document.getElementById('filterSiteGroup').hidden = true;
+    document.getElementById('siteTabs').style.display = 'none';
     document.getElementById('filterKeywordOptions').innerHTML = '';
     document.getElementById('filterKeywordGroup').hidden = true;
     callout.style.display = 'none';
@@ -1929,20 +1939,15 @@ async function loadResultsInfo() {
   await loadProjects();
 }
 
-function renderSiteFilterOptions(sites) {
-  // Don't rebuild the option list under the user while the menu is open —
-  // just refresh the selection markers. It repopulates next time it's closed.
-  if (document.getElementById('filterMenu').classList.contains('open')) { syncFilterUI(); return; }
-  const menuOpts = document.getElementById('filterSiteOptions');
-  const menuGroup = document.getElementById('filterSiteGroup');
-  menuOpts.innerHTML = '';
+function renderSiteTabs(sites) {
+  const bar = document.getElementById('siteTabs');
+  bar.innerHTML = '';
 
   if (!sites || sites.length < 2) {
-    menuGroup.hidden = true;
-    syncFilterUI();
+    bar.style.display = 'none';
+    if (currentResultsSite) currentResultsSite = '';
     return;
   }
-  menuGroup.hidden = false;
 
   // Default view is flagged-only, so counts show flagged projects.
   const flaggedOnly = document.getElementById('resultsStatusFilter').value === 'Matched';
@@ -1953,17 +1958,20 @@ function renderSiteFilterOptions(sites) {
     currentResultsSite = '';
   }
 
-  function opt(key, label, count) {
+  function tab(key, label, count) {
     const b = document.createElement('button');
     b.type = 'button';
+    b.className = 'site-tab' + (key === currentResultsSite ? ' active' : '');
     b.dataset.site = key;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', key === currentResultsSite ? 'true' : 'false');
     b.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
     b.onclick = function() { pickSite(key); };
-    menuOpts.appendChild(b);
+    bar.appendChild(b);
   }
-  opt('', 'All sites', total);
-  sites.forEach(function(s) { opt(s.name, s.name, val(s)); });
-  syncFilterUI();
+  tab('', 'All sites', total);
+  sites.forEach(function(s) { tab(s.name, s.name, val(s)); });
+  bar.style.display = 'flex';
 }
 
 // [[keyword, projectCount], …] from the results-info stats
@@ -2026,7 +2034,7 @@ async function loadProjects() {
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
   renderUpdatesBadge(data.updated_total || 0);
-  renderSiteFilterOptions(data.sites);
+  renderSiteTabs(data.sites);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
@@ -2373,7 +2381,6 @@ function toggleFilterMenu(e) {
   document.getElementById('filterShowGroup').classList.toggle(
     'open',
     document.getElementById('resultsStatusFilter').value !== 'Matched' || currentResultsClosed);
-  document.getElementById('filterSiteGroup').classList.toggle('open', !!currentResultsSite);
   document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
   document.getElementById('filterBidGroup').classList.toggle('open', !!currentResultsBid);
   menu.classList.add('open');
@@ -2445,13 +2452,17 @@ function pickFilter(el) {
   closeFilterMenu();
 }
 function pickSite(key) {
-  if (currentResultsSite !== key) {
-    currentResultsSite = key;
-    resultsPage = 1;
-    loadProjects();
-  }
-  syncFilterUI();
-  closeFilterMenu();
+  if (currentResultsSite === key) return;
+  currentResultsSite = key;
+  resultsPage = 1;
+  // Mark the active tab immediately; loadProjects() re-renders the row with
+  // refreshed counts when the request lands.
+  document.querySelectorAll('#siteTabs .site-tab').forEach(function(b) {
+    const on = (b.dataset.site || '') === key;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  loadProjects();
 }
 function toggleClosedFilter() {
   currentResultsClosed = !currentResultsClosed;
@@ -2491,7 +2502,7 @@ function pickBid(el) {
 function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
-  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword
+  const anyFilter = status !== 'Matched' || !!currentResultsKeyword
     || !!currentResultsBid || currentResultsClosed || currentResultsUpdated;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
@@ -2505,9 +2516,6 @@ function syncFilterUI() {
     b.classList.toggle('sel', on);
     if (on) showLabel = b.textContent;
   });
-  document.querySelectorAll('#filterSiteOptions button').forEach(function(b) {
-    b.classList.toggle('sel', (b.dataset.site || '') === currentResultsSite);
-  });
   document.querySelectorAll('#filterKeywordOptions button').forEach(function(b) {
     b.classList.toggle('sel', (b.dataset.kw || '') === currentResultsKeyword);
   });
@@ -2520,7 +2528,6 @@ function syncFilterUI() {
 
   // Collapsed-section headers echo the current choice.
   document.getElementById('fmShowVal').textContent = status === 'Matched' ? '' : showLabel;
-  document.getElementById('fmSiteVal').textContent = currentResultsSite || '';
   document.getElementById('fmKeywordVal').textContent = currentResultsKeyword || '';
   document.getElementById('fmBidVal').textContent = bidLabel;
 }
