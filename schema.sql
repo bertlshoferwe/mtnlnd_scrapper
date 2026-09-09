@@ -72,22 +72,20 @@ create table if not exists project_flags (
   project_key text not null,
   done boolean not null default false,
   bid_date date,
-  -- "New document" notification. update_since is set by a scan when a new file
-  -- shows up on a project that was already being tracked (see
-  -- supabase_store.apply_document_updates): every file whose run_date is >=
-  -- update_since is shown as NEW. reopened_at is set when that project had been
-  -- marked done — it's flipped back to not-done and shown in a distinct colour.
-  -- Both clear when the user marks the project done (acknowledging the update).
-  update_since timestamptz,
-  reopened_at timestamptz,
+  -- "New document" notification watermark. A project (that has matched
+  -- keywords and was first seen on an earlier run) is flagged as updated
+  -- when it has a file whose run_date is newer than the project's first
+  -- run_date AND newer than docs_ack_through. Hitting "Mark done" sets
+  -- docs_ack_through = now(), acknowledging every file seen so far; the flag
+  -- clears until the next new document. NULL = nothing acknowledged yet.
+  docs_ack_through timestamptz,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
 -- Migration for existing databases:
 --   create table above, then
 --   alter table project_flags add column if not exists bid_date date;
---   alter table project_flags add column if not exists update_since timestamptz;
---   alter table project_flags add column if not exists reopened_at timestamptz;
+--   alter table project_flags add column if not exists docs_ack_through timestamptz;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (

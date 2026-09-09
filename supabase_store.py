@@ -592,24 +592,24 @@ def load_done_projects(division_id):
 
 def set_project_done(division_id, project_key, done):
     """Upsert a project's done flag. Marking a project done also acknowledges
-    any "new document" notification on it (clears update_since / reopened_at).
-    Raises ValueError with a migration hint if the table is missing."""
+    every document seen on it so far (docs_ack_through = now), clearing any
+    "new document" flag until the next addendum. Raises ValueError with a
+    migration hint if the table is missing."""
+    now = datetime.now(timezone.utc).isoformat()
     payload = {
         "division_id": division_id,
         "project_key": project_key,
         "done": bool(done),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": now,
     }
     if done:
-        payload["update_since"] = None
-        payload["reopened_at"] = None
+        payload["docs_ack_through"] = now
     try:
         get_client().table("project_flags").upsert(payload).execute()
     except Exception as e:
-        # The update_since/reopened_at columns may not exist yet — retry without.
-        if done and ("update_since" in payload or "reopened_at" in payload):
-            payload.pop("update_since", None)
-            payload.pop("reopened_at", None)
+        # The docs_ack_through column may not exist yet — retry without it.
+        if "docs_ack_through" in payload:
+            payload.pop("docs_ack_through", None)
             try:
                 get_client().table("project_flags").upsert(payload).execute()
                 return
@@ -620,54 +620,39 @@ def set_project_done(division_id, project_key, done):
         ) from e
 
 
-def load_project_updates(division_id):
-    """{project_key: {"since": iso, "reopened": bool}} for every project with an
-    unacknowledged "new document" notification. Empty if the columns aren't
-    there yet."""
+def load_docs_ack(division_id):
+    """{project_key: iso} — the watermark up to which the user has acknowledged
+    a project's documents (set when they mark it done). Empty if the column
+    isn't there yet."""
     try:
         res = (
             get_client().table("project_flags")
-            .select("project_key,update_since,reopened_at")
+            .select("project_key,docs_ack_through")
             .eq("division_id", division_id).execute()
         )
     except Exception:
         return {}
-    out = {}
-    for r in res.data:
-        if r.get("update_since"):
-            out[r["project_key"]] = {
-                "since": r["update_since"],
-                "reopened": bool(r.get("reopened_at")),
-            }
-    return out
+    return {r["project_key"]: r["docs_ack_through"]
+            for r in res.data if r.get("docs_ack_through")}
 
 
-def apply_document_updates(division_id, run_date, new_doc_project_keys):
-    """After a scan: flag every already-tracked project that just got a new
-    document, so the dashboard surfaces the added file(s). The flag persists
-    until the user marks the project done.
-
-    new_doc_project_keys: scan_results.site values that got >= 1 new file logged
-    this run. A project qualifies only if it existed before this run (a
-    brand-new project is just "new", not "updated") and at least one of its
-    documents has ever matched keywords (a new file on a project we never cared
-    about stays silent). A qualifying project that the user had marked done is
-    re-opened (done -> false) with reopened_at set for a distinct colour.
-
-    Returns (flagged_keys, reopened_keys) for the run summary. Never raises —
-    prints and returns ([], []) if the table/columns aren't there yet."""
-    keys = {k for k in (new_doc_project_keys or []) if k}
+def detect_new_doc_projects(division_id, run_date, candidate_keys):
+    """Read-only: of candidate_keys (projects that got a file logged this run),
+    which ones should surface a "new document" flag — i.e. they were first seen
+    on an earlier run, have matched keywords, and the new file post-dates the
+    user's acknowledgement watermark. Returns [(project_key, was_marked_done)]
+    for the run summary. Never raises."""
+    keys = {k for k in (candidate_keys or []) if k}
     if not keys:
-        return [], []
+        return []
     client = get_client()
     try:
         rows = (
             client.table("scan_results").select("site,status,run_date")
             .eq("division_id", division_id).execute()
         ).data
-    except Exception as e:
-        print(f"  ! document-update flags skipped ({e})")
-        return [], []
+    except Exception:
+        return []
 
     first_seen, ever_matched = {}, {}
     for r in rows:
@@ -680,54 +665,14 @@ def apply_document_updates(division_id, run_date, new_doc_project_keys):
         if (r.get("status") or "").startswith("Matched"):
             ever_matched[s] = True
 
-    qualifying = [
-        k for k in keys
-        if k in first_seen and first_seen[k] < run_date and ever_matched.get(k)
-    ]
-    if not qualifying:
-        return [], []
-
-    try:
-        existing = {
-            r["project_key"]: r
-            for r in (
-                client.table("project_flags")
-                .select("project_key,done,update_since")
-                .eq("division_id", division_id)
-                .in_("project_key", qualifying).execute()
-            ).data
-        }
-    except Exception as e:
-        print(f"  ! document-update flags skipped ({e})")
-        return [], []
-
-    now = datetime.now(timezone.utc).isoformat()
-    flagged, reopened, payloads = [], [], []
-    for k in qualifying:
-        prior = existing.get(k, {})
-        if prior.get("update_since"):
-            # Already flagged and not yet acknowledged — leave the baseline be.
-            flagged.append(k)
-            continue
-        p = {"division_id": division_id, "project_key": k,
-             "update_since": run_date, "updated_at": now}
-        if prior.get("done"):
-            p["done"] = False
-            p["reopened_at"] = run_date
-            reopened.append(k)
-        payloads.append(p)
-        flagged.append(k)
-
-    if payloads:
-        try:
-            client.table("project_flags").upsert(payloads).execute()
-        except Exception as e:
-            print(f"  ! couldn't write document-update flags ({e})")
-            return [], []
-    if flagged:
-        print(f"  Document updates: {len(flagged)} project(s) flagged"
-              + (f", {len(reopened)} re-opened" if reopened else ""))
-    return flagged, reopened
+    ack = load_docs_ack(division_id)
+    done = load_done_projects(division_id)
+    out = []
+    for k in keys:
+        if (k in first_seen and first_seen[k] < run_date and ever_matched.get(k)
+                and (not ack.get(k) or run_date > ack[k])):
+            out.append((k, k in done))
+    return out
 
 
 def load_project_bid_dates(division_id):
@@ -814,7 +759,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     done_keys = load_done_projects(division_id)
     bid_dates = load_project_bid_dates(division_id)
-    updates = load_project_updates(division_id)
+    docs_ack = load_docs_ack(division_id)
 
     projects = []
     for site_key, g in groups.items():
@@ -838,13 +783,22 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         else:
             proj_status = "No match"
 
-        upd = updates.get(site_key)
+        # "New document" flag: a file counts as new when it post-dates both the
+        # project's first run_date (so a brand-new project isn't "updated") and
+        # the user's acknowledgement watermark (set by "Mark done"). Only matched
+        # projects surface it.
+        real_runs = [f["run_date"] for f in real_files if f["run_date"]]
+        first_run = min(real_runs) if real_runs else ""
+        ack = docs_ack.get(site_key) or ""
         new_file_count = 0
         for f in g["files"]:
-            f["is_new"] = bool(upd and f["filename"]
-                               and f["run_date"] and f["run_date"] >= upd["since"])
+            f["is_new"] = bool(
+                f["filename"] and f["run_date"] and matched
+                and f["run_date"] > first_run and f["run_date"] > ack
+            )
             if f["is_new"]:
                 new_file_count += 1
+        is_updated = new_file_count > 0
 
         projects.append({
             "key": site_key,
@@ -852,9 +806,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "source_url": g["source_url"], "latest_date": g["latest_date"],
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
-            "done": site_key in done_keys,
-            "updated": bool(upd), "new_file_count": new_file_count,
-            "reopened": bool(upd and upd["reopened"]),
+            "done": (site_key in done_keys) and not is_updated,
+            "updated": is_updated, "new_file_count": new_file_count,
+            "reopened": is_updated and (site_key in done_keys),
             "closed": closed, "last_seen_at": last_seen,
             "bid_date": bid_dates.get(site_key),
             "files": sorted(g["files"], key=lambda f: f["filename"]),
