@@ -410,19 +410,35 @@
     min-width: 190px; max-height: 62vh; overflow-y: auto;
   }
   .filter-menu.open { display: block; }
-  .filter-menu button {
-    display: block; width: 100%; text-align: left;
-    background: transparent; color: var(--text);
-    padding: 8px 10px; font-size: 13px; font-weight: 500; border-radius: 5px;
-  }
-  .filter-menu button:hover { background: var(--bg); }
-  .filter-menu button.sel { color: var(--accent); font-weight: 650; }
-  .filter-menu button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
-  .filter-menu .fm-label {
+  .fm-group { border-top: 1px solid var(--border); }
+  .fm-group:first-child { border-top: none; }
+  .fm-head {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: transparent; border: none; cursor: pointer;
+    padding: 8px 10px; font-family: inherit;
     font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--muted); padding: 7px 10px 3px;
+    color: var(--muted);
   }
-  .filter-menu .fm-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 2px; }
+  .fm-head:hover { color: var(--text); }
+  .fm-head-label { flex-shrink: 0; }
+  .fm-head-val {
+    flex: 1; min-width: 0; text-align: left;
+    text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; color: var(--accent);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fm-head-val:empty { display: none; }
+  .fm-chev { font-size: 9px; transition: transform .12s; flex-shrink: 0; }
+  .fm-group.open .fm-chev { transform: rotate(90deg); }
+  .fm-body { display: none; padding-bottom: 4px; }
+  .fm-group.open > .fm-body { display: block; }
+  .fm-body button {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--text); border: none; font-family: inherit;
+    padding: 8px 10px; font-size: 13px; font-weight: 500; border-radius: 5px; cursor: pointer;
+  }
+  .fm-body button:hover { background: var(--bg); }
+  .fm-body button.sel { color: var(--accent); font-weight: 650; }
+  .fm-body button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
   .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .pager button {
     min-width: 32px; height: 32px; padding: 0 8px;
@@ -607,18 +623,28 @@
         <div class="filter-wrap">
           <button type="button" id="filterToggleBtn" class="icon-btn bordered" aria-label="Filter projects" aria-expanded="false" onclick="toggleFilterMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           <div class="filter-menu" id="filterMenu">
-            <div class="fm-label">Show</div>
-            <button type="button" data-val="Matched" onclick="pickFilter(this)">Flagged only</button>
-            <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
-            <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
-            <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
-            <div class="fm-sep" id="filterSiteGroup" hidden>
-              <div class="fm-label">Site</div>
-              <div id="filterSiteOptions"></div>
+            <div class="fm-group open" id="filterShowGroup">
+              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
+                <span class="fm-head-label">Show</span><span class="fm-head-val" id="fmShowVal"></span><span class="fm-chev">&#9656;</span>
+              </button>
+              <div class="fm-body">
+                <button type="button" data-val="Matched" onclick="pickFilter(this)">Flagged only</button>
+                <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
+                <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
+                <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
+              </div>
             </div>
-            <div class="fm-sep" id="filterKeywordGroup" hidden>
-              <div class="fm-label">Keyword</div>
-              <div id="filterKeywordOptions"></div>
+            <div class="fm-group" id="filterSiteGroup" hidden>
+              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
+                <span class="fm-head-label">Site</span><span class="fm-head-val" id="fmSiteVal"></span><span class="fm-chev">&#9656;</span>
+              </button>
+              <div class="fm-body" id="filterSiteOptions"></div>
+            </div>
+            <div class="fm-group" id="filterKeywordGroup" hidden>
+              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
+                <span class="fm-head-label">Keyword</span><span class="fm-head-val" id="fmKeywordVal"></span><span class="fm-chev">&#9656;</span>
+              </button>
+              <div class="fm-body" id="filterKeywordOptions"></div>
             </div>
           </div>
         </div>
@@ -1704,6 +1730,9 @@ async function loadResultsInfo() {
 }
 
 function renderSiteFilterOptions(sites) {
+  // Don't rebuild the option list under the user while the menu is open —
+  // just refresh the selection markers. It repopulates next time it's closed.
+  if (document.getElementById('filterMenu').classList.contains('open')) { syncFilterUI(); return; }
   const menuOpts = document.getElementById('filterSiteOptions');
   const menuGroup = document.getElementById('filterSiteGroup');
   menuOpts.innerHTML = '';
@@ -1739,6 +1768,7 @@ function renderSiteFilterOptions(sites) {
 
 // [[keyword, projectCount], …] from the results-info stats
 function renderKeywordFilterOptions(pairs) {
+  if (document.getElementById('filterMenu').classList.contains('open')) { syncFilterUI(); return; }
   const menuOpts = document.getElementById('filterKeywordOptions');
   const menuGroup = document.getElementById('filterKeywordGroup');
   menuOpts.innerHTML = '';
@@ -2036,9 +2066,23 @@ function toggleFilterMenu(e) {
   // don't leave the search field open behind the menu
   const bar = document.querySelector('.results-toolbar');
   if (bar.classList.contains('search-open')) toggleResultsSearch();
+  // Each section starts collapsed unless it holds a non-default choice.
+  document.getElementById('filterShowGroup').classList.toggle(
+    'open', document.getElementById('resultsStatusFilter').value !== 'Matched');
+  document.getElementById('filterSiteGroup').classList.toggle('open', !!currentResultsSite);
+  document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
   menu.classList.add('open');
   document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'true');
   setTimeout(function() { document.addEventListener('click', onFilterOutside); }, 0);
+}
+function toggleFmGroup(headEl) {
+  const group = headEl.closest('.fm-group');
+  const opening = !group.classList.contains('open');
+  group.classList.toggle('open', opening);
+  if (opening) {
+    const sel = group.querySelector('.fm-body button.sel');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
 }
 function closeFilterMenu() {
   document.getElementById('filterMenu').classList.remove('open');
@@ -2072,8 +2116,12 @@ function syncFilterUI() {
   const btn = document.getElementById('filterToggleBtn');
   const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword;
   if (btn) btn.classList.toggle('active', anyFilter);
-  document.querySelectorAll('#filterMenu > button[data-val]').forEach(function(b) {
-    b.classList.toggle('sel', b.dataset.val === status);
+
+  let showLabel = '';
+  document.querySelectorAll('#filterShowGroup .fm-body button[data-val]').forEach(function(b) {
+    const on = b.dataset.val === status;
+    b.classList.toggle('sel', on);
+    if (on) showLabel = b.textContent;
   });
   document.querySelectorAll('#filterSiteOptions button').forEach(function(b) {
     b.classList.toggle('sel', (b.dataset.site || '') === currentResultsSite);
@@ -2081,6 +2129,11 @@ function syncFilterUI() {
   document.querySelectorAll('#filterKeywordOptions button').forEach(function(b) {
     b.classList.toggle('sel', (b.dataset.kw || '') === currentResultsKeyword);
   });
+
+  // Collapsed-section headers echo the current choice.
+  document.getElementById('fmShowVal').textContent = status === 'Matched' ? '' : showLabel;
+  document.getElementById('fmSiteVal').textContent = currentResultsSite || '';
+  document.getElementById('fmKeywordVal').textContent = currentResultsKeyword || '';
 }
 
 async function loadAllForCurrentDivision() {
