@@ -499,7 +499,6 @@
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
   .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .project-list .p-bid { font-size: 12px; color: var(--muted); white-space: nowrap; font-weight: 600; }
   .project-list .p-check { color: var(--success); flex-shrink: 0; display: inline-flex; }
   .project-list .p-check svg { width: 16px; height: 16px; }
   .project-list li.p-done .p-name,
@@ -1911,24 +1910,20 @@ async function loadProjects() {
     const name = document.createElement('div');
     name.className = 'p-name';
     name.textContent = p.project;
-    if (p.source_prefix) {
+    const subParts = [];
+    if (p.source_prefix) subParts.push(p.source_prefix);
+    if (p.bid_date) subParts.push('bids ' + formatBidDate(p.bid_date));
+    if (subParts.length) {
       const sub = document.createElement('span');
       sub.className = 'p-sub';
-      sub.textContent = p.source_prefix;
+      sub.textContent = subParts.join('  ·  ');
+      if (p.bid_date) sub.title = 'Bid opening ' + formatBidDate(p.bid_date, true);
       name.appendChild(sub);
     }
 
     const count = document.createElement('span');
     count.className = 'p-count';
     count.textContent = p.file_count + (p.file_count === 1 ? ' file' : ' files');
-
-    let bid = null;
-    if (p.bid_date) {
-      bid = document.createElement('span');
-      bid.className = 'p-bid';
-      bid.textContent = 'Bids ' + formatBidDate(p.bid_date);
-      bid.title = 'Bid opening ' + formatBidDate(p.bid_date, true);
-    }
 
     const pill = document.createElement('span');
     if (p.closed) {
@@ -1946,7 +1941,6 @@ async function loadProjects() {
     }
 
     li.appendChild(name);
-    if (bid) li.appendChild(bid);
     li.appendChild(count);
     li.appendChild(pill);
     list.appendChild(li);
