@@ -659,7 +659,7 @@
         <div class="stat-sub" id="statFlaggedSub"></div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Documents scanned</div>
+        <div class="stat-label">Documents flagged</div>
         <div class="stat-value" id="statDocs">0</div>
         <div class="stat-sub" id="statDocsSub"></div>
       </div>
@@ -1712,9 +1712,9 @@ async function loadResultsInfo() {
   document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
   document.getElementById('statFlaggedSub').textContent =
     'of ' + (st.projects_scanned || 0) + ' scanned';
-  document.getElementById('statDocs').textContent = st.documents_scanned || 0;
+  document.getElementById('statDocs').textContent = st.documents_matched || 0;
   document.getElementById('statDocsSub').textContent =
-    (st.documents_matched || 0) + ' with keyword hits';
+    'of ' + (st.documents_scanned || 0) + ' scanned';
   statsRow.style.display = 'flex';
 
   renderKeywordFilterOptions(st.top_keywords || []);
