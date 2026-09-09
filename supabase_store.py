@@ -84,8 +84,11 @@ def delete_division(division_id):
     set up differently. A delete here is final — the dashboard confirms
     first."""
     client = get_client()
-    for table in ("scan_results", "daily_summaries", "scan_runs", "sites", "keywords"):
-        client.table(table).delete().eq("division_id", division_id).execute()
+    for table in ("scan_results", "daily_summaries", "scan_runs", "sites", "keywords", "project_flags"):
+        try:
+            client.table(table).delete().eq("division_id", division_id).execute()
+        except Exception:
+            pass  # e.g. project_flags on a DB that hasn't run that migration
     res = client.table("divisions").delete().eq("id", division_id).execute()
     if not res.data:
         raise ValueError("division not found")
@@ -486,6 +489,39 @@ def _split_site(site):
     return "", (site or "").strip()
 
 
+# ---------------------------------------------------------------------------
+# Project "done" flags (user-set)
+# ---------------------------------------------------------------------------
+
+def load_done_projects(division_id):
+    """Set of project keys (scan_results.site values) the user marked done.
+    Returns an empty set if the project_flags table isn't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key")
+            .eq("division_id", division_id).eq("done", True).execute()
+        )
+    except Exception:
+        return set()
+    return {r["project_key"] for r in res.data}
+
+
+def set_project_done(division_id, project_key, done):
+    """Upsert a project's done flag. Raises ValueError with a migration hint
+    if the table is missing."""
+    try:
+        get_client().table("project_flags").upsert({
+            "division_id": division_id,
+            "project_key": project_key,
+            "done": bool(done),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        raise ValueError(
+            "couldn't save — create the project_flags table from schema.sql"
+        ) from e
+
+
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
@@ -529,8 +565,10 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "ai_notes": r.get("ai_notes") or "",
         })
 
+    done_keys = load_done_projects(division_id)
+
     projects = []
-    for g in groups.values():
+    for site_key, g in groups.items():
         real_files = [f for f in g["files"] if f["filename"]]
         matched = sum(1 for f in g["files"] if f["status"].startswith("Matched"))
         failed = sum(1 for f in real_files if f["status"] == "Download failed")
@@ -548,10 +586,12 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         else:
             proj_status = "No match"
         projects.append({
+            "key": site_key,
             "project": g["project"], "source_prefix": g["source_prefix"],
             "source_url": g["source_url"], "latest_date": g["latest_date"],
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
+            "done": site_key in done_keys,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
 
@@ -582,6 +622,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
+    projects.sort(key=lambda p: 1 if p["done"] else 0)  # finished ones sink
 
     total = len(projects)
     page = max(1, page)

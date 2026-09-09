@@ -56,6 +56,17 @@ create table if not exists scan_results (
 --   alter table scan_results add column if not exists source_url text;
 create index if not exists scan_results_division_idx on scan_results(division_id, run_date desc);
 
+-- User-set "done" flag per project (keyed by the scan_results.site value),
+-- so finished opportunities can be checked off in the dashboard.
+create table if not exists project_flags (
+  division_id text not null references divisions(id) on delete cascade,
+  project_key text not null,
+  done boolean not null default false,
+  updated_at timestamptz default now(),
+  primary key (division_id, project_key)
+);
+-- Migration for existing databases: just run the create table above.
+
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (
   id bigint generated always as identity primary key,
@@ -100,3 +111,4 @@ alter table keywords enable row level security;
 alter table scan_results enable row level security;
 alter table daily_summaries enable row level security;
 alter table scan_runs enable row level security;
+alter table project_flags enable row level security;

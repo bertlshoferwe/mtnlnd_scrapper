@@ -31,6 +31,7 @@ Routes:
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested
+  POST /api/<division_id>/projects/done      mark a project done / not done
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
 
@@ -671,6 +672,23 @@ def api_get_results_grouped(division_id):
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "page": page, "page_size": page_size})
+
+
+@app.route("/api/<division_id>/projects/done", methods=["POST"])
+def api_set_project_done(division_id):
+    """Mark a project done / not done. Body: {"project_key": "...", "done": bool}."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    if not key:
+        return jsonify({"error": "project_key is required"}), 400
+    try:
+        supabase_store.set_project_done(division_id, key, bool(data.get("done")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
 
 
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")

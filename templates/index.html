@@ -27,6 +27,7 @@
     --danger-hover: #983226;
     --danger-soft: #f6e9e7;
     --success: #1f7a43;
+    --success-soft: #e3f1e8;
     --warning: #b26b00;
     --warning-soft: #f4ecd9;
     --radius: 6px;
@@ -58,6 +59,7 @@
       --danger-hover: #ec8776;
       --danger-soft: #37201c;
       --success: #57bb80;
+      --success-soft: #1c3327;
       --warning: #d49b52;
       --warning-soft: #33291a;
       --shadow-sm: 0 1px 2px rgba(0,0,0,.45);
@@ -87,6 +89,7 @@
     --danger-hover: #ec8776;
     --danger-soft: #37201c;
     --success: #57bb80;
+    --success-soft: #1c3327;
     --warning: #d49b52;
     --warning-soft: #33291a;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.45);
@@ -174,6 +177,19 @@
   }
   .ext-link:hover { border-color: var(--accent); color: var(--accent); }
   .ext-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .done-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 8px; font-family: inherit;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: border-color .12s, color .12s, background .12s;
+  }
+  .done-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .done-btn:hover { border-color: var(--success); color: var(--success); }
+  .done-btn.is-done {
+    background: var(--success-soft); border-color: var(--success); color: var(--success);
+  }
+  .done-btn:disabled { opacity: .5; cursor: default; }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
@@ -469,6 +485,11 @@
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
   .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .project-list .p-check { color: var(--success); flex-shrink: 0; display: inline-flex; }
+  .project-list .p-check svg { width: 16px; height: 16px; }
+  .project-list li.p-done .p-name,
+  .project-list li.p-done .p-count { opacity: .5; }
+  .project-list li.p-done .pill { opacity: .55; }
   .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .pill.match { background: var(--accent); color: var(--accent-contrast); }
   .pill.nomatch { background: var(--surface-2); color: var(--muted); }
@@ -800,7 +821,10 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <a id="projectModalLink" class="ext-link" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
+      <div class="row" style="gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+        <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
+        <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
+      </div>
       <div id="projectModalFiles"></div>
     </div>
   </div>
@@ -1221,6 +1245,7 @@ let editingSiteId = null;
 
 const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
 // The edit form is a single shared node: its home is at the top under the
 // "+ Add a site" button (used for adding), editSite() moves it into the row
@@ -1846,7 +1871,16 @@ async function loadProjects() {
 
   projectsData.forEach(function(p, i) {
     const li = document.createElement('li');
+    if (p.done) li.className = 'p-done';
     li.onclick = function() { openProjectModal(i); };
+
+    if (p.done) {
+      const chk = document.createElement('span');
+      chk.className = 'p-check';
+      chk.title = 'Marked done';
+      chk.innerHTML = ICON_CHECK;
+      li.appendChild(chk);
+    }
 
     const name = document.createElement('div');
     name.className = 'p-name';
@@ -1947,9 +1981,12 @@ function parseLocations(str) {
   return out;
 }
 
+let currentProject = null;
+
 function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
+  currentProject = p;
   document.getElementById('projectModalTitle').textContent = p.project;
 
   const meta = [];
@@ -1963,6 +2000,8 @@ function openProjectModal(i) {
   const link = document.getElementById('projectModalLink');
   if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-flex'; }
   else { link.style.display = 'none'; }
+
+  renderProjectDoneBtn(p);
 
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
@@ -2035,6 +2074,33 @@ function openProjectModal(i) {
   });
 
   openModal('project');
+}
+
+function renderProjectDoneBtn(p) {
+  const btn = document.getElementById('projectDoneBtn');
+  btn.classList.toggle('is-done', !!p.done);
+  document.getElementById('projectDoneLabel').textContent = p.done ? 'Done' : 'Mark done';
+}
+
+async function toggleProjectDone() {
+  const p = currentProject;
+  if (!p) return;
+  const next = !p.done;
+  const btn = document.getElementById('projectDoneBtn');
+  btn.disabled = true;
+  try {
+    await api('/api/' + currentDivision + '/projects/done', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, done: next }),
+    });
+    p.done = next;
+    renderProjectDoneBtn(p);
+    loadProjects();  // reflect the check + re-sort in the list behind the modal
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 document.getElementById('resultsSearch').addEventListener('input', function() {
