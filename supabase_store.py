@@ -606,6 +606,36 @@ def set_project_done(division_id, project_key, done):
         ) from e
 
 
+def load_project_bid_dates(division_id):
+    """{project_key: 'YYYY-MM-DD'} for projects with a known bid-opening date.
+    Empty if the column/table isn't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,bid_date")
+            .eq("division_id", division_id).execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: r["bid_date"] for r in res.data if r.get("bid_date")}
+
+
+def save_project_bid_dates(division_id, mapping):
+    """Upsert {project_key: 'YYYY-MM-DD'} from a scan. Only touches bid_date,
+    so a project's `done` flag is left alone. No-ops if the table/column is
+    missing (a scan shouldn't fail over this)."""
+    rows = [
+        {"division_id": division_id, "project_key": k, "bid_date": v,
+         "updated_at": datetime.now(timezone.utc).isoformat()}
+        for k, v in mapping.items() if v
+    ]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save bid dates ({e})")
+
+
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         include_closed=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
@@ -656,6 +686,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         })
 
     done_keys = load_done_projects(division_id)
+    bid_dates = load_project_bid_dates(division_id)
 
     projects = []
     for site_key, g in groups.items():
@@ -686,6 +717,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "keywords": kws, "status": proj_status,
             "done": site_key in done_keys,
             "closed": closed, "last_seen_at": last_seen,
+            "bid_date": bid_dates.get(site_key),
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
 

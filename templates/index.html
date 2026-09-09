@@ -499,6 +499,7 @@
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
   .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .project-list .p-bid { font-size: 12px; color: var(--muted); white-space: nowrap; font-weight: 600; }
   .project-list .p-check { color: var(--success); flex-shrink: 0; display: inline-flex; }
   .project-list .p-check svg { width: 16px; height: 16px; }
   .project-list li.p-done .p-name,
@@ -1921,6 +1922,14 @@ async function loadProjects() {
     count.className = 'p-count';
     count.textContent = p.file_count + (p.file_count === 1 ? ' file' : ' files');
 
+    let bid = null;
+    if (p.bid_date) {
+      bid = document.createElement('span');
+      bid.className = 'p-bid';
+      bid.textContent = 'Bids ' + formatBidDate(p.bid_date);
+      bid.title = 'Bid opening ' + formatBidDate(p.bid_date, true);
+    }
+
     const pill = document.createElement('span');
     if (p.closed) {
       pill.className = 'pill closed';
@@ -1937,6 +1946,7 @@ async function loadProjects() {
     }
 
     li.appendChild(name);
+    if (bid) li.appendChild(bid);
     li.appendChild(count);
     li.appendChild(pill);
     list.appendChild(li);
@@ -2011,6 +2021,14 @@ function parseLocations(str) {
 
 let currentProject = null;
 
+function formatBidDate(iso, full) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString([], full
+    ? { year: 'numeric', month: 'long', day: 'numeric' }
+    : { month: 'short', day: 'numeric' });
+}
+
 function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
@@ -2019,6 +2037,7 @@ function openProjectModal(i) {
 
   const meta = [];
   if (p.source_prefix) meta.push(p.source_prefix);
+  if (p.bid_date) meta.push('bids open ' + formatBidDate(p.bid_date, true));
   meta.push(p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned');
   if (p.status === 'Matched') {
     meta.push(p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords') + ' found');

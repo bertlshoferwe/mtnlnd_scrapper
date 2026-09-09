@@ -504,16 +504,19 @@ def find_document_links_via_listing(site, ai_client):
 def scan_site(site, ai_client):
     """
     Dispatch to the right document-finding strategy for a site and return a
-    uniform list of 5-tuples:
-        (label_or_None, url_or_None, filename, content_bytes_or_None, source_url_or_None)
+    uniform list of 6-tuples:
+        (label_or_None, url_or_None, filename, content_bytes_or_None,
+         source_url_or_None, bid_date_or_None)
     `content_bytes` is set only for files captured from a JavaScript download
     (no URL to fetch later); otherwise it's None and the caller downloads
     `url`. `source_url` is a link to the job/project page the file belongs to.
+    `bid_date` ('YYYY-MM-DD') only comes from portal adapters.
     """
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
         print(f"  Adapter: {adapter.label}")
-        return [(lbl, url, fn, None, src) for lbl, url, fn, src in adapter.find_documents(site)]
+        return [(lbl, url, fn, None, src, bid)
+                for lbl, url, fn, src, bid in adapter.find_documents(site)]
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
         return []
@@ -523,10 +526,10 @@ def scan_site(site, ai_client):
         # Only a *configured* listing (has a selector or URL pattern) uses the
         # targeted listing crawl. An empty {} — left over from the old
         # "let AI find the links" checkbox — falls through to the browser crawler.
-        return [(lbl, url, fn, None, None)
+        return [(lbl, url, fn, None, None, None)
                 for lbl, url, fn in find_document_links_via_listing(site, ai_client)]
     if site.get("tabs"):
-        return [(lbl, url, fn, None, None)
+        return [(lbl, url, fn, None, None, None)
                 for lbl, url, fn in find_document_links_across_tabs(site)]
 
     # Default: a real browser crawl — renders JS, follows links, clicks
@@ -534,8 +537,9 @@ def scan_site(site, ai_client):
     # requests link finder if Playwright/Chromium isn't available.
     crawled = browser_crawl.crawl_site(site["url"])
     if crawled is not None:
-        return crawled
-    return [(None, doc_url, fn, None, site["url"])
+        return [(lbl, url, fn, content, page_url, None)
+                for lbl, url, fn, content, page_url in crawled]
+    return [(None, doc_url, fn, None, site["url"], None)
             for doc_url, fn in find_document_links(site["url"])]
 
 
@@ -898,6 +902,7 @@ def _scan_division(division):
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
         stopped_early = False
         advertised_by_site = {}  # site name -> {doc_key} for seen-tracking reconcile
+        bid_dates = {}  # project_key -> "YYYY-MM-DD" (portal adapters only)
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
@@ -932,11 +937,16 @@ def _scan_division(division):
             # broke, and we don't want that to mark projects "no longer listed".
             if SEEN_TRACKING and site.get("active", True) and doc_links:
                 advertised_by_site[name] = {
-                    (du or f"{url}#{fn}") for _, du, fn, _, _ in doc_links
+                    (du or f"{url}#{fn}") for _, du, fn, _, _, _ in doc_links
                 }
 
+            # Bid-opening dates (portal adapters only), one per project.
+            for lbl, _, _, _, _, bd in doc_links:
+                if bd:
+                    bid_dates[f"{name} — {lbl}" if lbl else name] = bd
+
             site_total = sum(
-                1 for _, du, fn, _, _ in doc_links
+                1 for _, du, fn, _, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
             )
             site_done = 0
@@ -959,7 +969,7 @@ def _scan_division(division):
                 supabase_store.log_scan_row(division_id, *row)
                 continue
 
-            for label, doc_url, filename, content, source_url in doc_links:
+            for label, doc_url, filename, content, source_url, _bid in doc_links:
                 # For a URL-less capture, key the "already scanned" / logged
                 # URL off the site + filename so re-runs still skip it.
                 doc_key = doc_url or f"{url}#{filename}"
@@ -1040,6 +1050,9 @@ def _scan_division(division):
         if SEEN_TRACKING and advertised_by_site:
             supabase_store.update_run_progress(run_id, label="Checking listings")
             supabase_store.reconcile_seen(division_id, advertised_by_site, run_date)
+
+        if bid_dates:
+            supabase_store.save_project_bid_dates(division_id, bid_dates)
 
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,

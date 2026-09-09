@@ -71,7 +71,7 @@ VENDOR_DIR = os.path.join(_REPO_ROOT, "vendor")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
 COLUMN_HEADERS = [
-    "Date", "Site", "Document URL", "Filename",
+    "Date", "Site", "Bid Opening", "Document URL", "Filename",
     "Matched Keywords", "Match Count", "Keyword Locations", "Status", "AI Notes",
 ]
 
@@ -717,17 +717,18 @@ def _unique_sheet_name(name, used):
     return candidate
 
 
-def _write_matches_sheet(ws, rows):
+def _write_matches_sheet(ws, rows, bid_dates):
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
-    widths = [22, 24, 45, 30, 30, 14, 40, 22, 60]
+    widths = [22, 24, 16, 45, 30, 30, 14, 40, 22, 60]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
     for r in rows:
         ws.append([
-            r["run_date"], r["site"], r["document_url"], r["filename"],
+            r["run_date"], r["site"], bid_dates.get(r.get("site"), ""),
+            r["document_url"], r["filename"],
             r["matched_keywords"], r["match_count"], r["keyword_locations"],
             r["status"], r["ai_notes"],
         ])
@@ -744,6 +745,7 @@ def _build_results_workbook(division_id, division_name):
     rows = supabase_store.get_scan_results(division_id, matches_only=True)
     closed = supabase_store.closed_project_keys(division_id)
     rows = [r for r in rows if r.get("site") not in closed]
+    bid_dates = supabase_store.load_project_bid_dates(division_id)
     summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
 
     groups = {}
@@ -754,11 +756,12 @@ def _build_results_workbook(division_id, division_name):
     wb.remove(wb.active)  # drop the default empty sheet
 
     if not groups:
-        _write_matches_sheet(wb.create_sheet("Keyword Matches"), [])
+        _write_matches_sheet(wb.create_sheet("Keyword Matches"), [], bid_dates)
     else:
         used = set()
         for name in sorted(groups, key=str.lower):
-            _write_matches_sheet(wb.create_sheet(_unique_sheet_name(name, used)), groups[name])
+            _write_matches_sheet(wb.create_sheet(_unique_sheet_name(name, used)),
+                                 groups[name], bid_dates)
 
     if summaries:
         sws = wb.create_sheet("Daily Summary")

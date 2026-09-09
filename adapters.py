@@ -14,6 +14,7 @@ class to the ADAPTERS list at the bottom.
 """
 
 import re
+from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -21,6 +22,22 @@ import requests
 REQUEST_TIMEOUT = 30
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; BidScoutBot/1.0)"}
 DOC_EXTENSIONS = (".pdf", ".docx", ".doc")
+
+
+def parse_bid_date(text):
+    """'September 10, 2026' / 'Sep 10, 2026' / '9/10/2026' / '2026-09-10'
+    (asterisks and surrounding junk tolerated) -> '2026-09-10', or None."""
+    t = re.sub(r"\*+", "", text or "").strip()
+    m = re.search(r"[A-Za-z]+ +\d{1,2}, *\d{4}|\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2}", t)
+    if not m:
+        return None
+    t = m.group(0)
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(t, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 class SiteAdapter:
@@ -35,10 +52,11 @@ class SiteAdapter:
         return any(host == h or host.endswith("." + h) for h in cls.hosts)
 
     def find_documents(self, site):
-        """Return [(label, document_url, filename, project_page_url), ...] for
-        every document the portal is currently advertising. `label` is the
-        job/project name; `project_page_url` is a link to that job's page
-        (or None). `site` is the sites row (dict)."""
+        """Return [(label, document_url, filename, project_page_url, bid_date),
+        ...] for every document the portal is currently advertising. `label` is
+        the job/project name; `project_page_url` is a link to that job's page
+        (or None); `bid_date` is the bid-opening date as 'YYYY-MM-DD' (or None).
+        `site` is the sites row (dict)."""
         raise NotImplementedError
 
 
@@ -76,6 +94,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
             if not uuid:
                 continue
             label = p.get("project_name") or p.get("project_number") or str(uuid)
+            bid_date = parse_bid_date(p.get("bid_opening_date"))
             project_url = f"{self.BASE}/project/{uuid}/project-files"
             try:
                 files = self._get_json(f"/project-files/{uuid}/project-files")
@@ -88,7 +107,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
                     continue
                 url = (f"{self.BASE}/project-files/download/{uuid}/project-files"
                        f"?file_name={requests.utils.quote(fn)}")
-                out.append((label, url, fn, project_url))
+                out.append((label, url, fn, project_url, bid_date))
         return out
 
 
@@ -143,6 +162,7 @@ class ITDAdvertisedAdapter(SiteAdapter):
                 key_no = cells[1].get_text(strip=True).strip("*").strip()
                 if key_no and not self._KEY_RE.match(key_no):
                     continue
+                bid_date = parse_bid_date(cells[0].get_text(" ", strip=True))
                 anchors = tr.find_all("a", href=True)
                 for a in anchors:
                     href = urljoin(self.PAGE, a.get("href", "").strip())
@@ -154,7 +174,7 @@ class ITDAdvertisedAdapter(SiteAdapter):
                     link_text = a.get_text(" ", strip=True).strip("*").strip()
                     label = f"Key {key_no} — {link_text}" if key_no else (link_text or href)
                     fn = href.split("/")[-1].split("?")[0]
-                    out.append((label, href, fn, self.PAGE))
+                    out.append((label, href, fn, self.PAGE, bid_date))
 
         print(f"  ITD: {len(out)} document link(s) from the advertised-project tables")
         return out
@@ -187,6 +207,7 @@ class WYDOTExevisionAdapter(SiteAdapter):
     _DRIVE_ID = re.compile(r"drive\.google\.com/file/d/([A-Za-z0-9_-]+)")
     _PROJ = re.compile(r"Project Number:\s*([A-Za-z0-9\-]+)")
     _DESC = re.compile(r"Description:\s*(.+?)\s*(?:County:|Engineer:|$)", re.S)
+    _LETTING = re.compile(r"Scheduled letting for\s+([A-Za-z]+ +\d{1,2},? *\d{4})")
 
     @staticmethod
     def _drive_download_url(file_id):
@@ -223,6 +244,8 @@ class WYDOTExevisionAdapter(SiteAdapter):
             proj = m.group(1)
             desc = self._DESC.search(text)
             label = f"{proj} {desc.group(1).strip()}" if desc else proj
+            lm = self._LETTING.search(text)
+            bid_date = parse_bid_date(lm.group(1)) if lm else None
 
             for a in block.find_all("a", href=True):
                 dm = self._DRIVE_ID.search(a["href"])
@@ -237,6 +260,7 @@ class WYDOTExevisionAdapter(SiteAdapter):
                     self._drive_download_url(file_id),
                     self._filename(proj, a.get_text(" ", strip=True)),
                     self.PAGE,
+                    bid_date,
                 ))
 
         print(f"  WYDOT: {len(out)} document(s) across the advertised projects")

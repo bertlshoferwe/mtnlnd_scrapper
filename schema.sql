@@ -65,16 +65,19 @@ create table if not exists scan_results (
 --   alter table scan_results add column if not exists misses int default 0;
 create index if not exists scan_results_division_idx on scan_results(division_id, run_date desc);
 
--- User-set "done" flag per project (keyed by the scan_results.site value),
--- so finished opportunities can be checked off in the dashboard.
+-- Per-project extras (keyed by the scan_results.site value): the user-set
+-- "done" flag, and the bid-opening date pulled from the source portal.
 create table if not exists project_flags (
   division_id text not null references divisions(id) on delete cascade,
   project_key text not null,
   done boolean not null default false,
+  bid_date date,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
--- Migration for existing databases: just run the create table above.
+-- Migration for existing databases:
+--   create table above, then
+--   alter table project_flags add column if not exists bid_date date;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (
