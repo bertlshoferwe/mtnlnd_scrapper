@@ -74,7 +74,7 @@ This is the **one shared schedule for every division** — Vercel Hobby doesn't 
    - `GITHUB_REPO` — the repo name
    - `GITHUB_WORKFLOW_FILE` — `daily-scan.yml` (matches the filename in `.github/workflows/`)
    - `GITHUB_REF` — `main` (or whatever your default branch is)
-   - `DISPLAY_SCHEDULE_UTC` — optional, e.g. `08:00 UTC`, just cosmetic text shown on the dashboard
+   - `DISPLAY_SCHEDULE_UTC` — optional, e.g. `07:00 UTC`, just cosmetic text shown on the dashboard (keep it matching the workflow's `cron`)
 3. Redeploy if you added the environment variables after the first deploy (**Deployments → ⋯ → Redeploy**) so the function picks them up.
 4. Open the URL Vercel gives you (`https://<project>.vercel.app`). You should see the dashboard with one empty division ready to go, or create your first one with "+ New division".
 

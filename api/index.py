@@ -77,7 +77,7 @@ COLUMN_HEADERS = [
 # Purely informational — the actual schedule lives in
 # .github/workflows/daily-scan.yml. Shown in the dashboard so it's not a
 # mystery where/when scans run. Update both places together if you change it.
-DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC", "08:00 UTC")
+DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC", "07:00 UTC")
 
 
 def _schedule_hm(text):

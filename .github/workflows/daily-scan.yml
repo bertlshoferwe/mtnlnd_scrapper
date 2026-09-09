@@ -4,9 +4,11 @@ on:
   schedule:
     # GitHub Actions cron is UTC only, and — like Vercel Hobby — only
     # guarantees the job starts sometime within this hour, not to the exact
-    # minute. Adjust for your timezone: this example (08:00 UTC) is roughly
-    # 1am Mountain Time (MDT, UTC-7) / 2am during MST.
-    - cron: "0 8 * * *"
+    # minute. Adjust for your timezone: 07:00 UTC is 1am Mountain Daylight
+    # Time (MDT, UTC-6) / midnight Mountain Standard Time (MST, UTC-7).
+    # Keep DISPLAY_SCHEDULE_UTC (Vercel env, or its default in api/index.py)
+    # in sync so the dashboard shows the right time.
+    - cron: "0 7 * * *"
   workflow_dispatch:
     inputs:
       division_id:
