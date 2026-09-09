@@ -637,7 +637,7 @@ def save_project_bid_dates(division_id, mapping):
 
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
-                        bid_window=None, include_closed=False, page=1, page_size=15):
+                        bid_window=None, sort=None, include_closed=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -765,11 +765,21 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             except ValueError:
                 pass
 
-    projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
-    projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
-    # With a bid-date window active, order it as a worklist: soonest first.
-    if bid_window and bid_window != "none":
+    # A bid-date window with no explicit sort implies "soonest first".
+    if not sort and bid_window and bid_window != "none":
+        sort = "bid"
+
+    if sort == "bid":
         projects.sort(key=lambda p: p["bid_date"] or "9999-99-99")
+    elif sort == "keywords":
+        projects.sort(key=lambda p: (-len(p["keywords"]), p["project"].lower()))
+    elif sort == "recent":
+        projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
+    elif sort == "name":
+        projects.sort(key=lambda p: p["project"].lower())
+    else:  # "flagged" (default): matched first, then most-recently-scanned
+        projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
+        projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
 
     total = len(projects)
     page = max(1, page)

@@ -714,6 +714,21 @@
             </div>
           </div>
         </div>
+        <div class="filter-wrap">
+          <button type="button" id="sortToggleBtn" class="icon-btn bordered" aria-label="Sort projects" aria-expanded="false" onclick="toggleSortMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg></button>
+          <div class="filter-menu" id="sortMenu">
+            <div class="fm-group open">
+              <div class="fm-head" style="cursor:default;"><span class="fm-head-label">Sort by</span></div>
+              <div class="fm-body" id="sortOptions">
+                <button type="button" data-sort="flagged" onclick="pickSort(this)">Flagged first</button>
+                <button type="button" data-sort="bid" onclick="pickSort(this)">Bid date &mdash; soonest</button>
+                <button type="button" data-sort="keywords" onclick="pickSort(this)">Most keywords</button>
+                <button type="button" data-sort="recent" onclick="pickSort(this)">Recently found</button>
+                <button type="button" data-sort="name" onclick="pickSort(this)">Name (A&ndash;Z)</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
       </div>
     </div>
@@ -1072,6 +1087,8 @@ document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
   const fm = document.getElementById('filterMenu');
   if (fm && fm.classList.contains('open')) { closeFilterMenu(); return; }
+  const sm = document.getElementById('sortMenu');
+  if (sm && sm.classList.contains('open')) { closeSortMenu(); return; }
   if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
   closeModal();
 });
@@ -1238,13 +1255,16 @@ function switchDivision(id) {
   currentResultsKeyword = '';
   currentResultsBid = '';
   currentResultsClosed = false;
+  currentResultsSort = 'flagged';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
   document.querySelector('.results-toolbar').classList.remove('search-open');
   document.getElementById('searchToggleBtn').classList.remove('active');
   closeFilterMenu();
+  closeSortMenu();
   syncFilterUI();
+  syncSortUI();
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('filterSiteOptions').innerHTML = '';
@@ -1754,6 +1774,7 @@ let currentResultsSite = '';
 let currentResultsKeyword = '';
 let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
+let currentResultsSort = 'flagged'; // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
   if (!currentDivision) return;
@@ -1894,6 +1915,7 @@ async function loadProjects() {
   if (currentResultsKeyword) params.set('keyword', currentResultsKeyword);
   if (currentResultsBid) params.set('bid_window', currentResultsBid);
   if (currentResultsClosed) params.set('include_closed', '1');
+  if (currentResultsSort && currentResultsSort !== 'flagged') params.set('sort', currentResultsSort);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
@@ -2205,6 +2227,7 @@ function toggleFilterMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('filterMenu');
   if (menu.classList.contains('open')) { closeFilterMenu(); return; }
+  closeSortMenu();
   // don't leave the search field open behind the menu
   const bar = document.querySelector('.results-toolbar');
   if (bar.classList.contains('search-open')) toggleResultsSearch();
@@ -2234,7 +2257,44 @@ function closeFilterMenu() {
   document.removeEventListener('click', onFilterOutside);
 }
 function onFilterOutside(e) {
-  if (!e.target.closest('.filter-wrap')) closeFilterMenu();
+  const wrap = document.getElementById('filterMenu').closest('.filter-wrap');
+  if (!wrap.contains(e.target)) closeFilterMenu();
+}
+
+// ---- Sort menu ----
+function toggleSortMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('sortMenu');
+  if (menu.classList.contains('open')) { closeSortMenu(); return; }
+  closeFilterMenu();
+  menu.classList.add('open');
+  document.getElementById('sortToggleBtn').setAttribute('aria-expanded', 'true');
+  setTimeout(function() { document.addEventListener('click', onSortOutside); }, 0);
+}
+function closeSortMenu() {
+  document.getElementById('sortMenu').classList.remove('open');
+  document.getElementById('sortToggleBtn').setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onSortOutside);
+}
+function onSortOutside(e) {
+  const wrap = document.getElementById('sortMenu').closest('.filter-wrap');
+  if (!wrap.contains(e.target)) closeSortMenu();
+}
+function pickSort(el) {
+  const v = el.dataset.sort || 'flagged';
+  if (currentResultsSort !== v) {
+    currentResultsSort = v;
+    resultsPage = 1;
+    loadProjects();
+  }
+  syncSortUI();
+  closeSortMenu();
+}
+function syncSortUI() {
+  document.querySelectorAll('#sortOptions button').forEach(function(b) {
+    b.classList.toggle('sel', (b.dataset.sort || 'flagged') === currentResultsSort);
+  });
+  document.getElementById('sortToggleBtn').classList.toggle('active', currentResultsSort !== 'flagged');
 }
 function pickFilter(el) {
   const sel = document.getElementById('resultsStatusFilter');
@@ -2330,6 +2390,7 @@ function localizeSchedule() {
 async function init() {
   localizeSchedule();
   syncFilterUI();
+  syncSortUI();
   await loadAdapters();
   await loadDivisions();
   await loadAllForCurrentDivision();

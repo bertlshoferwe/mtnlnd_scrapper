@@ -30,7 +30,7 @@ Routes:
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
   GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
-  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, include_closed)
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
@@ -661,6 +661,7 @@ def api_get_results_grouped(division_id):
     site = (request.args.get("site") or "").strip()
     keyword = (request.args.get("keyword") or "").strip()
     bid_window = (request.args.get("bid_window") or "").strip()
+    sort = (request.args.get("sort") or "").strip()
     include_closed = request.args.get("include_closed") in ("1", "true")
     try:
         page = max(1, int(request.args.get("page", 1)))
@@ -670,8 +671,8 @@ def api_get_results_grouped(division_id):
 
     projects, total, sites = supabase_store.get_results_grouped(
         division_id, search=search or None, status=status or None, site=site or None,
-        keyword=keyword or None, bid_window=bid_window or None, include_closed=include_closed,
-        page=page, page_size=page_size,
+        keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
+        include_closed=include_closed, page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "page": page, "page_size": page_size})
