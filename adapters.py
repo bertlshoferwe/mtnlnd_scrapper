@@ -71,11 +71,16 @@ class UDOTMasterworksAdapter(SiteAdapter):
 
     key = "udot_masterworks"
     label = "UDOT Contractor Zone (advertised projects)"
-    help = "Pulls every advertised project's plan set / NTC / items PDFs straight from contractorzone.udot.utah.gov. The site URL field is ignored."
+    help = "Pulls every advertised project's plan set / NTC / items PDFs plus any addenda straight from contractorzone.udot.utah.gov. The site URL field is ignored."
     hosts = ("contractorzone.udot.utah.gov",)
 
     BASE = "https://contractorzone.udot.utah.gov"
     SECTION = "advertisements"
+    # Document tabs on a project's page, each a section of the project-files API:
+    # GET /project-files/{uuid}/{section} lists it, and the download URL uses the
+    # same section. "project-files" = the plan set / NTC / items; "addendum" =
+    # addenda issued after advertisement.
+    FILE_SECTIONS = ("project-files", "addendum")
 
     def _get_json(self, path, **params):
         r = requests.get(f"{self.BASE}{path}", params=params or None,
@@ -96,18 +101,26 @@ class UDOTMasterworksAdapter(SiteAdapter):
             label = p.get("project_name") or p.get("project_number") or str(uuid)
             bid_date = parse_bid_date(p.get("bid_opening_date"))
             project_url = f"{self.BASE}/project/{uuid}/project-files"
-            try:
-                files = self._get_json(f"/project-files/{uuid}/project-files")
-            except requests.RequestException as e:
-                print(f"  ! UDOT: couldn't list files for {label}: {e}")
-                continue
-            for f in files.get("result") or []:
-                fn = (f.get("file_name") or "").strip()
-                if not fn.lower().endswith(DOC_EXTENSIONS):
+
+            for section in self.FILE_SECTIONS:
+                try:
+                    files = self._get_json(f"/project-files/{uuid}/{section}")
+                except requests.RequestException as e:
+                    # A missing plan set means the project isn't ready; a missing
+                    # addendum section is normal — only bail on the main one.
+                    print(f"  ! UDOT: couldn't list {section} for {label}: {e}")
+                    if section == "project-files":
+                        break
                     continue
-                url = (f"{self.BASE}/project-files/download/{uuid}/project-files"
-                       f"?file_name={requests.utils.quote(fn)}")
-                out.append((label, url, fn, project_url, bid_date))
+                for f in files.get("result") or []:
+                    fn = (f.get("file_name") or "").strip()
+                    if not fn.lower().endswith(DOC_EXTENSIONS):
+                        continue
+                    url = (f"{self.BASE}/project-files/download/{uuid}/{section}"
+                           f"?file_name={requests.utils.quote(fn)}")
+                    # Same `label` for every section so addenda group under the
+                    # same project as the plan set (rather than as a new project).
+                    out.append((label, url, fn, project_url, bid_date))
         return out
 
 
