@@ -1224,6 +1224,9 @@ async function loadDivisions() {
   } else if (!currentDivision || !allDivisions.some(function(d) { return d.id === currentDivision; })) {
     currentDivision = allDivisions.length ? allDivisions[0].id : null;
   }
+  // Restore the source-site tab from the URL (validated later against the
+  // division's actual sites in renderSiteTabs).
+  currentResultsSite = urlParams.get('site') || '';
   renderDivisionTabs();
   updateUrl();
 }
@@ -1356,6 +1359,9 @@ async function deleteDivision(d) {
 function updateUrl() {
   const url = new URL(window.location);
   if (currentDivision) url.searchParams.set('division', currentDivision);
+  else url.searchParams.delete('division');
+  if (currentResultsSite) url.searchParams.set('site', currentResultsSite);
+  else url.searchParams.delete('site');
   history.replaceState(null, '', url);
 }
 
@@ -1949,7 +1955,7 @@ function renderSiteTabs(sites) {
 
   if (!sites || sites.length < 2) {
     bar.style.display = 'none';
-    if (currentResultsSite) currentResultsSite = '';
+    if (currentResultsSite) { currentResultsSite = ''; updateUrl(); }
     return;
   }
 
@@ -1960,6 +1966,7 @@ function renderSiteTabs(sites) {
 
   if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
     currentResultsSite = '';
+    updateUrl();
   }
 
   function tab(key, label, count) {
@@ -2458,6 +2465,7 @@ function pickFilter(el) {
 function pickSite(key) {
   if (currentResultsSite === key) return;
   currentResultsSite = key;
+  updateUrl();
   resultsPage = 1;
   // Mark the active tab immediately; loadProjects() re-renders the row with
   // refreshed counts when the request lands.
