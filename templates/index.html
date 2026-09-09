@@ -384,9 +384,6 @@
   .stat-tile .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .stat-tile.stat-tile-primary { background: var(--accent-soft); }
   .stat-tile.stat-tile-primary .stat-value { color: var(--accent-soft-text); }
-  .stat-keywords { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
-  .stat-keywords .sk-label { margin-right: 2px; }
-  .stat-keywords .tag { cursor: pointer; }
   .callout {
     background: var(--accent-soft); color: var(--accent-soft-text);
     border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
@@ -543,14 +540,6 @@
     .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
     .pager { justify-content: center; }
     .pager button { min-width: 36px; height: 36px; }
-
-    /* Most-flagged keywords: one swipeable line instead of wrapping */
-    .stat-keywords {
-      flex-wrap: nowrap; overflow-x: auto; margin-bottom: 10px;
-      scrollbar-width: none; -webkit-overflow-scrolling: touch;
-    }
-    .stat-keywords::-webkit-scrollbar { display: none; }
-    .stat-keywords > * { flex-shrink: 0; }
   }
 </style>
 </head>
@@ -627,6 +616,10 @@
               <div class="fm-label">Site</div>
               <div id="filterSiteOptions"></div>
             </div>
+            <div class="fm-sep" id="filterKeywordGroup" hidden>
+              <div class="fm-label">Keyword</div>
+              <div id="filterKeywordOptions"></div>
+            </div>
           </div>
         </div>
         <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
@@ -645,7 +638,6 @@
         <div class="stat-sub" id="statDocsSub"></div>
       </div>
     </div>
-    <div class="stat-keywords" id="statKeywords" style="display:none;"></div>
 
     <div id="summaryCallout" class="callout" style="display:none;"></div>
 
@@ -1147,6 +1139,7 @@ function switchDivision(id) {
   resultsTotal = 0;
   projectsData = [];
   currentResultsSite = '';
+  currentResultsKeyword = '';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
@@ -1158,7 +1151,8 @@ function switchDivision(id) {
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('filterSiteOptions').innerHTML = '';
   document.getElementById('filterSiteGroup').hidden = true;
-  document.getElementById('statKeywords').style.display = 'none';
+  document.getElementById('filterKeywordOptions').innerHTML = '';
+  document.getElementById('filterKeywordGroup').hidden = true;
   document.getElementById('statsRow').style.display = 'none';
   renderDivisionTabs();
   updateUrl();
@@ -1658,6 +1652,7 @@ const PROJECTS_PER_PAGE = 15;
 let projectsData = [];
 let resultsSearchDebounce = null;
 let currentResultsSite = '';
+let currentResultsKeyword = '';
 
 async function loadResultsInfo() {
   if (!currentDivision) return;
@@ -1669,9 +1664,10 @@ async function loadResultsInfo() {
   if (!info.exists) {
     btn.style.display = 'none';
     statsRow.style.display = 'none';
-    document.getElementById('statKeywords').style.display = 'none';
     document.getElementById('filterSiteOptions').innerHTML = '';
     document.getElementById('filterSiteGroup').hidden = true;
+    document.getElementById('filterKeywordOptions').innerHTML = '';
+    document.getElementById('filterKeywordGroup').hidden = true;
     callout.style.display = 'none';
     document.getElementById('projectList').innerHTML = '';
     const emptyEl = document.getElementById('resultsEmpty');
@@ -1695,25 +1691,7 @@ async function loadResultsInfo() {
     (st.documents_matched || 0) + ' with keyword hits';
   statsRow.style.display = 'flex';
 
-  const skEl = document.getElementById('statKeywords');
-  skEl.innerHTML = '';
-  if ((st.top_keywords || []).length) {
-    const lbl = document.createElement('span');
-    lbl.className = 'sk-label';
-    lbl.textContent = 'Most-flagged:';
-    skEl.appendChild(lbl);
-    st.top_keywords.forEach(function(kv) {
-      const t = document.createElement('span');
-      t.className = 'tag';
-      t.textContent = kv[0] + ' · ' + kv[1];
-      t.title = 'Filter results by "' + kv[0] + '"';
-      t.onclick = function() { setResultsSearch(kv[0]); };
-      skEl.appendChild(t);
-    });
-    skEl.style.display = 'flex';
-  } else {
-    skEl.style.display = 'none';
-  }
+  renderKeywordFilterOptions(st.top_keywords || []);
 
   if (info.latest_summary) {
     callout.textContent = info.latest_summary;
@@ -1759,6 +1737,47 @@ function renderSiteFilterOptions(sites) {
   syncFilterUI();
 }
 
+// [[keyword, projectCount], …] from the results-info stats
+function renderKeywordFilterOptions(pairs) {
+  const menuOpts = document.getElementById('filterKeywordOptions');
+  const menuGroup = document.getElementById('filterKeywordGroup');
+  menuOpts.innerHTML = '';
+
+  if (!pairs || !pairs.length) {
+    menuGroup.hidden = true;
+    currentResultsKeyword = '';
+    syncFilterUI();
+    return;
+  }
+  menuGroup.hidden = false;
+
+  if (currentResultsKeyword && !pairs.some(function(kv) { return kv[0] === currentResultsKeyword; })) {
+    currentResultsKeyword = '';
+  }
+
+  function opt(kw, label, count) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.kw = kw;
+    b.innerHTML = escapeHtml(label) + (count == null ? '' : '<span class="rtab-count">' + count + '</span>');
+    b.onclick = function() { pickKeyword(kw); };
+    menuOpts.appendChild(b);
+  }
+  opt('', 'Any keyword', null);
+  pairs.forEach(function(kv) { opt(kv[0], kv[0], kv[1]); });
+  syncFilterUI();
+}
+
+function pickKeyword(kw) {
+  if (currentResultsKeyword !== kw) {
+    currentResultsKeyword = kw;
+    resultsPage = 1;
+    loadProjects();
+  }
+  syncFilterUI();
+  closeFilterMenu();
+}
+
 async function loadProjects() {
   if (!currentDivision) return;
   const search = document.getElementById('resultsSearch').value.trim();
@@ -1767,6 +1786,7 @@ async function loadProjects() {
   if (search) params.set('search', search);
   if (status) params.set('status', status);
   if (currentResultsSite) params.set('site', currentResultsSite);
+  if (currentResultsKeyword) params.set('keyword', currentResultsKeyword);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
@@ -1777,7 +1797,7 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || (status && status !== 'Matched')) {
+  if (search || currentResultsSite || currentResultsKeyword || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
@@ -2003,19 +2023,6 @@ function toggleResultsSearch() {
   }
 }
 
-// Used by the "most-flagged" chips — sets the query and makes it visible.
-function setResultsSearch(value) {
-  const bar = document.querySelector('.results-toolbar');
-  const btn = document.getElementById('searchToggleBtn');
-  document.getElementById('resultsSearch').value = value;
-  if (!bar.classList.contains('search-open')) {
-    bar.classList.add('search-open');
-    btn.classList.add('active');
-    btn.setAttribute('aria-expanded', 'true');
-  }
-  resultsPage = 1;
-  loadProjects();
-}
 document.getElementById('resultsStatusFilter').addEventListener('change', function() {
   resultsPage = 1;
   loadProjects();
@@ -2063,12 +2070,16 @@ function pickSite(key) {
 function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
-  if (btn) btn.classList.toggle('active', status !== 'Matched' || !!currentResultsSite);
+  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword;
+  if (btn) btn.classList.toggle('active', anyFilter);
   document.querySelectorAll('#filterMenu > button[data-val]').forEach(function(b) {
     b.classList.toggle('sel', b.dataset.val === status);
   });
   document.querySelectorAll('#filterSiteOptions button').forEach(function(b) {
     b.classList.toggle('sel', (b.dataset.site || '') === currentResultsSite);
+  });
+  document.querySelectorAll('#filterKeywordOptions button').forEach(function(b) {
+    b.classList.toggle('sel', (b.dataset.kw || '') === currentResultsKeyword);
   });
 }
 

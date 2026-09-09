@@ -486,7 +486,7 @@ def _split_site(site):
     return "", (site or "").strip()
 
 
-def get_results_grouped(division_id, search=None, status=None, site=None, page=1, page_size=15):
+def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -567,6 +567,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, page=1
 
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
+    if keyword:
+        projects = [p for p in projects if keyword in p["keywords"]]
     if status:
         projects = [p for p in projects if p["status"].startswith(status)]
     if search:
@@ -615,8 +617,10 @@ def get_stats(division_id):
                 if k:
                     kw_projects.setdefault(k, set()).add(site)
 
+    # Every keyword that flagged at least one project, most-hit first — the
+    # dashboard's filter menu lists them all (it scrolls).
     top = sorted(((k, len(v)) for k, v in kw_projects.items()),
-                 key=lambda kv: (-kv[1], kv[0].lower()))[:6]
+                 key=lambda kv: (-kv[1], kv[0].lower()))
     return {
         "projects_scanned": len(projects_all),
         "projects_flagged": len(projects_flagged),
