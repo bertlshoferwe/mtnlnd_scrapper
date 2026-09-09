@@ -2480,5 +2480,13 @@ init();
   window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
 </script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
+
+<!-- Vercel Web Analytics. The script is served by Vercel at
+     /_vercel/insights/script.js once Web Analytics is enabled for this
+     project in the Vercel dashboard; it's a no-op elsewhere. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
