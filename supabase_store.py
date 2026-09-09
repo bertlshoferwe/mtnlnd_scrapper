@@ -636,45 +636,6 @@ def load_docs_ack(division_id):
             for r in res.data if r.get("docs_ack_through")}
 
 
-def detect_new_doc_projects(division_id, run_date, candidate_keys):
-    """Read-only: of candidate_keys (projects that got a file logged this run),
-    which ones should surface a "new document" flag — i.e. they were first seen
-    on an earlier run, have matched keywords, and the new file post-dates the
-    user's acknowledgement watermark. Returns [(project_key, was_marked_done)]
-    for the run summary. Never raises."""
-    keys = {k for k in (candidate_keys or []) if k}
-    if not keys:
-        return []
-    client = get_client()
-    try:
-        rows = (
-            client.table("scan_results").select("site,status,run_date")
-            .eq("division_id", division_id).execute()
-        ).data
-    except Exception:
-        return []
-
-    first_seen, ever_matched = {}, {}
-    for r in rows:
-        s = r.get("site")
-        if not s:
-            continue
-        rd = r.get("run_date") or ""
-        if s not in first_seen or rd < first_seen[s]:
-            first_seen[s] = rd
-        if (r.get("status") or "").startswith("Matched"):
-            ever_matched[s] = True
-
-    ack = load_docs_ack(division_id)
-    done = load_done_projects(division_id)
-    out = []
-    for k in keys:
-        if (k in first_seen and first_seen[k] < run_date and ever_matched.get(k)
-                and (not ack.get(k) or run_date > ack[k])):
-            out.append((k, k in done))
-    return out
-
-
 def load_project_bid_dates(division_id):
     """{project_key: 'YYYY-MM-DD'} for projects with a known bid-opening date.
     Empty if the column/table isn't there yet."""

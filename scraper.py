@@ -848,25 +848,6 @@ def generate_daily_summary(client, rows):
     return text.strip() if text else ""
 
 
-def _prepend_update_note(summary, new_doc_projects):
-    """Lead the daily summary with a plain line naming the previously-seen
-    projects that just gained a document (an addendum, a revised bid form).
-    new_doc_projects is [(project_key, was_marked_done)]. Returns summary
-    unchanged when there are none."""
-    if not new_doc_projects:
-        return summary
-
-    def name(key, was_done):
-        proj = key.split(" — ", 1)[1] if " — " in key else key
-        return proj + (" (was marked done)" if was_done else "")
-
-    names = ", ".join(sorted(name(k, d) for k, d in new_doc_projects))
-    n = len(new_doc_projects)
-    note = (f"\U0001f4c4 New document{'s' if n != 1 else ''} added to "
-            f"{n} previously-seen project{'s' if n != 1 else ''}: {names}.")
-    return f"{note}\n\n{summary}".strip() if summary else note
-
-
 # ---------------------------------------------------------------------------
 # Local Excel file
 # ---------------------------------------------------------------------------
@@ -1073,20 +1054,11 @@ def _scan_division(division):
         if bid_dates:
             supabase_store.save_project_bid_dates(division_id, bid_dates)
 
-        # Which already-tracked projects just gained a document (e.g. an
-        # addendum)? The dashboard derives the "new document" flag itself; this
-        # is only for the summary line.
-        candidate_keys = {r[1] for r in rows if r[3]}
-        new_doc_projects = supabase_store.detect_new_doc_projects(
-            division_id, run_date, candidate_keys
-        )
-
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
             done=0, total=0, overall=overall_done,
         )
         summary = generate_daily_summary(ai_client, rows)
-        summary = _prepend_update_note(summary, new_doc_projects)
         supabase_store.log_summary(division_id, run_date, summary)
 
         supabase_store.finish_run(run_id, "partial" if stopped_early else "success")
