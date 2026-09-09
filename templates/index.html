@@ -385,6 +385,7 @@
   }
   .modal-header h2 { margin: 0; font-size: 16px; font-weight: 650; }
   .modal-header .desc { margin: 4px 0 0; }
+  #projectModalMeta:empty { display: none; }
   .modal-close {
     background: transparent; border: none; font-size: 22px; line-height: 1;
     color: var(--muted); cursor: pointer; padding: 0 2px; flex-shrink: 0;
@@ -837,7 +838,8 @@
     <div class="modal-header">
       <div>
         <h2 id="projectModalTitle"></h2>
-        <p class="desc" id="projectModalMeta"></p>
+        <p class="desc" id="projectModalMeta" style="margin-bottom:2px;"></p>
+        <p class="desc" id="projectModalStats" style="margin:0;"></p>
       </div>
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
@@ -2032,16 +2034,18 @@ function openProjectModal(i) {
   const meta = [];
   if (p.source_prefix) meta.push(p.source_prefix);
   if (p.bid_date) meta.push('bids open ' + formatBidDate(p.bid_date, true));
-  meta.push(p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned');
-  if (p.status === 'Matched') {
-    meta.push(p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords') + ' found');
-  }
   if (p.closed) {
     let m = 'no longer listed on the source site';
     if (p.last_seen_at) m += ' — last seen ' + new Date(p.last_seen_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
     meta.push(m);
   }
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
+
+  const stats = [p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned'];
+  if (p.status === 'Matched') {
+    stats.push(p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords') + ' found');
+  }
+  document.getElementById('projectModalStats').textContent = stats.join('  ·  ');
 
   const link = document.getElementById('projectModalLink');
   if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-flex'; }
