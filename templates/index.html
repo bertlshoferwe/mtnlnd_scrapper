@@ -465,13 +465,13 @@
   .fm-body button:hover { background: var(--bg); }
   .fm-body button.sel { color: var(--accent); font-weight: 650; }
   .fm-body button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
-  .fm-toggle {
+  .fm-body button.fm-toggle {
     display: flex; align-items: center; gap: 9px; width: 100%;
     background: transparent; border: none; border-top: 1px solid var(--border);
-    cursor: pointer; font-family: inherit;
-    padding: 10px; font-size: 13px; font-weight: 500; color: var(--text);
+    cursor: pointer; font-family: inherit; text-align: left; border-radius: 0;
+    margin-top: 4px; padding: 10px; font-size: 13px; font-weight: 500; color: var(--text);
   }
-  .fm-toggle:hover { background: var(--bg); }
+  .fm-body button.fm-toggle:hover { background: var(--bg); }
   .fm-check {
     width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px;
     border: 1px solid var(--border-strong); color: transparent;
@@ -479,6 +479,8 @@
   }
   .fm-check svg { width: 11px; height: 11px; }
   .fm-toggle.on .fm-check { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+  .fm-toggle .fm-check svg { display: block; }
+  .fm-toggle:not(.on) .fm-check svg { visibility: hidden; }
   .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .pager button {
     min-width: 32px; height: 32px; padding: 0 8px;
@@ -680,6 +682,10 @@
                 <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
                 <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
                 <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
+                <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
+                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  Show closed projects
+                </button>
               </div>
             </div>
             <div class="fm-group" id="filterSiteGroup" hidden>
@@ -694,10 +700,18 @@
               </button>
               <div class="fm-body" id="filterKeywordOptions"></div>
             </div>
-            <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
-              <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-              Show closed projects
-            </button>
+            <div class="fm-group" id="filterBidGroup">
+              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
+                <span class="fm-head-label">Bid date</span><span class="fm-head-val" id="fmBidVal"></span><span class="fm-chev">&#9656;</span>
+              </button>
+              <div class="fm-body">
+                <button type="button" data-bid="" onclick="pickBid(this)">Any bid date</button>
+                <button type="button" data-bid="7" onclick="pickBid(this)">Opening within 7 days</button>
+                <button type="button" data-bid="30" onclick="pickBid(this)">Opening within 30 days</button>
+                <button type="button" data-bid="past" onclick="pickBid(this)">Already opened</button>
+                <button type="button" data-bid="none" onclick="pickBid(this)">No bid date</button>
+              </div>
+            </div>
           </div>
         </div>
         <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
@@ -1222,6 +1236,7 @@ function switchDivision(id) {
   projectsData = [];
   currentResultsSite = '';
   currentResultsKeyword = '';
+  currentResultsBid = '';
   currentResultsClosed = false;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
@@ -1737,6 +1752,7 @@ let projectsData = [];
 let resultsSearchDebounce = null;
 let currentResultsSite = '';
 let currentResultsKeyword = '';
+let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
 
 async function loadResultsInfo() {
@@ -1876,6 +1892,7 @@ async function loadProjects() {
   if (status) params.set('status', status);
   if (currentResultsSite) params.set('site', currentResultsSite);
   if (currentResultsKeyword) params.set('keyword', currentResultsKeyword);
+  if (currentResultsBid) params.set('bid_window', currentResultsBid);
   if (currentResultsClosed) params.set('include_closed', '1');
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
@@ -1887,7 +1904,7 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || currentResultsClosed || (status && status !== 'Matched')) {
+  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
@@ -2193,9 +2210,11 @@ function toggleFilterMenu(e) {
   if (bar.classList.contains('search-open')) toggleResultsSearch();
   // Each section starts collapsed unless it holds a non-default choice.
   document.getElementById('filterShowGroup').classList.toggle(
-    'open', document.getElementById('resultsStatusFilter').value !== 'Matched');
+    'open',
+    document.getElementById('resultsStatusFilter').value !== 'Matched' || currentResultsClosed);
   document.getElementById('filterSiteGroup').classList.toggle('open', !!currentResultsSite);
   document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
+  document.getElementById('filterBidGroup').classList.toggle('open', !!currentResultsBid);
   menu.classList.add('open');
   document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'true');
   setTimeout(function() { document.addEventListener('click', onFilterOutside); }, 0);
@@ -2242,10 +2261,21 @@ function toggleClosedFilter() {
   syncFilterUI();
   loadProjects();
 }
+function pickBid(el) {
+  const v = el.dataset.bid || '';
+  if (currentResultsBid !== v) {
+    currentResultsBid = v;
+    resultsPage = 1;
+    loadProjects();
+  }
+  syncFilterUI();
+  closeFilterMenu();
+}
 function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
-  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword || currentResultsClosed;
+  const anyFilter = status !== 'Matched' || !!currentResultsSite || !!currentResultsKeyword
+    || !!currentResultsBid || currentResultsClosed;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
 
@@ -2261,11 +2291,18 @@ function syncFilterUI() {
   document.querySelectorAll('#filterKeywordOptions button').forEach(function(b) {
     b.classList.toggle('sel', (b.dataset.kw || '') === currentResultsKeyword);
   });
+  let bidLabel = '';
+  document.querySelectorAll('#filterBidGroup .fm-body button[data-bid]').forEach(function(b) {
+    const on = (b.dataset.bid || '') === currentResultsBid;
+    b.classList.toggle('sel', on);
+    if (on && currentResultsBid) bidLabel = b.textContent;
+  });
 
   // Collapsed-section headers echo the current choice.
   document.getElementById('fmShowVal').textContent = status === 'Matched' ? '' : showLabel;
   document.getElementById('fmSiteVal').textContent = currentResultsSite || '';
   document.getElementById('fmKeywordVal').textContent = currentResultsKeyword || '';
+  document.getElementById('fmBidVal').textContent = bidLabel;
 }
 
 async function loadAllForCurrentDivision() {

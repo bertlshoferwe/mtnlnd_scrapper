@@ -13,7 +13,7 @@ anon key ever being used by mistake.
 
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from supabase import create_client
 
 _client = None
@@ -637,7 +637,7 @@ def save_project_bid_dates(division_id, mapping):
 
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
-                        include_closed=False, page=1, page_size=15):
+                        bid_window=None, include_closed=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -751,8 +751,25 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             or any(s in k.lower() for k in p["keywords"])
         ]
 
+    if bid_window:
+        today = date.today().isoformat()
+        if bid_window == "none":
+            projects = [p for p in projects if not p["bid_date"]]
+        elif bid_window == "past":
+            projects = [p for p in projects if p["bid_date"] and p["bid_date"] < today]
+        else:
+            try:
+                end = (date.today() + timedelta(days=int(bid_window))).isoformat()
+                projects = [p for p in projects
+                            if p["bid_date"] and today <= p["bid_date"] <= end]
+            except ValueError:
+                pass
+
     projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     projects.sort(key=lambda p: 0 if p["status"] == "Matched" else 1)
+    # With a bid-date window active, order it as a worklist: soonest first.
+    if bid_window and bid_window != "none":
+        projects.sort(key=lambda p: p["bid_date"] or "9999-99-99")
 
     total = len(projects)
     page = max(1, page)
