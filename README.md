@@ -53,7 +53,7 @@ You only need to add the secret for the provider you're actually using — the w
 
 ### 4. Set your schedule
 
-Open `.github/workflows/daily-scan.yml` and edit the `cron` line. **GitHub Actions cron is UTC only** and, like Vercel Hobby, only guarantees the job starts sometime within that hour, not to the exact minute. Convert your local time to UTC — e.g., 1am Mountain Time (MDT, UTC-6) is `0 7 * * *`; during MST (UTC-7) it's `0 8 * * *`. Commit and push the change.
+Open `.github/workflows/daily-scan.yml` and edit the `cron` line. **GitHub Actions cron is UTC only** and only guarantees the job starts sometime *after* the given time — scheduled runs on the top of a popular hour (`:00`) queue during peak load and often fire hours late, so use an odd minute and start ~20 min early. Convert your local time to UTC — e.g. for ~1am Mountain Time (MDT, UTC-6) use `41 6 * * *`; during MST (UTC-7) use `41 7 * * *`. Commit and push the change.
 
 This is the **one shared schedule for every division** — Vercel Hobby doesn't support per-division dynamic scheduling (that would need a persistent process, which is exactly what Vercel doesn't offer), so all divisions scan together in one workflow run, looping through them in sequence.
 
