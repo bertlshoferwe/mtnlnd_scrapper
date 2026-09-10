@@ -2,13 +2,15 @@ name: Daily Document Scan
 
 on:
   schedule:
-    # GitHub Actions cron is UTC only, and — like Vercel Hobby — only
-    # guarantees the job starts sometime within this hour, not to the exact
-    # minute. Adjust for your timezone: 07:00 UTC is 1am Mountain Daylight
-    # Time (MDT, UTC-6) / midnight Mountain Standard Time (MST, UTC-7).
+    # GitHub Actions cron is UTC only, and only guarantees the job starts
+    # sometime *after* this time — scheduled runs on the top of a popular
+    # hour (":00") sit in a queue during peak load and routinely fire hours
+    # late. Using an odd minute and starting ~20 min early keeps the actual
+    # run near 1am. 06:41 UTC is 00:41 Mountain Daylight Time (MDT, UTC-6) /
+    # 23:41 the previous day Mountain Standard Time (MST, UTC-7).
     # Keep DISPLAY_SCHEDULE_UTC (Vercel env, or its default in api/index.py)
     # in sync so the dashboard shows the right time.
-    - cron: "0 7 * * *"
+    - cron: "41 6 * * *"
   workflow_dispatch:
     inputs:
       division_id:
