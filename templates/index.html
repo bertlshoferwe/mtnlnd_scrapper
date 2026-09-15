@@ -410,11 +410,6 @@
   .stat-tile .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .stat-tile.stat-tile-primary { background: var(--accent-soft); }
   .stat-tile.stat-tile-primary .stat-value { color: var(--accent-soft-text); }
-  .callout {
-    background: var(--accent-soft); color: var(--accent-soft-text);
-    border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
-    font-size: 13px; line-height: 1.5; white-space: pre-line;
-  }
   .site-tabs {
     display: flex; gap: 2px; margin-bottom: 12px;
     border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none;
@@ -810,8 +805,6 @@
     </div>
 
     <div class="site-tabs" id="siteTabs" style="display:none;" role="tablist" aria-label="Filter by source site"></div>
-
-    <div id="summaryCallout" class="callout" style="display:none;"></div>
 
     <div class="row results-toolbar" style="margin-bottom: 6px;">
       <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" style="flex:1;">
@@ -1904,7 +1897,6 @@ async function loadResultsInfo() {
   const info = await api('/api/' + currentDivision + '/results-info');
   const btn = document.getElementById('downloadBtn');
   const statsRow = document.getElementById('statsRow');
-  const callout = document.getElementById('summaryCallout');
 
   if (!info.exists) {
     btn.style.display = 'none';
@@ -1912,7 +1904,6 @@ async function loadResultsInfo() {
     document.getElementById('siteTabs').style.display = 'none';
     document.getElementById('filterKeywordOptions').innerHTML = '';
     document.getElementById('filterKeywordGroup').hidden = true;
-    callout.style.display = 'none';
     document.getElementById('projectList').innerHTML = '';
     const emptyEl = document.getElementById('resultsEmpty');
     emptyEl.textContent = 'No scans yet — run a scan to see projects here.';
@@ -1936,17 +1927,6 @@ async function loadResultsInfo() {
   statsRow.style.display = 'flex';
 
   renderKeywordFilterOptions(st.top_keywords || []);
-
-  // Strip a legacy "📄 New documents added to N previously-seen projects: …"
-  // prefix that older scans baked into the stored summary.
-  const summaryText = (info.latest_summary || '')
-    .replace(/^\s*📄[^\n]*\n*/, '').trim();
-  if (summaryText) {
-    callout.textContent = summaryText;
-    callout.style.display = 'block';
-  } else {
-    callout.style.display = 'none';
-  }
 
   await loadProjects();
 }

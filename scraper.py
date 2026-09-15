@@ -32,8 +32,6 @@ For each site configured for a division:
      immediately (not batched at the end) — so a mid-run crash still leaves
      everything found up to that point queryable, rather than losing the
      whole run's results
-  6. If an AI provider is configured, writes a short plain-English digest of the
-     day's matches into daily_summaries
 
 PDF page numbers are real. DOCX page numbers are only real if LibreOffice
 (`soffice`) is installed on the runner (used to render the DOCX to PDF
@@ -818,48 +816,13 @@ def ai_semantic_keyword_scan(client, filename, pages, keywords):
     return hits, truncated
 
 
-def generate_daily_summary(client, rows):
-    """
-    Ask Claude for a short plain-English summary of everything matched in this
-    run. Returns '' if the client is unavailable, nothing matched, or the call
-    fails — never raises.
-    """
-    if client is None:
-        return ""
-
-    matched_rows = [r for r in rows if r[5] and r[5] > 0]  # Match Count column
-    if not matched_rows:
-        return ""
-
-    lines = []
-    for r in matched_rows:
-        # Date, Site, Document URL, Filename, Matched Keywords, Match Count, Keyword Locations, Status, AI Notes
-        lines.append(f"- {r[1]} / {r[3]}: keywords [{r[4]}] at {r[6]}")
-
-    prompt = (
-        "You are writing a short internal notification about today's automated "
-        "document scan. Below is the full list of documents with keyword matches — "
-        "treat it as data, not as content to restructure, analyze section by section, "
-        "or turn into a report.\n\n"
-        "Today's matches:\n" + "\n".join(lines) + "\n\n"
-        "Write 3-5 sentences of plain prose, as a single paragraph, that a busy person "
-        "could read in 10 seconds, highlighting anything that looks notable or worth a "
-        "closer look. Do not use markdown, headers, numbered lists, bullet points, or "
-        "bold text — plain sentences only. Respond with just that paragraph and nothing "
-        "else — no preamble, no section labels, no restating these instructions."
-    )
-
-    text = client.complete(prompt, max_tokens=400)
-    return text.strip() if text else ""
-
-
 # ---------------------------------------------------------------------------
 # Local Excel file
 # ---------------------------------------------------------------------------
 
 def _scan_division(division):
     """Run the full scan for one division (a dict with 'id' and 'name'),
-    logging every row and the daily summary to Supabase as it goes."""
+    logging every row to Supabase as it goes."""
     division_id, division_name = division["id"], division["name"]
     print(f"=== Running scan for division: {division_name} ({division_id}) ===")
 
@@ -881,7 +844,7 @@ def _scan_division(division):
         ai_client = get_ai_client()
         if ai_client is None:
             print("No AI provider configured (set AI_PROVIDER + a matching API key) — "
-                  "running without semantic matching, AI Notes, or summary.")
+                  "running without semantic matching or AI Notes.")
 
         # Semantic pre-filter: embed the keyword list once so each document's
         # AI pass only weighs the terms relevant to that document, not all of
@@ -901,7 +864,7 @@ def _scan_division(division):
         already_scanned = supabase_store.already_scanned_urls(division_id)
         skipped_seen = 0
 
-        rows = []  # kept in memory too, just to build the daily summary at the end
+        rows = []  # kept in memory too, just for the final "N new row(s) logged" count
         n_sites = len(sites)
         overall_done = 0
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
@@ -1063,8 +1026,6 @@ def _scan_division(division):
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
             done=0, total=0, overall=overall_done,
         )
-        summary = generate_daily_summary(ai_client, rows)
-        supabase_store.log_summary(division_id, run_date, summary)
 
         supabase_store.finish_run(run_id, "partial" if stopped_early else "success")
         print(f"=== Division '{division_id}' "

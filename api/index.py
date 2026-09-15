@@ -29,7 +29,7 @@ Routes:
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
-  GET  /api/<division_id>/results-info       stats + latest run_date + latest summary, for the Results card
+  GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
@@ -622,7 +622,6 @@ def api_results_info(division_id):
         "exists": True,
         "latest_run_date": rows[0]["run_date"],
         "stats": stats,
-        "latest_summary": supabase_store.get_latest_summary_text(division_id),
     })
 
 
@@ -751,7 +750,6 @@ def _build_results_workbook(division_id, division_name):
     closed = supabase_store.closed_project_keys(division_id)
     rows = [r for r in rows if r.get("site") not in closed]
     bid_dates = supabase_store.load_project_bid_dates(division_id)
-    summaries = {s["run_date"]: s["summary"] for s in supabase_store.get_summaries(division_id)}
 
     groups = {}
     for r in rows:
@@ -767,19 +765,6 @@ def _build_results_workbook(division_id, division_name):
         for name in sorted(groups, key=str.lower):
             _write_matches_sheet(wb.create_sheet(_unique_sheet_name(name, used)),
                                  groups[name], bid_dates)
-
-    if summaries:
-        sws = wb.create_sheet("Daily Summary")
-        sws.append(["Date", "Summary"])
-        for cell in sws[1]:
-            cell.font = Font(name="Arial", bold=True)
-        sws.column_dimensions["A"].width = 22
-        sws.column_dimensions["B"].width = 100
-        for run_date in sorted(summaries.keys(), reverse=True):
-            sws.append([run_date, summaries[run_date]])
-            for cell in sws[sws.max_row]:
-                cell.font = Font(name="Arial")
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -1,7 +1,7 @@
 """
 Provider-agnostic AI layer. scraper.py's AI-dependent functions
-(ai_identify_job_links, ai_semantic_keyword_scan, generate_daily_summary)
-call client.complete(prompt, max_tokens) without caring which provider is
+(ai_identify_job_links, ai_semantic_keyword_scan) call
+client.complete(prompt, max_tokens) without caring which provider is
 behind it — this module is the only place that knows the difference between
 Anthropic's and Gemini's SDKs/APIs.
 

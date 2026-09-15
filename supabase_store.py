@@ -781,9 +781,14 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects = [p for p in projects if not p["closed"]]
 
     # Per-site tab list, computed over every (visible) project, before filters.
+    # Every project has a source_prefix in practice (every adapter sets one),
+    # so a project without one just isn't offered its own tab — it still
+    # shows up under "All sites".
     site_tabs = {}
     for p in projects:
-        name = p["source_prefix"] or "Other"
+        name = p["source_prefix"]
+        if not name:
+            continue
         t = site_tabs.setdefault(name, {"name": name, "count": 0, "flagged": 0})
         t["count"] += 1
         if p["status"] == "Matched":
@@ -889,24 +894,3 @@ def get_stats(division_id):
         "documents_matched": docs_matched,
         "top_keywords": top,
     }
-
-
-def get_latest_summary_text(division_id):
-    summaries = get_summaries(division_id, limit=1)
-    return summaries[0]["summary"] if summaries else None
-
-
-def log_summary(division_id, run_date, summary_text):
-    if not summary_text:
-        return
-    get_client().table("daily_summaries").insert({
-        "division_id": division_id, "run_date": run_date, "summary": summary_text,
-    }).execute()
-
-
-def get_summaries(division_id, limit=200):
-    res = (
-        get_client().table("daily_summaries").select("*")
-        .eq("division_id", division_id).order("run_date", desc=True).limit(limit).execute()
-    )
-    return res.data
