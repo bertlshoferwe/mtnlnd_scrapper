@@ -526,6 +526,7 @@
   .pill.fail { background: var(--danger-soft); color: var(--danger); }
   .pill.closed { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); font-weight: 600; }
   .pill.updated { background: var(--warning-soft); border: 1px solid var(--warning); color: var(--warning); }
+  .pill.firstscan { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
   .project-list li.p-updated { box-shadow: inset 3px 0 0 var(--warning); }
   .project-list li.p-updated.p-done .p-name,
   .project-list li.p-updated.p-done .p-count,
@@ -1883,6 +1884,14 @@ function formatBytes(bytes) {
 let resultsPage = 1;
 let resultsTotal = 0;
 const PROJECTS_PER_PAGE = 15;
+const FIRST_SCAN_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+// True for a matched project's first 48 hours after we ever saw it.
+function isFirstScan(p) {
+  if (p.status !== 'Matched' || !p.first_seen) return false;
+  const seen = new Date(p.first_seen).getTime();
+  return !isNaN(seen) && (Date.now() - seen) < FIRST_SCAN_WINDOW_MS;
+}
 let projectsData = [];
 let resultsSearchDebounce = null;
 let currentResultsSite = '';
@@ -2092,6 +2101,13 @@ async function loadProjects() {
 
     li.appendChild(name);
     li.appendChild(count);
+    if (isFirstScan(p)) {
+      const fs = document.createElement('span');
+      fs.className = 'pill firstscan';
+      fs.textContent = 'First scan';
+      fs.title = 'First time this project has been seen — shows for 48 hours';
+      li.appendChild(fs);
+    }
     if (p.updated) {
       const u = document.createElement('span');
       u.className = 'pill updated';

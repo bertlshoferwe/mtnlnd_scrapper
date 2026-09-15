@@ -775,6 +775,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "reopened": is_updated and (site_key in done_keys),
             "closed": closed, "last_seen_at": last_seen,
             "bid_date": bid_dates.get(site_key),
+            "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
 
