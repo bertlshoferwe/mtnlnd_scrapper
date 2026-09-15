@@ -745,21 +745,19 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         else:
             proj_status = "No match"
 
-        # "New document" flag: a file counts as new when it post-dates both the
-        # project's first run_date (so a brand-new project isn't "updated") and
-        # the user's acknowledgement watermark (set by "Mark done"). Only matched
-        # projects surface it. A "Download failed" file is excluded — a failed
-        # download was never actually found/read, so it shouldn't read as new
-        # (also guards against pre-existing duplicate failure rows logged
-        # before already_scanned_urls stopped retrying them).
+        # "New document" flag: a file counts as new when it itself matched a
+        # keyword (a file with no match, or one that failed to download,
+        # wasn't actually a find — it shouldn't raise the flag even if some
+        # other file in the project did) and post-dates both the project's
+        # first run_date (so a brand-new project isn't "updated") and the
+        # user's acknowledgement watermark (set by "Mark done").
         real_runs = [f["run_date"] for f in real_files if f["run_date"]]
         first_run = min(real_runs) if real_runs else ""
         ack = docs_ack.get(site_key) or ""
         new_file_count = 0
         for f in g["files"]:
             f["is_new"] = bool(
-                f["filename"] and f["run_date"] and matched
-                and f["status"] != "Download failed"
+                f["filename"] and f["run_date"] and f["status"].startswith("Matched")
                 and f["run_date"] > first_run and f["run_date"] > ack
             )
             if f["is_new"]:
