@@ -609,6 +609,8 @@
   .kw-table th:first-child, .kw-table .kt-term { width: 1%; white-space: nowrap; }
   .kw-table .kt-term { font-weight: 600; padding-right: 20px; }
   .kw-table .kt-pages { color: var(--muted); }
+  .kw-table .kt-page-link { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .kw-table .kt-page-link:hover { text-decoration: underline; }
 
   @media (max-width: 640px) {
     .masthead-inner { padding: 16px 14px; }
@@ -1119,7 +1121,7 @@ function loadPdfLib() {
   return pdfLibPromise;
 }
 
-function openPdfPreview(url, filename) {
+function openPdfPreview(url, filename, page) {
   const src = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(url);
   document.getElementById('pdfModalTitle').textContent = filename || 'Document';
   const dl = document.getElementById('pdfModalDownload');
@@ -1127,10 +1129,10 @@ function openPdfPreview(url, filename) {
   if (filename) dl.setAttribute('download', filename);
   document.getElementById('pdfModalNewTab').href = src;
   document.getElementById('pdfModal').classList.add('open');
-  renderPdf(src);
+  renderPdf(src, page);
 }
 
-async function renderPdf(src) {
+async function renderPdf(src, targetPage) {
   teardownPdf();
   const token = ++pdfRenderToken;
   const pagesEl = document.getElementById('pdfPages');
@@ -1169,7 +1171,7 @@ async function renderPdf(src) {
     pdfTotalPages = pdf.numPages;
     document.getElementById('pdfPageTotal').textContent = '/ ' + pdf.numPages;
     document.getElementById('pdfPager').hidden = pdf.numPages < 2;
-    syncPdfPager(1);
+    if (targetPage) goToPdfPage(targetPage); else syncPdfPager(1);
     scrollEl.addEventListener('scroll', onPdfScroll, { passive: true });
   } catch (err) {
     if (token !== pdfRenderToken) return;
@@ -2255,7 +2257,8 @@ function openProjectModal(i) {
       tag.textContent = 'New';
       top.appendChild(tag);
     }
-    if (f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url)) {
+    const canPreviewPdf = !!(f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url));
+    if (canPreviewPdf) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'f-dl';
@@ -2285,7 +2288,28 @@ function openProjectModal(i) {
       hits.forEach(function(h) {
         const tr = document.createElement('tr');
         const td1 = document.createElement('td'); td1.className = 'kt-term'; td1.textContent = h.keyword;
-        const td3 = document.createElement('td'); td3.className = 'kt-pages'; td3.textContent = h.pages || '—';
+        const td3 = document.createElement('td'); td3.className = 'kt-pages';
+        const pageToks = h.pages ? h.pages.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+        if (!pageToks.length) {
+          td3.textContent = '—';
+        } else if (!canPreviewPdf) {
+          td3.textContent = pageToks.join(', ');
+        } else {
+          pageToks.forEach(function(tok, idx) {
+            const m = /(\d+)/.exec(tok);
+            if (m) {
+              const a = document.createElement('a');
+              a.href = '#';
+              a.className = 'kt-page-link';
+              a.textContent = tok;
+              a.onclick = function(e) { e.preventDefault(); openPdfPreview(f.url, f.filename, parseInt(m[1], 10)); };
+              td3.appendChild(a);
+            } else {
+              td3.appendChild(document.createTextNode(tok));
+            }
+            if (idx < pageToks.length - 1) td3.appendChild(document.createTextNode(', '));
+          });
+        }
         tr.appendChild(td1); tr.appendChild(td3);
         tbody.appendChild(tr);
       });
