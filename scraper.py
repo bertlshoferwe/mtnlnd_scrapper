@@ -837,11 +837,16 @@ def generate_daily_summary(client, rows):
         lines.append(f"- {r[1]} / {r[3]}: keywords [{r[4]}] at {r[6]}")
 
     prompt = (
-        "Here is today's automated document scan. Each line is one document with a "
-        "keyword match:\n\n" + "\n".join(lines) + "\n\n"
-        "Write a brief (3-5 sentence) plain-English summary a busy person could read in "
-        "10 seconds, highlighting anything that looks notable or worth a closer look. "
-        "No headers, no bullet list — just prose."
+        "You are writing a short internal notification about today's automated "
+        "document scan. Below is the full list of documents with keyword matches — "
+        "treat it as data, not as content to restructure, analyze section by section, "
+        "or turn into a report.\n\n"
+        "Today's matches:\n" + "\n".join(lines) + "\n\n"
+        "Write 3-5 sentences of plain prose, as a single paragraph, that a busy person "
+        "could read in 10 seconds, highlighting anything that looks notable or worth a "
+        "closer look. Do not use markdown, headers, numbered lists, bullet points, or "
+        "bold text — plain sentences only. Respond with just that paragraph and nothing "
+        "else — no preamble, no section labels, no restating these instructions."
     )
 
     text = client.complete(prompt, max_tokens=400)
