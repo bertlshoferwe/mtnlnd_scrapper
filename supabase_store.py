@@ -412,18 +412,19 @@ def log_scan_row(division_id, run_date, site, document_url, filename,
 
 def already_scanned_urls(division_id):
     """{document_url: source_url_or_None} for every document this division has
-    already processed to a non-failure status — so a re-run (especially an
-    adapter that re-lists every advertised project each day) skips them
-    instead of re-downloading and re-running the AI pass. 'Download failed'
-    rows are excluded so those get retried."""
+    already attempted — including past download failures — so a re-run
+    (especially an adapter that re-lists every advertised project each day)
+    skips them instead of re-downloading and re-running the AI pass. A file
+    that failed once (oversized, unreachable, etc.) is not retried; delete
+    its scan_results row if you want it picked up again."""
     res = (
-        get_client().table("scan_results").select("document_url,status,source_url")
+        get_client().table("scan_results").select("document_url,source_url")
         .eq("division_id", division_id).execute()
     )
     return {
         r["document_url"]: r.get("source_url")
         for r in res.data
-        if r.get("document_url") and r.get("status") != "Download failed"
+        if r.get("document_url")
     }
 
 
@@ -747,7 +748,10 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         # "New document" flag: a file counts as new when it post-dates both the
         # project's first run_date (so a brand-new project isn't "updated") and
         # the user's acknowledgement watermark (set by "Mark done"). Only matched
-        # projects surface it.
+        # projects surface it. A "Download failed" file is excluded — a failed
+        # download was never actually found/read, so it shouldn't read as new
+        # (also guards against pre-existing duplicate failure rows logged
+        # before already_scanned_urls stopped retrying them).
         real_runs = [f["run_date"] for f in real_files if f["run_date"]]
         first_run = min(real_runs) if real_runs else ""
         ack = docs_ack.get(site_key) or ""
@@ -755,6 +759,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         for f in g["files"]:
             f["is_new"] = bool(
                 f["filename"] and f["run_date"] and matched
+                and f["status"] != "Download failed"
                 and f["run_date"] > first_run and f["run_date"] > ack
             )
             if f["is_new"]:
