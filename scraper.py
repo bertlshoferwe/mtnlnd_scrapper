@@ -106,7 +106,7 @@ from dotenv import load_dotenv
 load_dotenv()  # picks up API keys from a local .env if present
 
 DOC_EXTENSIONS = (".pdf", ".docx", ".doc")
-MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024  # 25 MB safety cap per document
+MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50 MB safety cap per document
 REQUEST_TIMEOUT = 30  # seconds
 LIBREOFFICE_TIMEOUT = 60  # seconds, for docx->pdf conversion
 PARAS_PER_PSEUDO_PAGE = 25  # only used for the DOCX fallback when LibreOffice isn't installed

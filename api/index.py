@@ -772,7 +772,7 @@ def _build_results_workbook(division_id, division_name):
     return buf
 
 
-PROXY_MAX_BYTES = 30 * 1024 * 1024
+PROXY_MAX_BYTES = 50 * 1024 * 1024
 
 
 @app.route("/api/<division_id>/pdf", methods=["GET"])
