@@ -886,7 +886,7 @@
         <div class="adv-fields" id="advFields">
           <div class="row">
             <label>Portal adapter</label>
-            <select id="siteAdapter" onchange="onAdapterChange()" style="flex:1;">
+            <select id="siteAdapter" onchange="onAdapterManuallyChanged()" style="flex:1;">
               <option value="">None</option>
             </select>
           </div>
@@ -1571,6 +1571,19 @@ function adapterLabel(key) {
   return a ? a.label : key;
 }
 
+// The adapter whose known hosts recognize this URL, or '' — mirrors the
+// backend's adapters.match_adapter_class() so the dropdown can preview the
+// same auto-attachment the save request is about to apply.
+function adapterKeyForUrl(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return ''; }
+  if (!host) return '';
+  const hit = adapterList.find(function(a) {
+    return (a.hosts || []).some(function(h) { return host === h || host.endsWith('.' + h); });
+  });
+  return hit ? hit.key : '';
+}
+
 function onAdapterChange() {
   const key = document.getElementById('siteAdapter').value;
   const a = adapterList.find(function(x) { return x.key === key; });
@@ -1584,6 +1597,25 @@ function onAdapterChange() {
   document.getElementById('listingFields').style.display = usingAdapter ? 'none' : '';
   document.getElementById('useAiListing').closest('label').style.display = usingAdapter ? 'none' : '';
 }
+// A deliberate pick (including explicitly choosing "None") always wins over
+// auto-attachment from here on, for the rest of this form session.
+function onAdapterManuallyChanged() {
+  document.getElementById('siteAdapter').dataset.manual = '1';
+  onAdapterChange();
+}
+// Live preview of the auto-attachment the backend will apply on save: as
+// soon as a recognized URL is typed, the matching adapter is selected (and
+// the URL field greys out, same as picking it by hand) without having to
+// find it in the dropdown. Never overrides a deliberate manual choice.
+document.getElementById('siteUrl').addEventListener('input', function() {
+  const sel = document.getElementById('siteAdapter');
+  if (sel.dataset.manual === '1') return;
+  const match = adapterKeyForUrl(this.value.trim());
+  if (sel.value !== match) {
+    sel.value = match;
+    onAdapterChange();
+  }
+});
 
 function showAddSite() {
   editingSiteId = null;
@@ -1601,7 +1633,13 @@ function editSite(siteId) {
 
   document.getElementById('siteName').value = site.name || '';
   document.getElementById('siteUrl').value = site.url || '';
-  document.getElementById('siteAdapter').value = site.adapter || '';
+  const adapterSel = document.getElementById('siteAdapter');
+  adapterSel.value = site.adapter || '';
+  // An adapter already saved on this site is a deliberate, persisted choice
+  // (whether picked by hand or auto-attached at save time) — don't let
+  // further edits to the URL silently swap it out from under the site.
+  // A site with none yet stays open to auto-attachment as usual.
+  adapterSel.dataset.manual = site.adapter ? '1' : '';
   const sel = (site.listing && site.listing.link_selector) || '';
   const pat = (site.listing && site.listing.link_pattern) || '';
   document.getElementById('linkSelector').value = sel;
@@ -1624,6 +1662,7 @@ function hideAddSite() {
   document.getElementById('siteName').value = '';
   document.getElementById('siteUrl').value = '';
   document.getElementById('siteAdapter').value = '';
+  document.getElementById('siteAdapter').dataset.manual = '';
   document.getElementById('linkSelector').value = '';
   document.getElementById('linkPattern').value = '';
   document.getElementById('useAiListing').checked = true;

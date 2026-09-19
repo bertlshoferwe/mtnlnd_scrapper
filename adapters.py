@@ -289,19 +289,29 @@ def get_adapter(key):
     return cls() if cls else None
 
 
-def adapter_for_site(site):
-    """The adapter to use for a site: the one it explicitly selected, or —
-    failing that — one that recognizes the site's URL host (so a plain-URL
-    site pointed at a known portal still gets the fast path)."""
-    key = (site.get("adapter") or "").strip()
-    if key:
-        return get_adapter(key)
-    url = site.get("url") or ""
+def match_adapter_class(url):
+    """The adapter class whose hosts recognize this URL, or None. Shared by
+    adapter_for_site() (the scan-time fallback) and the dashboard's site
+    save handler (which uses it to attach the adapter up front, so the
+    choice is persisted and visible rather than a silent runtime fallback)."""
     for cls in _ADAPTER_CLASSES:
         if cls.matches_url(url):
-            return cls()
+            return cls
     return None
 
 
+def adapter_for_site(site):
+    """The adapter to use for a site: the one it explicitly selected, or —
+    failing that — one that recognizes the site's URL host (so a plain-URL
+    site pointed at a known portal still gets the fast path even if it
+    predates auto-attachment, or was added some other way)."""
+    key = (site.get("adapter") or "").strip()
+    if key:
+        return get_adapter(key)
+    cls = match_adapter_class(site.get("url") or "")
+    return cls() if cls else None
+
+
 def list_adapters():
-    return [{"key": c.key, "label": c.label, "help": c.help} for c in _ADAPTER_CLASSES]
+    return [{"key": c.key, "label": c.label, "help": c.help, "hosts": list(c.hosts)}
+            for c in _ADAPTER_CLASSES]

@@ -194,6 +194,14 @@ def _parse_site_payload(data):
     if not url and not adapter:
         raise ValueError("url is required (unless a portal adapter is selected)")
 
+    # A URL that matches a known portal's host gets that adapter attached
+    # automatically — no need to hunt it down in the dropdown. An explicit
+    # choice (including deliberately picking "None") always wins over this.
+    if not adapter and url:
+        matched = adapters.match_adapter_class(url)
+        if matched:
+            adapter = matched.key
+
     # Adapter set -> the adapter knows where to look, listing/pattern ignored.
     # No adapter and no manual selector/pattern -> the generic browser crawler
     # discovers the plan links itself (the "Let AI find the plan links" default).
