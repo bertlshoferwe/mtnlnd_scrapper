@@ -71,8 +71,8 @@ VENDOR_DIR = os.path.join(_REPO_ROOT, "vendor")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
 COLUMN_HEADERS = [
-    "Date", "Site", "Bid Opening", "Document URL", "Filename",
-    "Matched Keywords", "Match Count", "Keyword Locations", "Status", "AI Notes",
+    "Date", "Site", "Bid Opening", "Filename",
+    "Matched Keywords", "Match Count", "AI Notes",
 ]
 
 # Purely informational — the actual schedule lives in
@@ -729,7 +729,7 @@ def _write_matches_sheet(ws, rows, bid_dates):
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
-    widths = [22, 24, 16, 45, 30, 30, 14, 40, 22, 60]
+    widths = [22, 24, 16, 30, 30, 14, 60]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -743,9 +743,7 @@ def _write_matches_sheet(ws, rows, bid_dates):
     for r in rows:
         ws.append([
             r["run_date"], r["site"], bid_dates.get(r.get("site"), ""),
-            r["document_url"], r["filename"],
-            r["matched_keywords"], r["match_count"], r["keyword_locations"],
-            r["status"], r["ai_notes"],
+            r["filename"], r["matched_keywords"], r["match_count"], r["ai_notes"],
         ])
         for cell in ws[ws.max_row]:
             cell.font = Font(name="Arial")
