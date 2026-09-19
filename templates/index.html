@@ -1274,6 +1274,25 @@ function renderDivisionTabs() {
   strip.appendChild(add);
 }
 
+// Shared by every anchored popover (tab menu, results filter/sort menus):
+// clears any previous flip, measures where it actually landed, and flips
+// it to anchor from the opposite edge if it would run off the left or
+// right edge of the screen — common on mobile where the trigger button
+// isn't always near the same edge the menu defaults to opening toward.
+function keepMenuOnScreen(menu) {
+  menu.style.left = '';
+  menu.style.right = '';
+  const rect = menu.getBoundingClientRect();
+  const margin = 8;
+  if (rect.left < margin) {
+    menu.style.left = '0';
+    menu.style.right = 'auto';
+  } else if (rect.right > window.innerWidth - margin) {
+    menu.style.left = 'auto';
+    menu.style.right = '0';
+  }
+}
+
 function closeTabMenu() {
   const m = document.querySelector('.tab-menu');
   if (m) m.remove();
@@ -1302,12 +1321,7 @@ function openTabMenu(tab, d) {
   menu.appendChild(rename);
   menu.appendChild(del);
   tab.appendChild(menu);
-  // Flip to right-anchored if the left-anchored menu would run off the
-  // right edge of the screen — common for tabs near the edge on mobile.
-  if (menu.getBoundingClientRect().right > window.innerWidth) {
-    menu.style.left = 'auto';
-    menu.style.right = '0';
-  }
+  keepMenuOnScreen(menu);
   setTimeout(function() { document.addEventListener('click', closeTabMenu); }, 0);
 }
 
@@ -2447,6 +2461,7 @@ function toggleFilterMenu(e) {
   document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
   document.getElementById('filterBidGroup').classList.toggle('open', !!currentResultsBid);
   menu.classList.add('open');
+  keepMenuOnScreen(menu);
   document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'true');
   setTimeout(function() { document.addEventListener('click', onFilterOutside); }, 0);
 }
@@ -2476,6 +2491,7 @@ function toggleSortMenu(e) {
   if (menu.classList.contains('open')) { closeSortMenu(); return; }
   closeFilterMenu();
   menu.classList.add('open');
+  keepMenuOnScreen(menu);
   document.getElementById('sortToggleBtn').setAttribute('aria-expanded', 'true');
   setTimeout(function() { document.addEventListener('click', onSortOutside); }, 0);
 }
