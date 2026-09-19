@@ -2523,12 +2523,14 @@ function toggleClosedFilter() {
 }
 function toggleUpdatedFilter() {
   currentResultsUpdated = !currentResultsUpdated;
+  if (currentResultsUpdated) currentResultsNew = false; // mutually exclusive
   resultsPage = 1;
   syncFilterUI();
   loadProjects();
 }
 function toggleNewFilter() {
   currentResultsNew = !currentResultsNew;
+  if (currentResultsNew) currentResultsUpdated = false; // mutually exclusive
   resultsPage = 1;
   syncFilterUI();
   loadProjects();
