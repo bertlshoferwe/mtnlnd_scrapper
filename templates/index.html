@@ -429,12 +429,11 @@
 
   /* Results: one row per project. The status filter lives in the filter-menu
      (every width) — <select> is just a hidden state holder, never shown
-     directly. Search lives in its own modal. Source-site switching is the
-     tab row. */
+     directly. Search is its own anchored dropdown, same treatment as the
+     filter/sort menus. Source-site switching is the tab row. */
   .results-toolbar { display: none; }
 
-  /* Search modal: one field, so a narrower modal than the default 620px. */
-  .search-modal { max-width: 480px; }
+  .search-menu { width: 300px; min-width: 0; }
   /* >=16px keeps mobile Safari/Chrome from zooming the page in on focus —
      they auto-zoom any focused text input below that size. */
   #resultsSearch { font-size: 16px; }
@@ -644,6 +643,11 @@
     .modal-header { padding: 16px 16px 12px; }
     .modal-body { padding: 14px 16px 22px; }
 
+    /* The search dropdown is anchored to its button (see keepMenuOnScreen),
+       not a modal, so it's already a small floating bar on every width —
+       nothing to override here for mobile. */
+    .search-menu { min-width: 0; width: calc(100vw - 24px); max-width: 320px; }
+
     .stat-tile { min-width: 130px; padding: 10px 12px; }
     .stat-tile .stat-value { font-size: 19px; }
 
@@ -747,7 +751,15 @@
         <button type="button" id="updatesBadge" class="updates-badge" style="display:none;" onclick="showUpdatedOnly()"></button>
       </div>
       <div class="results-head-actions">
-        <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="openSearchModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+        <div class="filter-wrap">
+          <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleSearchMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+          <div class="filter-menu search-menu" id="searchMenu">
+            <div class="row" style="gap:8px; padding:4px; flex-wrap:nowrap;">
+              <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" style="flex:1; min-width:0;">
+              <button type="button" class="btn-ghost" id="searchClearBtn" style="display:none;" onclick="clearResultsSearch()">Clear</button>
+            </div>
+          </div>
+        </div>
         <div class="filter-wrap">
           <button type="button" id="filterToggleBtn" class="icon-btn bordered" aria-label="Filter projects" aria-expanded="false" onclick="toggleFilterMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           <div class="filter-menu" id="filterMenu">
@@ -847,21 +859,6 @@
   </div>
 
 
-</div>
-
-<div class="modal-overlay" id="searchModal" onclick="if(event.target===this) closeSearchModal()">
-  <div class="modal search-modal">
-    <div class="modal-header">
-      <h2>Search results</h2>
-      <button class="modal-close" onclick="closeSearchModal()" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="row" style="gap:8px;">
-        <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" style="flex:1;">
-        <button type="button" class="btn-ghost" id="searchClearBtn" style="display:none;" onclick="clearResultsSearch()">Clear</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div class="modal-overlay" id="sitesModal" onclick="if(event.target===this) closeModal()">
@@ -1234,8 +1231,9 @@ document.addEventListener('keydown', function(e) {
   if (fm && fm.classList.contains('open')) { closeFilterMenu(); return; }
   const sm = document.getElementById('sortMenu');
   if (sm && sm.classList.contains('open')) { closeSortMenu(); return; }
+  const seaM = document.getElementById('searchMenu');
+  if (seaM && seaM.classList.contains('open')) { closeSearchMenu(); return; }
   if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
-  if (document.getElementById('searchModal').classList.contains('open')) { closeSearchModal(); return; }
   closeModal();
 });
 
@@ -1434,7 +1432,7 @@ function switchDivision(id) {
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
   updateSearchToggleState();
-  closeSearchModal();
+  closeSearchMenu();
   closeFilterMenu();
   closeSortMenu();
   syncFilterUI();
@@ -2447,24 +2445,41 @@ document.getElementById('resultsSearch').addEventListener('input', function() {
 });
 
 // The search icon glows while a search term is active, whether or not the
-// search modal itself is currently open.
+// search dropdown itself is currently open.
 function updateSearchToggleState() {
   const has = !!document.getElementById('resultsSearch').value.trim();
   document.getElementById('searchClearBtn').style.display = has ? '' : 'none';
   document.getElementById('searchToggleBtn').classList.toggle('active', has);
 }
-function openSearchModal() {
-  document.getElementById('searchModal').classList.add('open');
+// Search opens as a dropdown anchored to its button — same treatment as the
+// filter/sort menus — so it always pops up right where it was clicked
+// instead of taking over the screen or centering in the viewport.
+function toggleSearchMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('searchMenu');
+  if (menu.classList.contains('open')) { closeSearchMenu(); return; }
+  closeFilterMenu();
+  closeSortMenu();
+  menu.classList.add('open');
+  keepMenuOnScreen(menu);
   document.getElementById('searchToggleBtn').classList.add('active');
   document.getElementById('searchToggleBtn').setAttribute('aria-expanded', 'true');
-  // Focus after the modal has actually opened, so mobile doesn't try to
-  // zoom into a field that hasn't finished laying out yet.
-  setTimeout(function() { document.getElementById('resultsSearch').focus(); }, 0);
+  setTimeout(function() {
+    // Focus only after the menu has actually opened, so mobile doesn't try
+    // to zoom into a field that hasn't finished laying out yet.
+    document.getElementById('resultsSearch').focus();
+    document.addEventListener('click', onSearchOutside);
+  }, 0);
 }
-function closeSearchModal() {
-  document.getElementById('searchModal').classList.remove('open');
+function closeSearchMenu() {
+  document.getElementById('searchMenu').classList.remove('open');
   document.getElementById('searchToggleBtn').setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onSearchOutside);
   updateSearchToggleState();  // drop the "open" glow back to just "has a query"
+}
+function onSearchOutside(e) {
+  const wrap = document.getElementById('searchMenu').closest('.filter-wrap');
+  if (!wrap.contains(e.target)) closeSearchMenu();
 }
 function clearResultsSearch() {
   const input = document.getElementById('resultsSearch');
@@ -2487,6 +2502,7 @@ function toggleFilterMenu(e) {
   const menu = document.getElementById('filterMenu');
   if (menu.classList.contains('open')) { closeFilterMenu(); return; }
   closeSortMenu();
+  closeSearchMenu();
   // Each section starts collapsed unless it holds a non-default choice.
   document.getElementById('filterShowGroup').classList.toggle(
     'open',
@@ -2525,6 +2541,7 @@ function toggleSortMenu(e) {
   const menu = document.getElementById('sortMenu');
   if (menu.classList.contains('open')) { closeSortMenu(); return; }
   closeFilterMenu();
+  closeSearchMenu();
   menu.classList.add('open');
   keepMenuOnScreen(menu);
   document.getElementById('sortToggleBtn').classList.add('active');
