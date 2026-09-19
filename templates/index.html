@@ -328,7 +328,7 @@
     position: absolute; top: 100%; left: 0; margin-top: 4px;
     background: var(--card); border: 1px solid var(--border); border-radius: 8px;
     box-shadow: var(--shadow-md);
-    padding: 4px; z-index: 20; min-width: 170px;
+    padding: 4px; z-index: 20; min-width: 170px; max-width: calc(100vw - 24px);
   }
   .tab-menu button {
     display: block; width: 100%; text-align: left;
@@ -412,7 +412,8 @@
   .stat-tile.stat-tile-primary .stat-value { color: var(--accent-soft-text); }
   .site-tabs {
     display: flex; gap: 2px; margin-bottom: 12px;
-    border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none;
+    border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; touch-action: pan-x;
   }
   .site-tabs::-webkit-scrollbar { display: none; }
   .site-tab {
@@ -444,7 +445,7 @@
     position: absolute; top: 100%; right: 0; margin-top: 6px;
     background: var(--card); border: 1px solid var(--border); border-radius: 8px;
     box-shadow: var(--shadow-md); padding: 4px; z-index: 30;
-    min-width: 190px; max-height: 62vh; overflow-y: auto;
+    min-width: 190px; max-width: calc(100vw - 24px); max-height: 62vh; overflow-y: auto;
   }
   .filter-menu.open { display: block; }
   .fm-group { border-top: 1px solid var(--border); }
@@ -630,7 +631,7 @@
     /* Modals go full-screen — no wasted margin, close button always reachable */
     .modal-overlay { padding: 0; align-items: stretch; }
     .modal {
-      max-width: 100%; min-height: 100vh; border-radius: 0; border: none;
+      max-width: 100%; min-height: 100vh; min-height: 100dvh; border-radius: 0; border: none;
       max-height: 100vh; max-height: 100dvh;
     }
     .modal-header { padding: 16px 16px 12px; }
@@ -662,6 +663,12 @@
       display: inline-flex; align-items: center; justify-content: center;
     }
     .pdf-actions .modal-close { font-size: 26px; padding: 0; }
+
+    /* Bigger tap targets for the page pager too, so page-number access is
+       as usable on a touchscreen as the desktop's mouse-driven version. */
+    #pdfPager { gap: 8px; padding: 6px 10px; }
+    #pdfPager button { min-width: 38px; min-height: 38px; font-size: 20px; }
+    #pdfPageInput { width: 3em; padding: 8px 2px; font-size: 15px; }
 
     .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
     .pager { justify-content: center; }
@@ -1295,6 +1302,12 @@ function openTabMenu(tab, d) {
   menu.appendChild(rename);
   menu.appendChild(del);
   tab.appendChild(menu);
+  // Flip to right-anchored if the left-anchored menu would run off the
+  // right edge of the screen — common for tabs near the edge on mobile.
+  if (menu.getBoundingClientRect().right > window.innerWidth) {
+    menu.style.left = 'auto';
+    menu.style.right = '0';
+  }
   setTimeout(function() { document.addEventListener('click', closeTabMenu); }, 0);
 }
 
