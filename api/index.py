@@ -723,13 +723,37 @@ def _unique_sheet_name(name, used):
 
 
 JOB_BAND_FILL = PatternFill("solid", fgColor="F2F2F2")
+HEADER_FILL = PatternFill("solid", fgColor="D9DEE8")
+DATA_FONT_SIZE = 10
+# Columns short enough that wrapping would only ever waste vertical space —
+# everything else (Site, Filename, Matched Keywords, AI Notes) can genuinely
+# run long and needs it. Keeps rows only as tall as their longest column
+# actually forces.
+NO_WRAP_COLUMNS = {1, 3, 6}  # Date, Bid Opening, Match Count
+
+
+def _run_date_only(value):
+    """'2026-09-19T11:30:15.043417+00:00' -> date(2026, 9, 19). A bare date
+    (no time-of-day) reads far cleaner in a sheet meant to be skimmed, and
+    matches how Bid Opening is already shown. Falls back to the raw string
+    if it's not parseable ISO — never blanks a real value over a format
+    quirk."""
+    try:
+        return datetime.fromisoformat(value).date()
+    except (TypeError, ValueError):
+        return value
 
 
 def _write_matches_sheet(ws, rows, bid_dates):
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
-        cell.font = Font(name="Arial", bold=True)
-    widths = [22, 24, 16, 30, 30, 14, 60]
+        cell.font = Font(name="Arial", bold=True, size=11)
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(vertical="center")
+    ws.row_dimensions[1].height = 20
+    # Matched Keywords gets the lion's share of the extra room — it's the
+    # column doing the most wrapping — and Match Count barely needs any.
+    widths = [13, 26, 13, 32, 42, 12, 50]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -742,12 +766,14 @@ def _write_matches_sheet(ws, rows, bid_dates):
                                         (r.get("filename") or "").lower()))
     for r in rows:
         ws.append([
-            r["run_date"], r["site"], bid_dates.get(r.get("site"), ""),
+            _run_date_only(r["run_date"]), r["site"], bid_dates.get(r.get("site"), ""),
             r["filename"], r["matched_keywords"], r["match_count"], r["ai_notes"],
         ])
-        for cell in ws[ws.max_row]:
-            cell.font = Font(name="Arial")
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+        row = ws[ws.max_row]
+        for col, cell in enumerate(row, start=1):
+            cell.font = Font(name="Arial", size=DATA_FONT_SIZE)
+            cell.alignment = Alignment(wrap_text=col not in NO_WRAP_COLUMNS, vertical="top")
+        row[0].number_format = "yyyy-mm-dd"
 
     if not rows:
         return
