@@ -539,6 +539,8 @@
   }
   .updates-badge:hover { filter: brightness(1.06); }
   .updates-badge.on { background: var(--warning); color: #fff; }
+  .updates-badge.new-badge { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
+  .updates-badge.new-badge.on { background: var(--success); color: #fff; }
   .file-row.f-new {
     background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning);
     border-radius: 4px; padding-left: 10px;
@@ -727,6 +729,7 @@
     <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 14px;">
       <div class="row" style="gap:10px; align-items:center; margin:0;">
         <h2 style="margin:0;">Results</h2>
+        <button type="button" id="newBadge" class="updates-badge new-badge" style="display:none;" onclick="showNewOnly()"></button>
         <button type="button" id="updatesBadge" class="updates-badge" style="display:none;" onclick="showUpdatedOnly()"></button>
       </div>
       <div class="results-head-actions">
@@ -743,6 +746,10 @@
                 <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
                 <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
                 <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
+                <button type="button" class="fm-toggle" id="fmNewToggle" onclick="toggleNewFilter()">
+                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  New projects only
+                </button>
                 <button type="button" class="fm-toggle" id="fmUpdatedToggle" onclick="toggleUpdatedFilter()">
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   New documents only
@@ -1372,6 +1379,7 @@ function switchDivision(id) {
   currentResultsBid = '';
   currentResultsClosed = false;
   currentResultsUpdated = false;
+  currentResultsNew = false;
   currentResultsSort = 'flagged';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
@@ -1884,13 +1892,19 @@ function formatBytes(bytes) {
 let resultsPage = 1;
 let resultsTotal = 0;
 const PROJECTS_PER_PAGE = 15;
-const FIRST_SCAN_WINDOW_MS = 48 * 60 * 60 * 1000;
+const FIRST_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;
+const FIRST_SCAN_FRIDAY_WINDOW_MS = 120 * 60 * 60 * 1000;
 
-// True for a matched project's first 48 hours after we ever saw it.
+// True for a matched project for 72 hours after we first saw it — extended
+// to 120 hours when it was first seen on a Friday, so the "New" pill
+// survives the weekend and is still up Monday morning.
 function isFirstScan(p) {
   if (p.status !== 'Matched' || !p.first_seen) return false;
   const seen = new Date(p.first_seen).getTime();
-  return !isNaN(seen) && (Date.now() - seen) < FIRST_SCAN_WINDOW_MS;
+  if (isNaN(seen)) return false;
+  const window = new Date(seen).getDay() === 5 /* Friday */
+    ? FIRST_SCAN_FRIDAY_WINDOW_MS : FIRST_SCAN_WINDOW_MS;
+  return (Date.now() - seen) < window;
 }
 let projectsData = [];
 let resultsSearchDebounce = null;
@@ -1899,6 +1913,7 @@ let currentResultsKeyword = '';
 let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
 let currentResultsUpdated = false;  // "New documents only" toggle
+let currentResultsNew = false;      // "New projects only" toggle
 let currentResultsSort = 'flagged'; // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
@@ -2030,19 +2045,21 @@ async function loadProjects() {
   if (currentResultsBid) params.set('bid_window', currentResultsBid);
   if (currentResultsClosed) params.set('include_closed', '1');
   if (currentResultsUpdated) params.set('updated', '1');
+  if (currentResultsNew) params.set('new', '1');
   if (currentResultsSort && currentResultsSort !== 'flagged') params.set('sort', currentResultsSort);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
   renderUpdatesBadge(data.updated_total || 0);
+  renderNewBadge(data.new_total || 0);
   renderSiteTabs(data.sites);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || (status && status !== 'Matched')) {
+  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
@@ -2104,8 +2121,10 @@ async function loadProjects() {
     if (isFirstScan(p)) {
       const fs = document.createElement('span');
       fs.className = 'pill firstscan';
-      fs.textContent = 'First scan';
-      fs.title = 'First time this project has been seen — shows for 48 hours';
+      fs.textContent = 'New';
+      const seenDay = p.first_seen ? new Date(p.first_seen).getDay() : -1;
+      fs.title = 'First time this project has been seen — shows for '
+        + (seenDay === 5 ? '120 hours (first seen on a Friday)' : '72 hours');
       li.appendChild(fs);
     }
     if (p.updated) {
@@ -2508,6 +2527,12 @@ function toggleUpdatedFilter() {
   syncFilterUI();
   loadProjects();
 }
+function toggleNewFilter() {
+  currentResultsNew = !currentResultsNew;
+  resultsPage = 1;
+  syncFilterUI();
+  loadProjects();
+}
 function renderUpdatesBadge(n) {
   const b = document.getElementById('updatesBadge');
   if (!b) return;
@@ -2521,6 +2546,19 @@ function renderUpdatesBadge(n) {
   }
 }
 function showUpdatedOnly() { toggleUpdatedFilter(); }
+function renderNewBadge(n) {
+  const b = document.getElementById('newBadge');
+  if (!b) return;
+  if (n > 0) {
+    b.textContent = n === 1 ? '1 new project' : n + ' new projects';
+    b.style.display = '';
+    b.classList.toggle('on', currentResultsNew);
+  } else {
+    b.style.display = 'none';
+    if (currentResultsNew) { currentResultsNew = false; syncFilterUI(); }
+  }
+}
+function showNewOnly() { toggleNewFilter(); }
 function pickBid(el) {
   const v = el.dataset.bid || '';
   if (currentResultsBid !== v) {
@@ -2535,12 +2573,15 @@ function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
   const anyFilter = status !== 'Matched' || !!currentResultsKeyword
-    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated;
+    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
   document.getElementById('fmUpdatedToggle').classList.toggle('on', currentResultsUpdated);
+  document.getElementById('fmNewToggle').classList.toggle('on', currentResultsNew);
   const badge = document.getElementById('updatesBadge');
   if (badge) badge.classList.toggle('on', currentResultsUpdated);
+  const newBadge = document.getElementById('newBadge');
+  if (newBadge) newBadge.classList.toggle('on', currentResultsNew);
 
   let showLabel = '';
   document.querySelectorAll('#filterShowGroup .fm-body button[data-val]').forEach(function(b) {

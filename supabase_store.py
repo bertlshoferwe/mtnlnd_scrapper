@@ -22,6 +22,34 @@ _client = None
 # site reconciles is treated as "no longer listed" (see reconcile_seen).
 CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES", "2"))
 
+# How long a newly-discovered matched project shows the "New" pill. Extended
+# to 120h when the project was first seen on a Friday so it survives the
+# weekend and is still flagged Monday morning — the base 72h window would
+# otherwise lapse Sunday/Monday before anyone's back to look at it.
+NEW_PROJECT_WINDOW_HOURS = 72
+NEW_PROJECT_FRIDAY_WINDOW_HOURS = 120
+
+
+def _is_new_project(first_seen_iso, now=None):
+    """True if a matched project's first_seen falls within its "New" window.
+    Mirrors the client-side isFirstScan() in templates/index.html — kept here
+    too so the Results header's "N new projects" count (over every visible
+    project, not just the current page) agrees with the per-row pill."""
+    if not first_seen_iso:
+        return False
+    try:
+        seen = datetime.fromisoformat(first_seen_iso.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    window_hours = (
+        NEW_PROJECT_FRIDAY_WINDOW_HOURS if seen.weekday() == 4
+        else NEW_PROJECT_WINDOW_HOURS
+    )
+    return (now - seen) < timedelta(hours=window_hours)
+
 
 def get_client():
     global _client
@@ -669,13 +697,17 @@ def save_project_bid_dates(division_id, mapping):
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
-                        updated_only=False, page=1, page_size=15):
+                        updated_only=False, new_only=False, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
-    site_tabs, updated_total) where site_tabs is [{"name", "count", "flagged"}]
-    over ALL projects (unaffected by the current filters) and updated_total is
-    the count of projects with an unacknowledged "new document" notification.
+    site_tabs, updated_total, new_total) where site_tabs is
+    [{"name", "count", "flagged"}] over ALL projects (unaffected by the
+    current filters), updated_total is the count of projects with an
+    unacknowledged "new document" notification, and new_total is the count
+    of matched projects still inside their "New" window (see
+    _is_new_project) — both counts are over every visible project, not just
+    the current page/filter.
 
     Projects the source site no longer lists ("closed") are dropped unless
     include_closed is set, in which case each carries closed=True.
@@ -801,9 +833,16 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     # "New document" notifications outstanding, over every visible project.
     updated_total = sum(1 for p in projects if p["updated"])
+    # Matched projects still inside their "New" window (see _is_new_project).
+    now = datetime.now(timezone.utc)
+    for p in projects:
+        p["is_new"] = p["status"] == "Matched" and _is_new_project(p["first_seen"], now)
+    new_total = sum(1 for p in projects if p["is_new"])
 
     if updated_only:
         projects = [p for p in projects if p["updated"]]
+    if new_only:
+        projects = [p for p in projects if p["is_new"]]
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if keyword:
@@ -857,7 +896,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     page = max(1, page)
     page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
-    return projects[start:start + page_size], total, site_tabs, updated_total
+    return projects[start:start + page_size], total, site_tabs, updated_total, new_total
 
 
 def get_stats(division_id):
