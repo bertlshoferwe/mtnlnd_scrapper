@@ -58,7 +58,7 @@ STALE_RUN_AFTER = timedelta(minutes=150)
 
 from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment
+from openpyxl.styles import Font, Alignment, PatternFill
 import pypdf
 from docx import Document as DocxDocument
 
@@ -722,6 +722,9 @@ def _unique_sheet_name(name, used):
     return candidate
 
 
+JOB_BAND_FILL = PatternFill("solid", fgColor="F2F2F2")
+
+
 def _write_matches_sheet(ws, rows, bid_dates):
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
@@ -730,6 +733,13 @@ def _write_matches_sheet(ws, rows, bid_dates):
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
+
+    # Group every document under its job (the "Site" value is really
+    # "<site> — <project>", i.e. the job) so the several documents a job can
+    # have land on consecutive rows instead of scattered throughout the
+    # sheet in scan order. Filename order within a job keeps that stable.
+    rows = sorted(rows, key=lambda r: ((r.get("site") or "").lower(),
+                                        (r.get("filename") or "").lower()))
     for r in rows:
         ws.append([
             r["run_date"], r["site"], bid_dates.get(r.get("site"), ""),
@@ -740,6 +750,31 @@ def _write_matches_sheet(ws, rows, bid_dates):
         for cell in ws[ws.max_row]:
             cell.font = Font(name="Arial")
             cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    if not rows:
+        return
+
+    # Merge the Site/Bid Opening columns down each job's block of rows (so a
+    # job with several documents reads as one group instead of repeating its
+    # name and bid date on every line) and shade every other job's block so
+    # the boundary between jobs is obvious at a glance.
+    job_start = 2
+    band = False
+    for row_idx in range(3, ws.max_row + 2):  # +1: a sentinel past the last row
+        job = ws.cell(row=row_idx, column=2).value if row_idx <= ws.max_row else object()
+        if job != ws.cell(row=job_start, column=2).value:
+            if row_idx - 1 > job_start:
+                for col in (2, 3):
+                    ws.merge_cells(start_row=job_start, start_column=col,
+                                    end_row=row_idx - 1, end_column=col)
+                    ws.cell(row=job_start, column=col).alignment = \
+                        Alignment(wrap_text=True, vertical="center")
+            if band:
+                for r2 in range(job_start, row_idx):
+                    for c2 in range(1, len(COLUMN_HEADERS) + 1):
+                        ws.cell(row=r2, column=c2).fill = JOB_BAND_FILL
+            band = not band
+            job_start = row_idx
 
 
 def _build_results_workbook(division_id, division_name):
