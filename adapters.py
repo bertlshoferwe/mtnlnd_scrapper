@@ -358,7 +358,7 @@ class ConstructConnectAdapter(SiteAdapter):
     PAGE_TIMEOUT_MS = 25000
     RUN_BUDGET_S = 1800              # whole adapter run
     MAX_PROJECTS_PER_SEARCH = 100    # safety cap per results view
-    MAX_ZIP_BYTES = 150 * 1024 * 1024
+    MAX_ZIP_BYTES = 130 * 1024 * 1024
     LOGIN_REDIRECT_TIMEOUT_S = 25    # how long to wait for the SSO redirect back into the app
     # A generic browser-flavored UA and Playwright's default navigator.webdriver=true
     # got the SSO login (login.io.constructconnect.com) stuck forever on a

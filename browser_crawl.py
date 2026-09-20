@@ -49,7 +49,7 @@ MAX_DEPTH = int(os.environ.get("CRAWL_MAX_DEPTH", "3"))
 MAX_DOCS = int(os.environ.get("CRAWL_MAX_DOCS", "250"))
 PAGE_TIMEOUT_MS = int(os.environ.get("CRAWL_PAGE_TIMEOUT_MS", "25000"))
 SITE_BUDGET_S = int(os.environ.get("CRAWL_SITE_BUDGET_S", "600"))
-MAX_CAPTURED_BYTES = 25 * 1024 * 1024
+MAX_CAPTURED_BYTES = 130 * 1024 * 1024
 
 # A link is worth following if its text/href hints at more bid content.
 _FOLLOW = re.compile(
