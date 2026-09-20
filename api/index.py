@@ -289,12 +289,21 @@ def api_update_site(division_id, site_id):
     # No username -> login removed entirely. A username with a blank
     # password means "keep the saved password" (the edit form never gets it
     # back to re-submit), so login_password_enc is left out of the patch.
+    # Either way, a changed/removed credential invalidates whatever the last
+    # scan found — clear it rather than show a stale result for the old
+    # password.
     if login is None:
-        login_patch = {"login_username": None, "login_password_enc": None, "login_url": None}
+        login_patch = {
+            "login_username": None, "login_password_enc": None, "login_url": None,
+            "login_last_ok": None, "login_last_checked_at": None, "login_last_error": None,
+        }
     else:
         login_patch = {"login_username": login["username"], "login_url": login["url"]}
         if login["password"]:
             login_patch["login_password_enc"] = credentials.encrypt_password(login["password"])
+            login_patch["login_last_ok"] = None
+            login_patch["login_last_checked_at"] = None
+            login_patch["login_last_error"] = None
 
     try:
         site = supabase_store.update_site(

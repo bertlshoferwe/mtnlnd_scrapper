@@ -163,6 +163,21 @@ def set_site_active(division_id, site_id, active):
     return res.data[0]
 
 
+def record_login_result(division_id, site_id, ok, message=None):
+    """Record the outcome of a site's most recent login attempt (set by the
+    scan worker right after it tries to log in), so the dashboard can show
+    whether the saved credentials are still working. Best-effort — a site
+    predating this column shouldn't fail the whole scan over it."""
+    try:
+        get_client().table("sites").update({
+            "login_last_ok": bool(ok),
+            "login_last_checked_at": datetime.now(timezone.utc).isoformat(),
+            "login_last_error": None if ok else (message or "login failed"),
+        }).eq("division_id", division_id).eq("id", site_id).execute()
+    except Exception as e:
+        print(f"  ! Could not record login result: {e}")
+
+
 def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, login=None):
     """`login`, when given, is {"username", "password_enc", "url"} — the
     password already encrypted by the caller (api/index.py), since this

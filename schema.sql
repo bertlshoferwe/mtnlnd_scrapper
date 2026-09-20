@@ -23,6 +23,12 @@ create table if not exists sites (
   login_username text,
   login_password_enc text,
   login_url text,          -- login page, if different from url; null = use url
+  -- Outcome of the most recent login attempt (set by the scan worker right
+  -- after it tries to log in) — null until the site with a login has been
+  -- scanned at least once.
+  login_last_ok boolean,
+  login_last_checked_at timestamptz,
+  login_last_error text,
   created_at timestamptz default now()
 );
 -- Migration for existing databases:
@@ -31,6 +37,9 @@ create table if not exists sites (
 --   alter table sites add column if not exists login_username text;
 --   alter table sites add column if not exists login_password_enc text;
 --   alter table sites add column if not exists login_url text;
+--   alter table sites add column if not exists login_last_ok boolean;
+--   alter table sites add column if not exists login_last_checked_at timestamptz;
+--   alter table sites add column if not exists login_last_error text;
 
 create table if not exists keywords (
   id bigint generated always as identity primary key,

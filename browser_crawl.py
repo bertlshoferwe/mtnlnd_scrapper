@@ -17,20 +17,24 @@ bounded.
 
 Entry point:
     crawl_site(start_url, login=None) ->
-        ([(label, url_or_None, filename, content_or_None, page_url)], cookies)
+        ([(label, url_or_None, filename, content_or_None, page_url)],
+         cookies, login_result)
 
 `content` is raw bytes for files captured from a JS download (no URL to fetch
 later); it's None for ordinary linked files, which the caller downloads by URL.
 `page_url` is the page the file was found on (used for the "open project" link).
-If Playwright or its browser isn't available, returns (None, {}) and logs why
-— the caller falls back to the plain-requests link finder.
+If Playwright or its browser isn't available, returns (None, {}, None) and
+logs why — the caller falls back to the plain-requests link finder.
 
 `login`, when given, is {"username", "password", "url"}: before crawling,
 the browser context logs in at `url` by auto-filling the first visible
 password field and a preceding username/email field, then submits. The
 returned `cookies` ({name: value}) carry that authenticated session so the
 caller can pass them to plain `requests` downloads of documents that were
-only linked (not captured as a JS download) during the crawl.
+only linked (not captured as a JS download) during the crawl. `login_result`
+is None when no login was configured, otherwise {"ok": bool, "message":
+str_or_None} — the caller persists this so the dashboard can show whether
+the site's saved credentials are working.
 """
 
 import os
@@ -188,8 +192,11 @@ _SUBMIT_SELECTOR = (
 def _attempt_login(ctx, login):
     """Best-effort: open the login page, fill the first visible password
     field and a preceding username/email field, submit, and wait for the
-    page to settle. Silent no-op (with a log line) if no matching form is
-    found — the crawl still proceeds with whatever session resulted."""
+    page to settle. Returns {"ok": bool, "message": str_or_None} — `ok` is a
+    heuristic (the password field is gone after submitting, i.e. we're not
+    still sitting on the login form), not a guarantee the site accepted the
+    credentials, but it does catch the common case of a login page that just
+    reloads itself on a wrong password."""
     page = ctx.new_page()
     try:
         page.goto(login["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
@@ -197,12 +204,14 @@ def _attempt_login(ctx, login):
 
         pw_input = page.query_selector("input[type=password]")
         if not pw_input or not pw_input.is_visible():
-            print(f"  ! Login: no password field found on {login['url']}")
-            return
+            msg = f"no password field found on {login['url']}"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
         user_input = page.query_selector(_USERNAME_SELECTOR)
         if not user_input or not user_input.is_visible():
-            print(f"  ! Login: no username field found on {login['url']}")
-            return
+            msg = f"no username field found on {login['url']}"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
 
         user_input.fill(login["username"])
         pw_input.fill(login["password"])
@@ -212,10 +221,23 @@ def _attempt_login(ctx, login):
             submit.click(timeout=4000)
         else:
             pw_input.press("Enter")
-        page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+        try:
+            page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+        except Exception:
+            pass  # some sites never go idle (polling/websockets) — check below anyway
+
+        still_on_login = page.query_selector("input[type=password]")
+        if still_on_login and still_on_login.is_visible():
+            msg = "still on a page with a password field after submitting — check the username/password"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
+
         print(f"  Logged in as {login['username']} at {login['url']}")
+        return {"ok": True, "message": None}
     except Exception as e:
-        print(f"  ! Login attempt failed ({login['url']}): {e}")
+        msg = str(e)
+        print(f"  ! Login attempt failed ({login['url']}): {msg}")
+        return {"ok": False, "message": msg}
     finally:
         page.close()
 
@@ -225,7 +247,7 @@ def crawl_site(start_url, login=None):
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("  ! Playwright not installed — falling back to plain-request crawl")
-        return None, {}
+        return None, {}, None
 
     origin = urlparse(start_url).netloc
     seen_pages = set()
@@ -237,7 +259,7 @@ def crawl_site(start_url, login=None):
         pw = sync_playwright().start()
     except Exception as e:
         print(f"  ! Could not start Playwright ({e}) — falling back to plain-request crawl")
-        return None, {}
+        return None, {}, None
 
     try:
         browser = pw.chromium.launch(headless=True)
@@ -245,7 +267,7 @@ def crawl_site(start_url, login=None):
         print(f"  ! Chromium not available ({e}) — run 'playwright install chromium'. "
               "Falling back to plain-request crawl")
         pw.stop()
-        return None, {}
+        return None, {}, None
 
     ctx = browser.new_context(
         accept_downloads=True,
@@ -253,8 +275,9 @@ def crawl_site(start_url, login=None):
     )
 
     cookies = {}
+    login_result = None
     if login:
-        _attempt_login(ctx, login)
+        login_result = _attempt_login(ctx, login)
         cookies = {c["name"]: c["value"] for c in ctx.cookies()}
 
     try:
@@ -333,4 +356,4 @@ def crawl_site(start_url, login=None):
     results = [(label, u, fn, content, page_url)
                for (fn, _), (label, u, content, page_url) in found.items()]
     print(f"  Crawled {len(seen_pages)} page(s), found {len(results)} document(s)")
-    return results, cookies
+    return results, cookies, login_result

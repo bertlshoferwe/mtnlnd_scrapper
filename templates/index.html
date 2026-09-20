@@ -245,6 +245,8 @@
     background: var(--accent-soft); color: var(--accent-soft-text);
   }
   .tag.tag-tabs { background: var(--warning-soft); color: var(--warning); }
+  .tag.tag-ok { background: var(--success-soft); color: var(--success); }
+  .tag.tag-danger { background: var(--danger-soft); color: var(--danger); }
   .adapter-mark { color: var(--accent); margin-left: 3px; cursor: default; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
@@ -928,6 +930,7 @@
               <label>Login page URL</label>
               <input type="url" id="loginUrl" placeholder="optional — defaults to the site URL above" style="flex:1;">
             </div>
+            <div class="status-line" id="loginStatus" style="margin: 0 0 6px 130px;"></div>
           </div>
         </div>
         <div class="row" style="margin-top:14px;">
@@ -1530,7 +1533,7 @@ async function loadSites() {
     let tags = '';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
-    if (site.has_login) tags += '<span class="tag tag-tabs">login</span>';
+    if (site.has_login) tags += loginStatusTag(site);
     const linkable = /^https?:\/\//i.test(site.url || '');
     const urlHtml = site.url
       ? (linkable
@@ -1599,6 +1602,36 @@ async function loadAdapters() {
 function adapterLabel(key) {
   const a = adapterList.find(function(x) { return x.key === key; });
   return a ? a.label : key;
+}
+
+// The "login" tag on a site card, colored by the last scan's login result —
+// neutral until the site has actually been scanned once (login_last_ok is
+// null), green/red after that. Title carries when it was checked and, on
+// failure, why.
+function loginStatusTag(site) {
+  const checked = site.login_last_checked_at
+    ? new Date(site.login_last_checked_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : null;
+  if (site.login_last_ok === true) {
+    return '<span class="tag tag-ok" title="' + escapeHtml('Login OK as of ' + checked) + '">login ✓</span>';
+  }
+  if (site.login_last_ok === false) {
+    const why = site.login_last_error ? ': ' + site.login_last_error : '';
+    return '<span class="tag tag-danger" title="' + escapeHtml('Login failed' + why + ' (checked ' + checked + ')') + '">login ✗</span>';
+  }
+  return '<span class="tag tag-tabs" title="Not checked yet — runs on the next scan">login</span>';
+}
+
+// Plain-text version of the same status, for the edit form's Login tab.
+function loginStatusText(site) {
+  const checked = site.login_last_checked_at
+    ? new Date(site.login_last_checked_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : null;
+  if (site.login_last_ok === true) return 'Login OK as of ' + checked + '.';
+  if (site.login_last_ok === false) {
+    return 'Login failed' + (site.login_last_error ? ': ' + site.login_last_error : '') + ' (checked ' + checked + ').';
+  }
+  return 'Not checked yet — runs on the next scan.';
 }
 
 // The adapter whose known hosts recognize this URL, or '' — mirrors the
@@ -1692,6 +1725,10 @@ function editSite(siteId) {
   const pwField = document.getElementById('loginPassword');
   pwField.value = '';
   pwField.placeholder = site.has_login ? 'saved — leave blank to keep it' : '';
+  const loginStatusEl = document.getElementById('loginStatus');
+  loginStatusEl.textContent = site.has_login ? loginStatusText(site) : '';
+  loginStatusEl.style.color = site.login_last_ok === true ? 'var(--success)'
+    : site.login_last_ok === false ? 'var(--danger)' : 'var(--muted)';
   selectAdvTab(site.has_login ? 'login' : 'discovery');
 
   // Show Advanced whenever this site isn't on the plain "let AI find it" default.
@@ -1718,6 +1755,7 @@ function hideAddSite() {
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginPassword').placeholder = '';
   document.getElementById('loginUrl').value = '';
+  document.getElementById('loginStatus').textContent = '';
   selectAdvTab('discovery');
   document.getElementById('advFields').classList.remove('open');
   onAdapterChange();

@@ -525,7 +525,7 @@ def _site_login(site):
 def scan_site(site, ai_client):
     """
     Dispatch to the right document-finding strategy for a site and return
-    (doc_links, cookies):
+    (doc_links, cookies, login_result):
       - doc_links: a uniform list of 6-tuples
             (label_or_None, url_or_None, filename, content_bytes_or_None,
              source_url_or_None, bid_date_or_None)
@@ -538,15 +538,19 @@ def scan_site(site, ai_client):
         when the site required a login (empty otherwise) — pass it to
         download_document() so linked (non-captured) documents can still be
         fetched after login.
+      - login_result: None if the site has no login configured, otherwise
+        {"ok": bool, "message": str_or_None} from the login attempt — the
+        caller records this so the dashboard can show whether the site's
+        saved credentials are working.
     """
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
         print(f"  Adapter: {adapter.label}")
         return [(lbl, url, fn, None, src, bid)
-                for lbl, url, fn, src, bid in adapter.find_documents(site)], {}
+                for lbl, url, fn, src, bid in adapter.find_documents(site)], {}, None
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
-        return [], {}
+        return [], {}, None
 
     listing = site.get("listing") or {}
     if listing.get("link_selector") or listing.get("link_pattern"):
@@ -554,21 +558,21 @@ def scan_site(site, ai_client):
         # targeted listing crawl. An empty {} — left over from the old
         # "let AI find the links" checkbox — falls through to the browser crawler.
         return [(lbl, url, fn, None, None, None)
-                for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}
+                for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}, None
     if site.get("tabs"):
         return [(lbl, url, fn, None, None, None)
-                for lbl, url, fn in find_document_links_across_tabs(site)], {}
+                for lbl, url, fn in find_document_links_across_tabs(site)], {}, None
 
     # Default: a real browser crawl — renders JS, follows links, clicks
     # "Documents/Plans" tabs, captures JS downloads, logs in first if the
     # site is configured for it. Falls back to the plain requests link
     # finder if Playwright/Chromium isn't available.
-    crawled, cookies = browser_crawl.crawl_site(site["url"], login=_site_login(site))
+    crawled, cookies, login_result = browser_crawl.crawl_site(site["url"], login=_site_login(site))
     if crawled is not None:
         return [(lbl, url, fn, content, page_url, None)
-                for lbl, url, fn, content, page_url in crawled], cookies
+                for lbl, url, fn, content, page_url in crawled], cookies, login_result
     return [(None, doc_url, fn, None, site["url"], None)
-            for doc_url, fn in find_document_links(site["url"])], {}
+            for doc_url, fn in find_document_links(site["url"])], {}, login_result
 
 
 def download_document(url, cookies=None):
@@ -933,7 +937,13 @@ def _scan_division(division):
                 run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
                 done=0, total=0, overall=overall_done,
             )
-            doc_links, site_cookies = scan_site(site, ai_client)
+            doc_links, site_cookies, login_result = scan_site(site, ai_client)
+            if login_result is not None:
+                supabase_store.record_login_result(
+                    division_id, site["id"], login_result["ok"], login_result["message"]
+                )
+                status = "OK" if login_result["ok"] else f"FAILED ({login_result['message']})"
+                print(f"  Login check: {status}")
 
             # Seen-tracking: only reconcile a site whose discovery actually
             # returned something — an empty result may just mean the adapter
