@@ -596,20 +596,81 @@ class ConstructConnectAdapter(SiteAdapter):
             return []
 
         project_url = page.url
+        out = []
+        doc_page = None
         try:
-            page.click("text=View/Download Documents", timeout=8000)
-            page.wait_for_timeout(1000)
-            zip_bytes = self._download_zip(page)
+            doc_page, download = self._click_view_download(page)
+            if download:
+                out = self._handle_download(download, label, project_url)
+            elif doc_page:
+                zip_bytes = self._download_zip(doc_page)
+                if zip_bytes:
+                    out = self._extract_zip(zip_bytes, label, project_url)
+            else:
+                print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
+                      f"observable for '{label}'")
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't download documents for '{label}': {e}")
-            zip_bytes = None
+        finally:
+            if doc_page:
+                try:
+                    doc_page.close()
+                except Exception:
+                    pass
 
         page.go_back()
         page.wait_for_timeout(1200)
+        return out
 
-        if not zip_bytes:
+    def _click_view_download(self, page):
+        """A debug screenshot showed the project page completely unchanged
+        right after clicking "View/Download Documents" — no in-page modal
+        ever appears there. So instead of assuming one, catch whichever of
+        the two things the button actually does: open the download picker
+        in a new tab, or trigger a file download directly on this same
+        page. Returns (new_page_or_None, download_or_None)."""
+        ctx = page.context
+        new_pages = []
+        downloads = []
+        ctx.on("page", lambda p: new_pages.append(p))
+        page.on("download", lambda d: downloads.append(d))
+        page.click("text=View/Download Documents", timeout=8000)
+        deadline = time.time() + 6
+        while time.time() < deadline and not new_pages and not downloads:
+            page.wait_for_timeout(200)
+        if downloads:
+            print("  ConstructConnect: 'View/Download Documents' triggered a direct download")
+            return None, downloads[0]
+        if new_pages:
+            doc_page = new_pages[0]
+            try:
+                doc_page.wait_for_load_state(timeout=self.PAGE_TIMEOUT_MS)
+            except Exception:
+                pass
+            print(f"  ConstructConnect: 'View/Download Documents' opened a new tab "
+                  f"({doc_page.url})")
+            return doc_page, None
+        return None, None
+
+    def _handle_download(self, download, label, project_url):
+        """A download that fired directly off "View/Download Documents"
+        (no "Download All"/"Zipped PDFs" picker involved) — could be a zip
+        or a single document depending on how many files the project has."""
+        path = download.path()
+        if not path:
             return []
-        return self._extract_zip(zip_bytes, label, project_url)
+        if os.path.getsize(path) > self.MAX_ZIP_BYTES:
+            print("  ! ConstructConnect: download too large, skipping")
+            return []
+        name = download.suggested_filename or ""
+        with open(path, "rb") as f:
+            data = f.read()
+        if name.lower().endswith(".zip"):
+            return self._extract_zip(data, label, project_url)
+        if name.lower().endswith(DOC_EXTENSIONS):
+            return [(label, None, f"{label} - {name}", data, project_url, None)]
+        print(f"  ! ConstructConnect: downloaded '{name}' — unrecognized type, skipping")
+        return []
 
     def _download_zip(self, page):
         """Click "Download All", pick "Zipped PDFs", click "Start", and
