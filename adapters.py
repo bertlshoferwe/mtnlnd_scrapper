@@ -674,26 +674,25 @@ class ConstructConnectAdapter(SiteAdapter):
 
     def _download_zip(self, page):
         """Click "Download All", pick "Zipped PDFs", click "Start", and
-        return the resulting file's bytes. The split-button's main click may
-        just re-trigger the last-used format instead of opening the picker
-        — if "Zipped PDFs" isn't visible yet, try the caret next to it."""
+        return the resulting file's bytes.
+
+        "Download All" is a split button: clicking the button itself
+        immediately downloads every document merged into one PDF — it does
+        NOT open a picker. Confirmed via screenshot: the small separate
+        arrow beside it opens a "File Format" panel with "Multi-page PDF" /
+        "Zipped PDFs" radio options and a "Start" button. So the arrow is
+        the only thing to click here — "Download All" itself must be left
+        alone or it fires the unwanted merged-PDF download right away."""
         try:
-            page.click("text=Download All", timeout=8000)
+            caret = (page.query_selector("button:has-text('Download All') + button")
+                     or page.query_selector("[aria-haspopup='true']"))
+            if caret:
+                caret.click(timeout=4000)
+            page.wait_for_timeout(600)
         except Exception:
             pass
-        page.wait_for_timeout(600)
 
         zipped = page.query_selector("text=Zipped PDFs")
-        if not zipped or not zipped.is_visible():
-            try:
-                caret = (page.query_selector("button:has-text('Download All') + button")
-                         or page.query_selector("[aria-haspopup='true']"))
-                if caret:
-                    caret.click(timeout=4000)
-                    page.wait_for_timeout(600)
-                    zipped = page.query_selector("text=Zipped PDFs")
-            except Exception:
-                pass
         if not zipped:
             print("  ! ConstructConnect: couldn't find the 'Zipped PDFs' option")
             # One debug screenshot of the actual download-modal state is
