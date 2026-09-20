@@ -71,18 +71,18 @@ jobs:
           CREDENTIALS_KEY: ${{ secrets.CREDENTIALS_KEY }}
 
       # The ConstructConnect adapter (adapters.py) saves a screenshot + page
-      # text dump here when it lands somewhere it doesn't recognize (e.g. no
-      # saved search matched anything) — pick it up if present so a person
-      # can see what the crawler actually saw, instead of guessing blind
-      # from the text log alone. Never fails the job: runs even if the scan
-      # step failed, and is a no-op when the files don't exist.
+      # text dump at a few checkpoints (constructconnect_<tag>.png/.txt) —
+      # pick them up if present so a person can see what the crawler
+      # actually saw, instead of guessing blind from the text log alone.
+      # Never fails the job: runs even if the scan step failed, and is a
+      # no-op when no such files exist.
       - name: Upload ConstructConnect debug artifacts (if any)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: constructconnect-debug
           path: |
-            constructconnect_debug.png
-            constructconnect_debug.txt
+            constructconnect_*.png
+            constructconnect_*.txt
           if-no-files-found: ignore
           retention-days: 14

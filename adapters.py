@@ -307,12 +307,12 @@ class ConstructConnectAdapter(SiteAdapter):
     browser to page through results and trigger each project's document
     download.
 
-    ConstructConnect's own filter UI (Project Category, Last Updated, etc.)
-    doesn't put its state in the URL — applying filters leaves the address
-    bar unchanged — so there's no filtered URL to just point a scan at.
-    Instead this works through every Saved Search already set up in the
-    account's sidebar (Search > Saved Searches): each one is a stable,
-    already-curated scope. For each saved search: page through its results
+    Current phase: prove out login + document discovery + download before
+    adding any scoping. It logs in, confirms the SSO redirect actually
+    landed in the authenticated app (see _wait_left_login_host — the
+    identity provider's own stuck "Loading..." screen looks enough like a
+    successful login to fool the generic password-field heuristic), then
+    works through whatever project list that lands on: page through it
     (MAX_PROJECTS_PER_SEARCH cap), open each project, click "View/Download
     Documents", choose "Zipped PDFs" from the "Download All" split button,
     and capture the resulting zip — unzipped here into individual PDFs so
@@ -321,22 +321,28 @@ class ConstructConnectAdapter(SiteAdapter):
     two different projects' same-named files, e.g. "Addendum 1.pdf", don't
     collide in that dedup).
 
-    SAVED_SEARCHES has to be kept in sync by hand with whatever's actually
-    saved in the account — add/rename/remove entries here to match.
+    Next phase (not wired up yet): ConstructConnect's own filter UI doesn't
+    put its state in the URL — applying filters leaves the address bar
+    unchanged — so once the above is confirmed working, scope this to the
+    account's curated Saved Searches (Search > Saved Searches) instead of
+    whatever the default view shows. SAVED_SEARCHES below is a start on
+    that list, kept in sync by hand with the account.
+
     The site URL field is ignored for navigation (same as the other
     adapters) but is still used as the login page when no separate Login
     page URL is set on the Login tab.
     """
 
     key = "constructconnect"
-    label = "ConstructConnect (saved searches)"
-    help = ("Logs in and works through every Saved Search listed in "
-            "adapters.py's ConstructConnectAdapter.SAVED_SEARCHES, downloading "
-            "each project's documents. Needs a login set on the Login tab.")
+    label = "ConstructConnect"
+    help = ("Logs in and downloads documents from whatever project list is "
+            "on screen after login (not yet scoped to a Saved Search — see "
+            "adapters.py). Needs a login set on the Login tab.")
     hosts = ("app.constructconnect.com",)
     needs_browser = True
 
-    # Keep this in sync with Search > Saved Searches in the account.
+    # Kept for the next phase (see find_documents_with_browser) — sync this
+    # by hand with Search > Saved Searches in the account when it's back in use.
     SAVED_SEARCHES = (
         "denver storm",
         "Erosion AND Sedimentation Controls - General Terms - Documents",
@@ -348,9 +354,19 @@ class ConstructConnectAdapter(SiteAdapter):
 
     BASE = "https://app.constructconnect.com"
     PAGE_TIMEOUT_MS = 25000
-    RUN_BUDGET_S = 1800              # whole adapter run, every saved search combined
-    MAX_PROJECTS_PER_SEARCH = 100    # safety cap per saved search
+    RUN_BUDGET_S = 1800              # whole adapter run
+    MAX_PROJECTS_PER_SEARCH = 100    # safety cap per results view
     MAX_ZIP_BYTES = 150 * 1024 * 1024
+    LOGIN_REDIRECT_TIMEOUT_S = 25    # how long to wait for the SSO redirect back into the app
+    # A generic browser-flavored UA and Playwright's default navigator.webdriver=true
+    # got the SSO login (login.io.constructconnect.com) stuck forever on a
+    # "Loading..." screen — never redirecting back into the app — which looks
+    # like automation detection on the identity provider's side. This is a
+    # plain desktop Chrome UA instead; combined with the launch arg and init
+    # script below, it's a standard (not foolproof) way to look less like a
+    # bot to that kind of check.
+    USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 
     def find_documents_with_browser(self, site, login):
         if not login:
@@ -365,7 +381,6 @@ class ConstructConnectAdapter(SiteAdapter):
 
         import browser_crawl  # reuse its best-effort login helper
 
-        out = []
         deadline = time.time() + self.RUN_BUDGET_S
         try:
             pw = sync_playwright().start()
@@ -374,7 +389,9 @@ class ConstructConnectAdapter(SiteAdapter):
             return [], None
 
         try:
-            browser = pw.chromium.launch(headless=True)
+            browser = pw.chromium.launch(
+                headless=True, args=["--disable-blink-features=AutomationControlled"],
+            )
         except Exception as e:
             print(f"  ! ConstructConnect: Chromium not available ({e})")
             pw.stop()
@@ -382,37 +399,45 @@ class ConstructConnectAdapter(SiteAdapter):
 
         ctx = browser.new_context(
             accept_downloads=True,
-            user_agent="Mozilla/5.0 (compatible; BidScoutBot/1.0)",
+            user_agent=self.USER_AGENT,
+            viewport={"width": 1366, "height": 900},
+        )
+        ctx.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
         page = ctx.new_page()
         try:
             # Reuses this same page for login (rather than the default
             # throwaway one _attempt_login would open and close) — the login
             # goes through an SSO redirect (login.io.constructconnect.com ->
-            # /api/gciconsume?returnUrl=...), and a fresh page.goto() to a
+            # /api/gcipconsume?returnUrl=...), and a fresh page.goto() to a
             # different URL right after was bouncing back to the login
             # screen instead of landing in the authenticated app.
             login_result = browser_crawl._attempt_login(ctx, login, page=page)
             if not login_result.get("ok"):
                 return [], login_result
 
-            self._open_search_page(page)
+            # _attempt_login's "password field is gone" heuristic is also
+            # satisfied by the SSO's own stuck "Loading..." screen (it has
+            # no password field either) — confirm we actually left that
+            # host before treating this as a real login.
+            if not self._wait_left_login_host(page):
+                msg = (f"stuck on the SSO login page ({page.url}) after submitting "
+                       "credentials — looks like it's being blocked as automated, "
+                       "not a bad password")
+                print(f"  ! ConstructConnect: {msg}")
+                self._save_debug_screenshot(page, "stuck_on_login")
+                return [], {"ok": False, "message": msg}
 
-            found_any = False
-            for search_name in self.SAVED_SEARCHES:
-                if time.time() > deadline:
-                    print("  ! ConstructConnect: run budget reached, stopping")
-                    break
-                try:
-                    docs, matched = self._run_saved_search(page, search_name, deadline)
-                    found_any = found_any or matched
-                    out.extend(docs)
-                except Exception as e:
-                    print(f"  ! ConstructConnect: saved search '{search_name}' failed: {e}")
+            print(f"  ConstructConnect: authenticated, landed on {page.url}")
+            self._save_debug_screenshot(page, "landed")  # always, while this is still new
 
-            if not found_any:
-                self._save_debug_screenshot(page)
-
+            # Not filtering by Saved Search yet (SAVED_SEARCHES above is
+            # parked for that) — first checking whether documents can be
+            # found and downloaded at all from whatever login lands us on.
+            out = self._scan_results_page(page, deadline)
+            if not out:
+                self._save_debug_screenshot(page, "no_docs_found")
             return out, login_result
         finally:
             try:
@@ -420,56 +445,25 @@ class ConstructConnectAdapter(SiteAdapter):
             finally:
                 pw.stop()
 
-    def _open_search_page(self, page):
-        """Land on wherever the Saved Searches sidebar actually lives, from
-        wherever the login's SSO redirect chain left off — deliberately
-        does NOT navigate to a fresh URL first; doing that once bounced
-        back to the login screen instead of the authenticated app (see the
-        note in find_documents_with_browser). Clicks the left icon nav's
-        "Search" entry (like a real user would) if it isn't already on a
-        page that has it, then "View All Searches" if the sidebar offers a
-        short default list rather than the full one."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=self.PAGE_TIMEOUT_MS)
-        except Exception:
-            pass
-        print(f"  ConstructConnect: post-login page is {page.url}")
-        try:
-            nav = page.query_selector("text=Search")
-            if nav and nav.is_visible():
-                nav.click(timeout=5000)
-                page.wait_for_timeout(1500)
-            else:
-                print("  ! ConstructConnect: no 'Search' nav item found — "
-                      f"landed on {page.url}")
-        except Exception as e:
-            print(f"  ! ConstructConnect: couldn't click the Search nav: {e}")
-        try:
-            view_all = page.query_selector("text=View All Searches")
-            if view_all and view_all.is_visible():
-                view_all.click(timeout=5000)
-                page.wait_for_timeout(1500)
-        except Exception:
-            pass
-        print(f"  ConstructConnect: search page is {page.url}")
+    def _wait_left_login_host(self, page):
+        """_attempt_login's "password field is gone" heuristic is also
+        satisfied by the SSO's own stuck "Loading..." screen (no password
+        field there either), so confirm here that the browser actually
+        navigated away from login.io.constructconnect.com within a
+        reasonable window before calling it a real login."""
+        deadline = time.time() + self.LOGIN_REDIRECT_TIMEOUT_S
+        while time.time() < deadline:
+            if "login.io.constructconnect.com" not in page.url:
+                return True
+            page.wait_for_timeout(1000)
+        return "login.io.constructconnect.com" not in page.url
 
-    def _run_saved_search(self, page, search_name, deadline):
-        """Returns ([doc_links...], matched) — `matched` is False when the
-        saved search couldn't even be found/opened, so the caller can tell
-        "found it, no projects" apart from "never found the sidebar at all"."""
+    def _scan_results_page(self, page, deadline):
+        """Work through whatever project list is currently on screen —
+        no Saved Search filtering yet (see SAVED_SEARCHES / the note in
+        find_documents_with_browser), just proving out login + document
+        discovery + download first."""
         out = []
-        print(f"  ConstructConnect: opening saved search '{search_name}'")
-        try:
-            el = page.query_selector(f"text={search_name}")
-            if not el or not el.is_visible():
-                print(f"  ! ConstructConnect: '{search_name}' not found in the sidebar")
-                return out, False
-            el.click(timeout=5000)
-        except Exception as e:
-            print(f"  ! ConstructConnect: couldn't open '{search_name}': {e}")
-            return out, False
-        page.wait_for_timeout(2000)
-
         project_count = 0
         while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
             labels = self._project_labels(page)
@@ -486,25 +480,25 @@ class ConstructConnectAdapter(SiteAdapter):
             if not self._go_to_next_page(page):
                 break
             page.wait_for_timeout(1500)
-        print(f"  ConstructConnect: '{search_name}' — {project_count} project(s) checked, "
-              f"{len(out)} document(s) so far")
-        return out, True
+        print(f"  ConstructConnect: {project_count} project(s) checked, "
+              f"{len(out)} document(s) found")
+        return out
 
-    def _save_debug_screenshot(self, page):
-        """None of the saved searches matched anything — save a screenshot
-        (and the visible text of the page) so a person can see what the
-        crawler actually landed on, instead of guessing blind from another
-        failed run. Picked up by the GitHub Actions workflow as a build
-        artifact when present."""
+    def _save_debug_screenshot(self, page, tag):
+        """Save a screenshot + the page's visible text under a distinct
+        name for this point in the run, so a person can see what the
+        crawler actually saw instead of guessing blind from the text log
+        alone. Picked up by the GitHub Actions workflow as a build artifact
+        when present."""
         try:
-            page.screenshot(path="constructconnect_debug.png", full_page=True)
+            page.screenshot(path=f"constructconnect_{tag}.png", full_page=True)
             text = page.evaluate("document.body.innerText") or ""
-            with open("constructconnect_debug.txt", "w") as f:
+            with open(f"constructconnect_{tag}.txt", "w") as f:
                 f.write(f"URL: {page.url}\n\n{text[:20000]}")
-            print("  ! ConstructConnect: found no saved searches at all — saved "
-                  "constructconnect_debug.png/.txt (uploaded as a workflow artifact)")
+            print(f"  ConstructConnect: saved constructconnect_{tag}.png/.txt "
+                  "(uploaded as a workflow artifact)")
         except Exception as e:
-            print(f"  ! ConstructConnect: couldn't save debug screenshot: {e}")
+            print(f"  ! ConstructConnect: couldn't save debug screenshot ({tag}): {e}")
 
     def _project_labels(self, page):
         """The Project Name column's link text for every row on the current
