@@ -34,11 +34,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install LibreOffice (for real DOCX page numbers)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libreoffice-writer
-
+      # LibreOffice (for real DOCX page numbers) is NOT installed here —
+      # most runs hit zero DOCX files, and libreoffice-writer is a sizeable
+      # apt install, so scraper.py's _ensure_libreoffice() installs it lazily
+      # on demand the first time a DOCX actually needs converting. Runs with
+      # no DOCX skip the cost entirely.
       - name: Install Python dependencies
         run: pip install -r requirements-scan.txt
 

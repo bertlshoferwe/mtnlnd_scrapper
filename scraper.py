@@ -34,12 +34,13 @@ For each site configured for a division:
      whole run's results
 
 PDF page numbers are real. DOCX page numbers are only real if LibreOffice
-(`soffice`) is installed on the runner (used to render the DOCX to PDF
-first) — GitHub Actions' ubuntu-latest runners are full VMs, so `apt-get
-install libreoffice-writer` in the workflow gets this working, unlike a
-Vercel serverless function where it couldn't run at all. Otherwise DOCX
-locations fall back to an approximate paragraph-block number, clearly
-labeled as such. See README.md for details.
+(`soffice`) can be used to render the DOCX to PDF first — GitHub Actions'
+ubuntu-latest runners are full VMs, so `_ensure_libreoffice()` apt-installs
+it lazily the first time a DOCX actually needs converting (most runs hit
+none, so most runs never pay for it), unlike a Vercel serverless function
+where it couldn't run at all. Otherwise DOCX locations fall back to an
+approximate paragraph-block number, clearly labeled as such. See README.md
+for details.
 
 Every integration in this script (Firecrawl, Claude, LibreOffice) is
 optional and degrades gracefully — without an AI provider configured, the script
@@ -109,6 +110,7 @@ DOC_EXTENSIONS = (".pdf", ".docx", ".doc")
 MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50 MB safety cap per document
 REQUEST_TIMEOUT = 30  # seconds
 LIBREOFFICE_TIMEOUT = 60  # seconds, for docx->pdf conversion
+LIBREOFFICE_INSTALL_TIMEOUT = 300  # seconds, for the on-demand apt-get install
 PARAS_PER_PSEUDO_PAGE = 25  # only used for the DOCX fallback when LibreOffice isn't installed
 # Model selection now lives in ai_provider.py (ANTHROPIC_MODEL / GEMINI_MODEL
 # env vars, one per provider) since which model applies depends on which
@@ -613,15 +615,48 @@ def _extract_pdf_pages(raw_bytes):
     return pages
 
 
+_libreoffice_install_attempted = False
+
+
+def _ensure_libreoffice():
+    """
+    LibreOffice isn't preinstalled on the runner — it used to be apt-installed
+    unconditionally in the workflow on every run, which cost real setup time
+    even on the (common) runs with no DOCX at all. Install it here instead,
+    lazily, only the first time a DOCX actually needs converting; a second
+    DOCX later in the same run just finds `soffice` already there. Only ever
+    works on the GitHub Actions runner (a full Ubuntu VM with passwordless
+    sudo and apt) — anywhere else `apt-get` won't exist and this is a no-op.
+    """
+    global _libreoffice_install_attempted
+    if shutil.which("soffice") or shutil.which("libreoffice"):
+        return True
+    if _libreoffice_install_attempted or not shutil.which("apt-get"):
+        return False
+    _libreoffice_install_attempted = True
+    print("  Installing LibreOffice for real DOCX page numbers (first DOCX this run)...")
+    try:
+        subprocess.run(["sudo", "apt-get", "update"],
+                        check=True, timeout=LIBREOFFICE_INSTALL_TIMEOUT, capture_output=True)
+        subprocess.run(["sudo", "apt-get", "install", "-y", "--no-install-recommends",
+                         "libreoffice-writer"],
+                        check=True, timeout=LIBREOFFICE_INSTALL_TIMEOUT, capture_output=True)
+    except Exception as e:
+        print(f"  ! Couldn't install LibreOffice on demand, falling back to approximate location: {e}")
+        return False
+    return bool(shutil.which("soffice") or shutil.which("libreoffice"))
+
+
 def _extract_docx_pages_via_libreoffice(raw_bytes):
     """
     Convert the DOCX to PDF with headless LibreOffice, then read real page
-    boundaries from that PDF. Returns None if LibreOffice isn't installed or
-    the conversion fails, so the caller can fall back gracefully.
+    boundaries from that PDF. Returns None if LibreOffice isn't installed (and
+    can't be installed on demand) or the conversion fails, so the caller can
+    fall back gracefully.
     """
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice:
+    if not _ensure_libreoffice():
         return None
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
 
     with tempfile.TemporaryDirectory() as tmp:
         docx_path = os.path.join(tmp, "doc.docx")
