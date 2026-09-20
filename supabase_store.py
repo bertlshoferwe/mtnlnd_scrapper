@@ -163,7 +163,10 @@ def set_site_active(division_id, site_id, active):
     return res.data[0]
 
 
-def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
+def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, login=None):
+    """`login`, when given, is {"username", "password_enc", "url"} — the
+    password already encrypted by the caller (api/index.py), since this
+    module has no opinion on how secrets are handled."""
     row = {"division_id": division_id, "name": name, "url": url}
     if listing is not None:
         row["listing"] = listing
@@ -171,21 +174,29 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None):
         row["tabs"] = tabs
     if adapter:
         row["adapter"] = adapter
+    if login is not None:
+        row["login_username"] = login["username"]
+        row["login_password_enc"] = login["password_enc"]
+        row["login_url"] = login["url"]
     res = get_client().table("sites").insert(row).execute()
     return res.data[0]
 
 
-def update_site(division_id, site_id, name, url, listing=None, adapter=None):
+def update_site(division_id, site_id, name, url, listing=None, adapter=None, login_patch=None):
     """Overwrite an existing site's config. `listing` and `adapter` are
     written as given (including None, to clear a previously-set value) so the
     dashboard's edit form can move a site between strategies. `tabs` is left
-    untouched — it has no dashboard UI."""
+    untouched — it has no dashboard UI. `login_patch` is merged in as given
+    (the caller decides whether to touch login_password_enc, so leaving a
+    password field blank in the edit form doesn't overwrite a saved one)."""
     patch = {
         "name": name,
         "url": url,
         "listing": listing,
         "adapter": adapter,
     }
+    if login_patch:
+        patch.update(login_patch)
     res = (
         get_client().table("sites").update(patch)
         .eq("division_id", division_id).eq("id", site_id).execute()

@@ -149,6 +149,7 @@ HEADERS = {
 import supabase_store
 import adapters
 import browser_crawl
+import credentials
 
 
 def load_config(division_id):
@@ -499,25 +500,53 @@ def find_document_links_via_listing(site, ai_client):
     return results
 
 
+def _site_login(site):
+    """The {"username", "password", "url"} to log in with before the default
+    browser crawl, or None if the site has no login configured or its saved
+    password can't be decrypted. Only the generic browser crawl (below) uses
+    this — portal adapters and the listing/tabs crawls don't use a real
+    browser session, so a login form wouldn't do anything for them."""
+    username = (site.get("login_username") or "").strip()
+    enc = site.get("login_password_enc")
+    if not username or not enc:
+        return None
+    try:
+        password = credentials.decrypt_password(enc)
+    except Exception as e:
+        print(f"  ! Could not decrypt login credentials for '{site.get('name')}': {e}")
+        return None
+    return {
+        "username": username,
+        "password": password,
+        "url": (site.get("login_url") or "").strip() or site.get("url"),
+    }
+
+
 def scan_site(site, ai_client):
     """
-    Dispatch to the right document-finding strategy for a site and return a
-    uniform list of 6-tuples:
-        (label_or_None, url_or_None, filename, content_bytes_or_None,
-         source_url_or_None, bid_date_or_None)
-    `content_bytes` is set only for files captured from a JavaScript download
-    (no URL to fetch later); otherwise it's None and the caller downloads
-    `url`. `source_url` is a link to the job/project page the file belongs to.
-    `bid_date` ('YYYY-MM-DD') only comes from portal adapters.
+    Dispatch to the right document-finding strategy for a site and return
+    (doc_links, cookies):
+      - doc_links: a uniform list of 6-tuples
+            (label_or_None, url_or_None, filename, content_bytes_or_None,
+             source_url_or_None, bid_date_or_None)
+        `content_bytes` is set only for files captured from a JavaScript
+        download (no URL to fetch later); otherwise it's None and the caller
+        downloads `url`. `source_url` is a link to the job/project page the
+        file belongs to. `bid_date` ('YYYY-MM-DD') only comes from portal
+        adapters.
+      - cookies: a {name: value} dict of the authenticated session's cookies
+        when the site required a login (empty otherwise) — pass it to
+        download_document() so linked (non-captured) documents can still be
+        fetched after login.
     """
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
         print(f"  Adapter: {adapter.label}")
         return [(lbl, url, fn, None, src, bid)
-                for lbl, url, fn, src, bid in adapter.find_documents(site)]
+                for lbl, url, fn, src, bid in adapter.find_documents(site)], {}
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
-        return []
+        return [], {}
 
     listing = site.get("listing") or {}
     if listing.get("link_selector") or listing.get("link_pattern"):
@@ -525,26 +554,32 @@ def scan_site(site, ai_client):
         # targeted listing crawl. An empty {} — left over from the old
         # "let AI find the links" checkbox — falls through to the browser crawler.
         return [(lbl, url, fn, None, None, None)
-                for lbl, url, fn in find_document_links_via_listing(site, ai_client)]
+                for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}
     if site.get("tabs"):
         return [(lbl, url, fn, None, None, None)
-                for lbl, url, fn in find_document_links_across_tabs(site)]
+                for lbl, url, fn in find_document_links_across_tabs(site)], {}
 
     # Default: a real browser crawl — renders JS, follows links, clicks
-    # "Documents/Plans" tabs, captures JS downloads. Falls back to the plain
-    # requests link finder if Playwright/Chromium isn't available.
-    crawled = browser_crawl.crawl_site(site["url"])
+    # "Documents/Plans" tabs, captures JS downloads, logs in first if the
+    # site is configured for it. Falls back to the plain requests link
+    # finder if Playwright/Chromium isn't available.
+    crawled, cookies = browser_crawl.crawl_site(site["url"], login=_site_login(site))
     if crawled is not None:
         return [(lbl, url, fn, content, page_url, None)
-                for lbl, url, fn, content, page_url in crawled]
+                for lbl, url, fn, content, page_url in crawled], cookies
     return [(None, doc_url, fn, None, site["url"], None)
-            for doc_url, fn in find_document_links(site["url"])]
+            for doc_url, fn in find_document_links(site["url"])], {}
 
 
-def download_document(url):
-    """Return raw bytes, or None on failure / oversize."""
+def download_document(url, cookies=None):
+    """Return raw bytes, or None on failure / oversize. `cookies` (from a
+    logged-in browser crawl's session) lets a login-protected document be
+    fetched here even though this is a plain request, not the browser."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT, stream=True)
+        resp = requests.get(
+            url, headers=HEADERS, timeout=REQUEST_TIMEOUT, stream=True,
+            cookies=cookies or None,
+        )
         resp.raise_for_status()
     except requests.RequestException as e:
         print(f"  ! Failed to download {url}: {e}")
@@ -898,7 +933,7 @@ def _scan_division(division):
                 run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
                 done=0, total=0, overall=overall_done,
             )
-            doc_links = scan_site(site, ai_client)
+            doc_links, site_cookies = scan_site(site, ai_client)
 
             # Seen-tracking: only reconcile a site whose discovery actually
             # returned something — an empty result may just mean the adapter
@@ -957,7 +992,7 @@ def _scan_division(division):
                         done=site_done, total=site_total, overall=overall_done,
                     )
 
-                raw = content if content is not None else download_document(doc_url)
+                raw = content if content is not None else download_document(doc_url, cookies=site_cookies)
                 if raw is None:
                     row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
                     rows.append(row)

@@ -48,6 +48,7 @@ In the repo: **Settings → Secrets and variables → Actions → New repository
 - `AI_PROVIDER` — `anthropic` or `gemini` (optional if you're only adding one key below)
 - Whichever of `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` matches your chosen provider — see "How matching works" below for why this matters
 - `FIRECRAWL_API_KEY` (optional — get one at [firecrawl.dev](https://firecrawl.dev) if you need JS-rendered pages or anti-bot handling)
+- `CREDENTIALS_KEY` (optional — only needed if any site requires a login; see step 6 for how to generate it)
 
 You only need to add the secret for the provider you're actually using — the workflow passes both through as environment variables regardless, but `ai_provider.py` only initializes the one that's configured.
 
@@ -75,12 +76,13 @@ This is the **one shared schedule for every division** — Vercel Hobby doesn't 
    - `GITHUB_WORKFLOW_FILE` — `daily-scan.yml` (matches the filename in `.github/workflows/`)
    - `GITHUB_REF` — `main` (or whatever your default branch is)
    - `DISPLAY_SCHEDULE_UTC` — optional, e.g. `07:00 UTC`, just cosmetic text shown on the dashboard (keep it matching the workflow's `cron`)
+   - `CREDENTIALS_KEY` — optional, only needed if any site requires a login. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set the **same value** here and as the GitHub Actions secret above — one side encrypts a site's saved password, the other decrypts it to log in.
 3. Redeploy if you added the environment variables after the first deploy (**Deployments → ⋯ → Redeploy**) so the function picks them up.
 4. Open the URL Vercel gives you (`https://<project>.vercel.app`). You should see the dashboard with one empty division ready to go, or create your first one with "+ New division".
 
 ### 7. Add your divisions, sites, and keywords
 
-Everything from here is through the dashboard: create a division per team, add sites (with the "Advanced" toggle for listing-page CSS selectors or AI-detected job links), and add keywords. This writes straight to Supabase — the next scheduled GitHub Actions run (or a manual "Run Now") will pick it up.
+Everything from here is through the dashboard: create a division per team, add sites (with the "Advanced" toggle for listing-page CSS selectors, AI-detected job links, or a "Requires login" username/password for sites whose documents sit behind a login form), and add keywords. This writes straight to Supabase — the next scheduled GitHub Actions run (or a manual "Run Now") will pick it up.
 
 ### 8. Test it
 

@@ -16,11 +16,21 @@ create table if not exists sites (
   tabs jsonb,              -- null = no tabs; otherwise a list of {"label": "...", "selector": "..."}
   adapter text,            -- null = generic HTML crawl; otherwise a key from adapters.py (portal-specific API)
   active boolean not null default true,  -- false = kept in the list but skipped by every scan
+  -- Login, for a site whose documents sit behind a login form. Only used by
+  -- the generic browser crawl (adapters and listing/tabs crawls don't use a
+  -- real browser session). login_password_enc is Fernet-encrypted with
+  -- CREDENTIALS_KEY (see credentials.py) — never sent to the dashboard.
+  login_username text,
+  login_password_enc text,
+  login_url text,          -- login page, if different from url; null = use url
   created_at timestamptz default now()
 );
 -- Migration for existing databases:
 --   alter table sites add column if not exists adapter text;
 --   alter table sites add column if not exists active boolean not null default true;
+--   alter table sites add column if not exists login_username text;
+--   alter table sites add column if not exists login_password_enc text;
+--   alter table sites add column if not exists login_url text;
 
 create table if not exists keywords (
   id bigint generated always as identity primary key,

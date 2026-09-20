@@ -5,6 +5,7 @@ pdfplumber>=0.11
 python-docx>=1.1
 python-dotenv>=1.0
 supabase>=2.9
+cryptography>=42  # decrypts a site's saved login password before logging in
 
 # Headless browser for the generic crawler (browser_crawl.py) — renders JS
 # sites, clicks document tabs, captures JS downloads. Needs a one-time

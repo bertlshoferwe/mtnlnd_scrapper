@@ -16,13 +16,21 @@ bid/project/solicitation pages, with page/depth/time caps so a run stays
 bounded.
 
 Entry point:
-    crawl_site(start_url) -> [(label, url_or_None, filename, content_or_None, page_url)]
+    crawl_site(start_url, login=None) ->
+        ([(label, url_or_None, filename, content_or_None, page_url)], cookies)
 
 `content` is raw bytes for files captured from a JS download (no URL to fetch
 later); it's None for ordinary linked files, which the caller downloads by URL.
 `page_url` is the page the file was found on (used for the "open project" link).
-If Playwright or its browser isn't available, returns [] and logs why — the
-caller falls back to the plain-requests link finder.
+If Playwright or its browser isn't available, returns (None, {}) and logs why
+— the caller falls back to the plain-requests link finder.
+
+`login`, when given, is {"username", "password", "url"}: before crawling,
+the browser context logs in at `url` by auto-filling the first visible
+password field and a preceding username/email field, then submits. The
+returned `cookies` ({name: value}) carry that authenticated session so the
+caller can pass them to plain `requests` downloads of documents that were
+only linked (not captured as a JS download) during the crawl.
 """
 
 import os
@@ -163,12 +171,61 @@ def _save_download(dl):
         return None
 
 
-def crawl_site(start_url):
+# Candidate username/email fields, tried in order, first visible one wins.
+_USERNAME_SELECTOR = (
+    "input[type=email], input[autocomplete=username], "
+    "input[type=text][name*=user i], input[type=text][name*=email i], "
+    "input[type=text][id*=user i], input[type=text][id*=email i], "
+    "input[type=text]"
+)
+_SUBMIT_SELECTOR = (
+    "button[type=submit], input[type=submit], "
+    "button:has-text('Log in'), button:has-text('Log In'), "
+    "button:has-text('Sign in'), button:has-text('Sign In')"
+)
+
+
+def _attempt_login(ctx, login):
+    """Best-effort: open the login page, fill the first visible password
+    field and a preceding username/email field, submit, and wait for the
+    page to settle. Silent no-op (with a log line) if no matching form is
+    found — the crawl still proceeds with whatever session resulted."""
+    page = ctx.new_page()
+    try:
+        page.goto(login["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        page.wait_for_timeout(800)
+
+        pw_input = page.query_selector("input[type=password]")
+        if not pw_input or not pw_input.is_visible():
+            print(f"  ! Login: no password field found on {login['url']}")
+            return
+        user_input = page.query_selector(_USERNAME_SELECTOR)
+        if not user_input or not user_input.is_visible():
+            print(f"  ! Login: no username field found on {login['url']}")
+            return
+
+        user_input.fill(login["username"])
+        pw_input.fill(login["password"])
+
+        submit = page.query_selector(_SUBMIT_SELECTOR)
+        if submit:
+            submit.click(timeout=4000)
+        else:
+            pw_input.press("Enter")
+        page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+        print(f"  Logged in as {login['username']} at {login['url']}")
+    except Exception as e:
+        print(f"  ! Login attempt failed ({login['url']}): {e}")
+    finally:
+        page.close()
+
+
+def crawl_site(start_url, login=None):
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("  ! Playwright not installed — falling back to plain-request crawl")
-        return None
+        return None, {}
 
     origin = urlparse(start_url).netloc
     seen_pages = set()
@@ -180,7 +237,7 @@ def crawl_site(start_url):
         pw = sync_playwright().start()
     except Exception as e:
         print(f"  ! Could not start Playwright ({e}) — falling back to plain-request crawl")
-        return None
+        return None, {}
 
     try:
         browser = pw.chromium.launch(headless=True)
@@ -188,12 +245,17 @@ def crawl_site(start_url):
         print(f"  ! Chromium not available ({e}) — run 'playwright install chromium'. "
               "Falling back to plain-request crawl")
         pw.stop()
-        return None
+        return None, {}
 
     ctx = browser.new_context(
         accept_downloads=True,
         user_agent="Mozilla/5.0 (compatible; BidScoutBot/1.0)",
     )
+
+    cookies = {}
+    if login:
+        _attempt_login(ctx, login)
+        cookies = {c["name"]: c["value"] for c in ctx.cookies()}
 
     try:
         while queue and len(seen_pages) < MAX_PAGES and len(found) < MAX_DOCS:
@@ -271,4 +333,4 @@ def crawl_site(start_url):
     results = [(label, u, fn, content, page_url)
                for (fn, _), (label, u, content, page_url) in found.items()]
     print(f"  Crawled {len(seen_pages)} page(s), found {len(results)} document(s)")
-    return results
+    return results, cookies

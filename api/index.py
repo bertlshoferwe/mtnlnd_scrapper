@@ -64,6 +64,7 @@ from docx import Document as DocxDocument
 
 import supabase_store
 import adapters
+import credentials
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(_REPO_ROOT, "templates")
@@ -177,13 +178,30 @@ def api_get_sites(division_id):
     _, err = _require_division(division_id)
     if err:
         return err
-    return jsonify(supabase_store.load_sites(division_id))
+    return jsonify([_public_site(s) for s in supabase_store.load_sites(division_id)])
+
+
+def _public_site(site):
+    """Strip a site row of its encrypted login password before it goes to
+    the browser — the dashboard only needs to know a login is configured
+    (and show the username/login URL back in the edit form), never the
+    encrypted secret itself."""
+    site = dict(site)
+    site.pop("login_password_enc", None)
+    site["has_login"] = bool(site.get("login_username"))
+    return site
 
 
 def _parse_site_payload(data):
-    """Turn the add/edit form's JSON into (name, url, listing, adapter) or
-    raise ValueError with a user-facing message. Same rules for both routes
-    so a site can be edited into any strategy it could be created in."""
+    """Turn the add/edit form's JSON into (name, url, listing, adapter,
+    login) or raise ValueError with a user-facing message. Same rules for
+    both routes so a site can be edited into any strategy it could be
+    created in.
+
+    `login` is None (no login / login removed) or {"username", "password",
+    "url"} with the password in plaintext — encrypting it and deciding
+    whether a blank password means "unchanged" (edit) or is an error
+    (create) is the caller's job, since that differs by route."""
     name = (data.get("name") or "").strip()
     url = (data.get("url") or "").strip()
     adapter = (data.get("adapter") or "").strip()
@@ -214,7 +232,16 @@ def _parse_site_payload(data):
         if data.get("link_pattern"):
             listing["link_pattern"] = data["link_pattern"].strip()
 
-    return name, url, listing, (adapter or None)
+    login_username = (data.get("login_username") or "").strip()
+    login = None
+    if login_username:
+        login = {
+            "username": login_username,
+            "password": data.get("login_password") or "",
+            "url": (data.get("login_url") or "").strip() or None,
+        }
+
+    return name, url, listing, (adapter or None), login
 
 
 @app.route("/api/<division_id>/sites", methods=["POST"])
@@ -224,16 +251,26 @@ def api_add_site(division_id):
         return err
 
     try:
-        name, url, listing, adapter = _parse_site_payload(
+        name, url, listing, adapter, login = _parse_site_payload(
             request.get_json(force=True, silent=True) or {}
         )
+        if login and not login["password"]:
+            raise ValueError("a password is required when a login username is given")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
+    login_row = None
+    if login:
+        login_row = {
+            "username": login["username"],
+            "password_enc": credentials.encrypt_password(login["password"]),
+            "url": login["url"],
+        }
+
     site = supabase_store.add_site(
-        division_id, name, url, listing=listing, adapter=adapter
+        division_id, name, url, listing=listing, adapter=adapter, login=login_row
     )
-    return jsonify({"ok": True, "site": site})
+    return jsonify({"ok": True, "site": _public_site(site)})
 
 
 @app.route("/api/<division_id>/sites/<int:site_id>", methods=["PATCH"])
@@ -243,19 +280,30 @@ def api_update_site(division_id, site_id):
         return err
 
     try:
-        name, url, listing, adapter = _parse_site_payload(
+        name, url, listing, adapter, login = _parse_site_payload(
             request.get_json(force=True, silent=True) or {}
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
+    # No username -> login removed entirely. A username with a blank
+    # password means "keep the saved password" (the edit form never gets it
+    # back to re-submit), so login_password_enc is left out of the patch.
+    if login is None:
+        login_patch = {"login_username": None, "login_password_enc": None, "login_url": None}
+    else:
+        login_patch = {"login_username": login["username"], "login_url": login["url"]}
+        if login["password"]:
+            login_patch["login_password_enc"] = credentials.encrypt_password(login["password"])
+
     try:
         site = supabase_store.update_site(
-            division_id, site_id, name, url, listing=listing, adapter=adapter
+            division_id, site_id, name, url, listing=listing, adapter=adapter,
+            login_patch=login_patch,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
-    return jsonify({"ok": True, "site": site})
+    return jsonify({"ok": True, "site": _public_site(site)})
 
 
 @app.route("/api/<division_id>/sites/<int:site_id>/active", methods=["POST"])
@@ -271,7 +319,7 @@ def api_set_site_active(division_id, site_id):
     except ValueError as e:
         msg = str(e)
         return jsonify({"error": msg}), (404 if msg == "site not found" else 400)
-    return jsonify({"ok": True, "site": site})
+    return jsonify({"ok": True, "site": _public_site(site)})
 
 
 @app.route("/api/adapters", methods=["GET"])

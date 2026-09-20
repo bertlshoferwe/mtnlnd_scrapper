@@ -901,6 +901,25 @@
               <input type="text" id="linkPattern" placeholder="/jobs/ (optional)" style="flex:1;">
             </div>
           </div>
+          <div id="loginSection">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text); margin-top:6px;">
+              <input type="checkbox" id="siteRequiresLogin" style="width:auto;" onchange="onRequiresLoginChange()"> Requires login
+            </label>
+            <div id="loginFields" style="display:none; margin-top:8px;">
+              <div class="row">
+                <label>Username</label>
+                <input type="text" id="loginUsername" placeholder="username or email" style="flex:1;" autocomplete="off">
+              </div>
+              <div class="row">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="" style="flex:1;" autocomplete="new-password">
+              </div>
+              <div class="row">
+                <label>Login page URL</label>
+                <input type="url" id="loginUrl" placeholder="optional — defaults to the site URL above" style="flex:1;">
+              </div>
+            </div>
+          </div>
         </div>
         <div class="row" style="margin-top:14px;">
           <button class="btn-primary" id="siteSaveBtn" onclick="saveSite()">Add site</button>
@@ -1502,6 +1521,7 @@ async function loadSites() {
     let tags = '';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
+    if (site.has_login) tags += '<span class="tag tag-tabs">login</span>';
     const linkable = /^https?:\/\//i.test(site.url || '');
     const urlHtml = site.url
       ? (linkable
@@ -1597,6 +1617,13 @@ function onAdapterChange() {
     : 'https://example.com/bids';
   document.getElementById('listingFields').style.display = usingAdapter ? 'none' : '';
   document.getElementById('useAiListing').closest('label').style.display = usingAdapter ? 'none' : '';
+  // Login only applies to the default browser crawl — an adapter has its
+  // own way of talking to the portal, so a login form wouldn't be used.
+  document.getElementById('loginSection').style.display = usingAdapter ? 'none' : '';
+}
+function onRequiresLoginChange() {
+  document.getElementById('loginFields').style.display =
+    document.getElementById('siteRequiresLogin').checked ? '' : 'none';
 }
 // A deliberate pick (including explicitly choosing "None") always wins over
 // auto-attachment from here on, for the rest of this form session.
@@ -1647,8 +1674,16 @@ function editSite(siteId) {
   document.getElementById('linkPattern').value = pat;
   document.getElementById('useAiListing').checked = !site.adapter && !sel && !pat;
 
+  document.getElementById('siteRequiresLogin').checked = !!site.has_login;
+  document.getElementById('loginUsername').value = site.login_username || '';
+  document.getElementById('loginUrl').value = site.login_url || '';
+  const pwField = document.getElementById('loginPassword');
+  pwField.value = '';
+  pwField.placeholder = site.has_login ? 'saved — leave blank to keep it' : '';
+  onRequiresLoginChange();
+
   // Show Advanced whenever this site isn't on the plain "let AI find it" default.
-  document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat));
+  document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat || site.has_login));
   onAdapterChange();
 
   document.getElementById('siteFormTitle').textContent = 'Edit ' + site.name;
@@ -1667,6 +1702,12 @@ function hideAddSite() {
   document.getElementById('linkSelector').value = '';
   document.getElementById('linkPattern').value = '';
   document.getElementById('useAiListing').checked = true;
+  document.getElementById('siteRequiresLogin').checked = false;
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginPassword').placeholder = '';
+  document.getElementById('loginUrl').value = '';
+  onRequiresLoginChange();
   document.getElementById('advFields').classList.remove('open');
   onAdapterChange();
 }
@@ -1677,13 +1718,21 @@ async function saveSite() {
   const adapter = document.getElementById('siteAdapter').value;
   if (!name) { alert('Site name is required.'); return; }
   if (!url && !adapter) { alert('Enter a URL, or pick a portal adapter.'); return; }
+  const editing = editingSiteId != null;
   const body = {
     name: name, url: url, adapter: adapter,
     link_selector: document.getElementById('linkSelector').value.trim(),
     link_pattern: document.getElementById('linkPattern').value.trim(),
     use_ai_listing: document.getElementById('useAiListing').checked,
+    login_username: '', login_password: '', login_url: '',
   };
-  const editing = editingSiteId != null;
+  if (document.getElementById('siteRequiresLogin').checked) {
+    body.login_username = document.getElementById('loginUsername').value.trim();
+    body.login_password = document.getElementById('loginPassword').value;
+    body.login_url = document.getElementById('loginUrl').value.trim();
+    if (!body.login_username) { alert('Enter a username for the login, or turn off "Requires login".'); return; }
+    if (!editing && !body.login_password) { alert('Enter a password for the login.'); return; }
+  }
   const path = '/api/' + currentDivision + '/sites' + (editing ? '/' + editingSiteId : '');
   try {
     await api(path, {
