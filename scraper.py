@@ -545,6 +545,10 @@ def scan_site(site, ai_client):
     """
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
+        if adapter.needs_browser:
+            print(f"  Adapter: {adapter.label} (browser)")
+            doc_links, login_result = adapter.find_documents_with_browser(site, _site_login(site))
+            return doc_links, {}, login_result
         print(f"  Adapter: {adapter.label}")
         return [(lbl, url, fn, None, src, bid)
                 for lbl, url, fn, src, bid in adapter.find_documents(site)], {}, None

@@ -13,7 +13,11 @@ Adding a portal: subclass SiteAdapter, implement find_documents(), and add the
 class to the ADAPTERS list at the bottom.
 """
 
+import io
+import os
 import re
+import time
+import zipfile
 from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
@@ -45,6 +49,11 @@ class SiteAdapter:
     label = ""      # shown in the dashboard dropdown
     help = ""       # one-liner under the dropdown
     hosts = ()      # hostnames this adapter recognizes from a plain site URL
+    # True for an adapter that needs a real logged-in browser session (see
+    # ConstructConnectAdapter) rather than a plain requests call — scan_site()
+    # calls find_documents_with_browser() instead of find_documents() for one
+    # of these, and passes it the site's saved login.
+    needs_browser = False
 
     @classmethod
     def matches_url(cls, url):
@@ -57,6 +66,16 @@ class SiteAdapter:
         the job/project name; `project_page_url` is a link to that job's page
         (or None); `bid_date` is the bid-opening date as 'YYYY-MM-DD' (or None).
         `site` is the sites row (dict)."""
+        raise NotImplementedError
+
+    def find_documents_with_browser(self, site, login):
+        """Only for needs_browser=True adapters. Return (doc_links, login_result):
+        doc_links is [(label, document_url_or_None, filename, content_bytes_or_None,
+        project_page_url, bid_date), ...] — already in scan_site()'s final 6-tuple
+        shape, since a browser-driven adapter typically has content bytes rather
+        than a URL the caller can fetch later. `login_result` is the {"ok",
+        "message"} dict from the login attempt (or None if login was never
+        attempted). `login` is {"username", "password", "url"} or None."""
         raise NotImplementedError
 
 
@@ -280,7 +299,287 @@ class WYDOTExevisionAdapter(SiteAdapter):
         return out
 
 
-_ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter, WYDOTExevisionAdapter]
+class ConstructConnectAdapter(SiteAdapter):
+    """ConstructConnect — app.constructconnect.com.
+
+    Unlike every other adapter here, this is a heavy authenticated Angular
+    SPA with no plain API: a real login (see needs_browser) and a real
+    browser to page through results and trigger each project's document
+    download.
+
+    ConstructConnect's own filter UI (Project Category, Last Updated, etc.)
+    doesn't put its state in the URL — applying filters leaves the address
+    bar unchanged — so there's no filtered URL to just point a scan at.
+    Instead this works through every Saved Search already set up in the
+    account's sidebar (Search > Saved Searches): each one is a stable,
+    already-curated scope. For each saved search: page through its results
+    (MAX_PROJECTS_PER_SEARCH cap), open each project, click "View/Download
+    Documents", choose "Zipped PDFs" from the "Download All" split button,
+    and capture the resulting zip — unzipped here into individual PDFs so
+    each keeps its own filename for keyword matching and "already scanned"
+    tracking (each extracted filename is prefixed with the project name so
+    two different projects' same-named files, e.g. "Addendum 1.pdf", don't
+    collide in that dedup).
+
+    SAVED_SEARCHES has to be kept in sync by hand with whatever's actually
+    saved in the account — add/rename/remove entries here to match.
+    The site URL field is ignored for navigation (same as the other
+    adapters) but is still used as the login page when no separate Login
+    page URL is set on the Login tab.
+    """
+
+    key = "constructconnect"
+    label = "ConstructConnect (saved searches)"
+    help = ("Logs in and works through every Saved Search listed in "
+            "adapters.py's ConstructConnectAdapter.SAVED_SEARCHES, downloading "
+            "each project's documents. Needs a login set on the Login tab.")
+    hosts = ("app.constructconnect.com",)
+    needs_browser = True
+
+    # Keep this in sync with Search > Saved Searches in the account.
+    SAVED_SEARCHES = (
+        "denver storm",
+        "Erosion AND Sedimentation Controls - General Terms - Documents",
+        "Gabions - General Terms - Documents",
+        "Soil Reinforcement - General Terms - Documents",
+        "Soil Stabilization - General Terms - Documents",
+        "Southern Utah",
+    )
+
+    BASE = "https://app.constructconnect.com"
+    RESULTS_URL = BASE + "/results?area=project"
+    PAGE_TIMEOUT_MS = 25000
+    RUN_BUDGET_S = 1800              # whole adapter run, every saved search combined
+    MAX_PROJECTS_PER_SEARCH = 100    # safety cap per saved search
+    MAX_ZIP_BYTES = 150 * 1024 * 1024
+
+    def find_documents_with_browser(self, site, login):
+        if not login:
+            print("  ! ConstructConnect: no login configured on this site — skipping")
+            return [], None
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            print("  ! ConstructConnect: Playwright not installed — skipping")
+            return [], None
+
+        import browser_crawl  # reuse its best-effort login helper
+
+        out = []
+        deadline = time.time() + self.RUN_BUDGET_S
+        try:
+            pw = sync_playwright().start()
+        except Exception as e:
+            print(f"  ! ConstructConnect: could not start Playwright ({e})")
+            return [], None
+
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception as e:
+            print(f"  ! ConstructConnect: Chromium not available ({e})")
+            pw.stop()
+            return [], None
+
+        ctx = browser.new_context(
+            accept_downloads=True,
+            user_agent="Mozilla/5.0 (compatible; BidScoutBot/1.0)",
+        )
+        try:
+            login_result = browser_crawl._attempt_login(ctx, login)
+            if not login_result.get("ok"):
+                return [], login_result
+
+            page = ctx.new_page()
+            page.goto(self.RESULTS_URL, wait_until="domcontentloaded", timeout=self.PAGE_TIMEOUT_MS)
+            page.wait_for_timeout(1500)
+
+            for search_name in self.SAVED_SEARCHES:
+                if time.time() > deadline:
+                    print("  ! ConstructConnect: run budget reached, stopping")
+                    break
+                try:
+                    out.extend(self._run_saved_search(page, search_name, deadline))
+                except Exception as e:
+                    print(f"  ! ConstructConnect: saved search '{search_name}' failed: {e}")
+
+            return out, login_result
+        finally:
+            try:
+                browser.close()
+            finally:
+                pw.stop()
+
+    def _run_saved_search(self, page, search_name, deadline):
+        out = []
+        print(f"  ConstructConnect: opening saved search '{search_name}'")
+        try:
+            el = page.query_selector(f"text={search_name}")
+            if not el or not el.is_visible():
+                print(f"  ! ConstructConnect: '{search_name}' not found in the sidebar")
+                return out
+            el.click(timeout=5000)
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't open '{search_name}': {e}")
+            return out
+        page.wait_for_timeout(2000)
+
+        project_count = 0
+        while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
+            labels = self._project_labels(page)
+            if not labels:
+                break
+            for label in labels:
+                if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
+                    break
+                try:
+                    out.extend(self._download_project(page, label))
+                except Exception as e:
+                    print(f"  ! ConstructConnect: project '{label}' failed: {e}")
+                project_count += 1
+            if not self._go_to_next_page(page):
+                break
+            page.wait_for_timeout(1500)
+        print(f"  ConstructConnect: '{search_name}' — {project_count} project(s) checked, "
+              f"{len(out)} document(s) so far")
+        return out
+
+    def _project_labels(self, page):
+        """The Project Name column's link text for every row on the current
+        results page — matched by header position so it doesn't accidentally
+        pick up the Documents column's short "Drawing"/"Specs..." links."""
+        try:
+            page.wait_for_selector("table", timeout=10000)
+        except Exception:
+            return []
+        headers = [(h.inner_text() or "").strip()
+                   for h in page.query_selector_all("table thead th, table tr:first-child th")]
+        name_col = headers.index("Project Name") if "Project Name" in headers else None
+
+        labels = []
+        for tr in page.query_selector_all("table tbody tr"):
+            cells = tr.query_selector_all("td")
+            a = None
+            if name_col is not None and name_col < len(cells):
+                a = cells[name_col].query_selector("a")
+            if a is None:
+                a = tr.query_selector("a")  # fallback: first link in the row
+            if a is None:
+                continue
+            try:
+                label = (a.inner_text() or "").strip()
+            except Exception:
+                continue
+            if label:
+                labels.append(label)
+        return labels
+
+    def _go_to_next_page(self, page):
+        try:
+            btn = (page.query_selector("button[aria-label*='Next' i]")
+                   or page.query_selector("button[title*='Next' i]"))
+            if btn and btn.is_visible() and btn.is_enabled():
+                btn.click(timeout=4000)
+                page.wait_for_timeout(1500)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _download_project(self, page, label):
+        try:
+            page.click(f"text={label}", timeout=8000)
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't open '{label}': {e}")
+            return []
+        try:
+            page.wait_for_selector("text=View/Download Documents", timeout=self.PAGE_TIMEOUT_MS)
+        except Exception:
+            print(f"  ! ConstructConnect: '{label}' has no Documents button — skipping")
+            page.go_back()
+            page.wait_for_timeout(1000)
+            return []
+
+        project_url = page.url
+        try:
+            page.click("text=View/Download Documents", timeout=8000)
+            page.wait_for_timeout(1000)
+            zip_bytes = self._download_zip(page)
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't download documents for '{label}': {e}")
+            zip_bytes = None
+
+        page.go_back()
+        page.wait_for_timeout(1200)
+
+        if not zip_bytes:
+            return []
+        return self._extract_zip(zip_bytes, label, project_url)
+
+    def _download_zip(self, page):
+        """Click "Download All", pick "Zipped PDFs", click "Start", and
+        return the resulting file's bytes. The split-button's main click may
+        just re-trigger the last-used format instead of opening the picker
+        — if "Zipped PDFs" isn't visible yet, try the caret next to it."""
+        try:
+            page.click("text=Download All", timeout=8000)
+        except Exception:
+            pass
+        page.wait_for_timeout(600)
+
+        zipped = page.query_selector("text=Zipped PDFs")
+        if not zipped or not zipped.is_visible():
+            try:
+                caret = (page.query_selector("button:has-text('Download All') + button")
+                         or page.query_selector("[aria-haspopup='true']"))
+                if caret:
+                    caret.click(timeout=4000)
+                    page.wait_for_timeout(600)
+                    zipped = page.query_selector("text=Zipped PDFs")
+            except Exception:
+                pass
+        if not zipped:
+            print("  ! ConstructConnect: couldn't find the 'Zipped PDFs' option")
+            return None
+
+        try:
+            zipped.click(timeout=4000)
+            with page.expect_download(timeout=45000) as dl_info:
+                page.click("text=Start", timeout=8000)
+            download = dl_info.value
+        except Exception as e:
+            print(f"  ! ConstructConnect: download didn't start: {e}")
+            return None
+
+        path = download.path()
+        if not path:
+            return None
+        if os.path.getsize(path) > self.MAX_ZIP_BYTES:
+            print("  ! ConstructConnect: zip too large, skipping")
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+
+    def _extract_zip(self, zip_bytes, label, project_url):
+        out = []
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                for name in zf.namelist():
+                    if not name.lower().endswith(DOC_EXTENSIONS):
+                        continue
+                    data = zf.read(name)
+                    # Prefixed with the project name so the same filename
+                    # (e.g. "Addendum 1.pdf") across different projects
+                    # doesn't collide in the site-wide "already scanned" key.
+                    fn = f"{label} - {name.split('/')[-1]}"
+                    out.append((label, None, fn, data, project_url, None))
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't read the zip for '{label}': {e}")
+        return out
+
+
+_ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter, WYDOTExevisionAdapter,
+                     ConstructConnectAdapter]
 ADAPTERS = {cls.key: cls for cls in _ADAPTER_CLASSES}
 
 
