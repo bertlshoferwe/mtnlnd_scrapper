@@ -274,6 +274,14 @@
   .adv-fields.open { display: block; }
   .adv-fields .row { margin-bottom: 8px; }
   .adv-fields label { font-size: 12.5px; color: var(--muted); width: 130px; flex-shrink: 0; }
+  .site-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .site-tab {
+    background: transparent; border: 1px solid var(--border-strong); color: var(--muted);
+    font-size: 12.5px; font-weight: 600; font-family: inherit;
+    padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  }
+  .site-tab:hover { border-color: var(--accent); color: var(--text); }
+  .site-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
 
   select { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 14px; font-family: inherit; background: var(--surface); color: var(--text); }
 
@@ -884,40 +892,41 @@
         </label>
         <span class="adv-toggle" id="advToggle" onclick="toggleAdv()">+ Advanced</span>
         <div class="adv-fields" id="advFields">
-          <div class="row">
-            <label>Portal adapter</label>
-            <select id="siteAdapter" onchange="onAdapterManuallyChanged()" style="flex:1;">
-              <option value="">None</option>
-            </select>
+          <div class="site-tabs">
+            <button type="button" class="site-tab active" id="discoveryTabBtn" data-tab="discovery" onclick="selectAdvTab('discovery')">Discovery</button>
+            <button type="button" class="site-tab" id="loginTabBtn" data-tab="login" onclick="selectAdvTab('login')">Login</button>
           </div>
-          <div class="status-line" id="adapterHelp" style="margin: 0 0 6px 130px;"></div>
-          <div id="listingFields">
+          <div id="advTabDiscovery">
             <div class="row">
-              <label>CSS selector</label>
-              <input type="text" id="linkSelector" placeholder="a.job-title (optional)" style="flex:1;">
+              <label>Portal adapter</label>
+              <select id="siteAdapter" onchange="onAdapterManuallyChanged()" style="flex:1;">
+                <option value="">None</option>
+              </select>
+            </div>
+            <div class="status-line" id="adapterHelp" style="margin: 0 0 6px 130px;"></div>
+            <div id="listingFields">
+              <div class="row">
+                <label>CSS selector</label>
+                <input type="text" id="linkSelector" placeholder="a.job-title (optional)" style="flex:1;">
+              </div>
+              <div class="row">
+                <label>URL pattern</label>
+                <input type="text" id="linkPattern" placeholder="/jobs/ (optional)" style="flex:1;">
+              </div>
+            </div>
+          </div>
+          <div id="advTabLogin" style="display:none;">
+            <div class="row">
+              <label>Username</label>
+              <input type="text" id="loginUsername" placeholder="username or email" style="flex:1;" autocomplete="off">
             </div>
             <div class="row">
-              <label>URL pattern</label>
-              <input type="text" id="linkPattern" placeholder="/jobs/ (optional)" style="flex:1;">
+              <label>Password</label>
+              <input type="password" id="loginPassword" placeholder="" style="flex:1;" autocomplete="new-password">
             </div>
-          </div>
-          <div id="loginSection">
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text); margin-top:6px;">
-              <input type="checkbox" id="siteRequiresLogin" style="width:auto;" onchange="onRequiresLoginChange()"> Requires login
-            </label>
-            <div id="loginFields" style="display:none; margin-top:8px;">
-              <div class="row">
-                <label>Username</label>
-                <input type="text" id="loginUsername" placeholder="username or email" style="flex:1;" autocomplete="off">
-              </div>
-              <div class="row">
-                <label>Password</label>
-                <input type="password" id="loginPassword" placeholder="" style="flex:1;" autocomplete="new-password">
-              </div>
-              <div class="row">
-                <label>Login page URL</label>
-                <input type="url" id="loginUrl" placeholder="optional — defaults to the site URL above" style="flex:1;">
-              </div>
+            <div class="row">
+              <label>Login page URL</label>
+              <input type="url" id="loginUrl" placeholder="optional — defaults to the site URL above" style="flex:1;">
             </div>
           </div>
         </div>
@@ -1619,11 +1628,15 @@ function onAdapterChange() {
   document.getElementById('useAiListing').closest('label').style.display = usingAdapter ? 'none' : '';
   // Login only applies to the default browser crawl — an adapter has its
   // own way of talking to the portal, so a login form wouldn't be used.
-  document.getElementById('loginSection').style.display = usingAdapter ? 'none' : '';
+  const loginTabBtn = document.getElementById('loginTabBtn');
+  loginTabBtn.style.display = usingAdapter ? 'none' : '';
+  if (usingAdapter && loginTabBtn.classList.contains('active')) selectAdvTab('discovery');
 }
-function onRequiresLoginChange() {
-  document.getElementById('loginFields').style.display =
-    document.getElementById('siteRequiresLogin').checked ? '' : 'none';
+function selectAdvTab(tab) {
+  document.getElementById('discoveryTabBtn').classList.toggle('active', tab === 'discovery');
+  document.getElementById('loginTabBtn').classList.toggle('active', tab === 'login');
+  document.getElementById('advTabDiscovery').style.display = tab === 'discovery' ? '' : 'none';
+  document.getElementById('advTabLogin').style.display = tab === 'login' ? '' : 'none';
 }
 // A deliberate pick (including explicitly choosing "None") always wins over
 // auto-attachment from here on, for the rest of this form session.
@@ -1674,13 +1687,12 @@ function editSite(siteId) {
   document.getElementById('linkPattern').value = pat;
   document.getElementById('useAiListing').checked = !site.adapter && !sel && !pat;
 
-  document.getElementById('siteRequiresLogin').checked = !!site.has_login;
   document.getElementById('loginUsername').value = site.login_username || '';
   document.getElementById('loginUrl').value = site.login_url || '';
   const pwField = document.getElementById('loginPassword');
   pwField.value = '';
   pwField.placeholder = site.has_login ? 'saved — leave blank to keep it' : '';
-  onRequiresLoginChange();
+  selectAdvTab(site.has_login ? 'login' : 'discovery');
 
   // Show Advanced whenever this site isn't on the plain "let AI find it" default.
   document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat || site.has_login));
@@ -1702,12 +1714,11 @@ function hideAddSite() {
   document.getElementById('linkSelector').value = '';
   document.getElementById('linkPattern').value = '';
   document.getElementById('useAiListing').checked = true;
-  document.getElementById('siteRequiresLogin').checked = false;
   document.getElementById('loginUsername').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginPassword').placeholder = '';
   document.getElementById('loginUrl').value = '';
-  onRequiresLoginChange();
+  selectAdvTab('discovery');
   document.getElementById('advFields').classList.remove('open');
   onAdapterChange();
 }
@@ -1724,14 +1735,13 @@ async function saveSite() {
     link_selector: document.getElementById('linkSelector').value.trim(),
     link_pattern: document.getElementById('linkPattern').value.trim(),
     use_ai_listing: document.getElementById('useAiListing').checked,
-    login_username: '', login_password: '', login_url: '',
+    login_username: document.getElementById('loginUsername').value.trim(),
+    login_password: document.getElementById('loginPassword').value,
+    login_url: document.getElementById('loginUrl').value.trim(),
   };
-  if (document.getElementById('siteRequiresLogin').checked) {
-    body.login_username = document.getElementById('loginUsername').value.trim();
-    body.login_password = document.getElementById('loginPassword').value;
-    body.login_url = document.getElementById('loginUrl').value.trim();
-    if (!body.login_username) { alert('Enter a username for the login, or turn off "Requires login".'); return; }
-    if (!editing && !body.login_password) { alert('Enter a password for the login.'); return; }
+  if (body.login_username && !editing && !body.login_password) {
+    alert('Enter a password for the login (or clear the username if this site doesn\'t need one).');
+    return;
   }
   const path = '/api/' + currentDivision + '/sites' + (editing ? '/' + editingSiteId : '');
   try {
