@@ -347,7 +347,6 @@ class ConstructConnectAdapter(SiteAdapter):
     )
 
     BASE = "https://app.constructconnect.com"
-    RESULTS_URL = BASE + "/results?area=project"
     PAGE_TIMEOUT_MS = 25000
     RUN_BUDGET_S = 1800              # whole adapter run, every saved search combined
     MAX_PROJECTS_PER_SEARCH = 100    # safety cap per saved search
@@ -391,17 +390,22 @@ class ConstructConnectAdapter(SiteAdapter):
                 return [], login_result
 
             page = ctx.new_page()
-            page.goto(self.RESULTS_URL, wait_until="domcontentloaded", timeout=self.PAGE_TIMEOUT_MS)
-            page.wait_for_timeout(1500)
+            self._open_search_page(page)
 
+            found_any = False
             for search_name in self.SAVED_SEARCHES:
                 if time.time() > deadline:
                     print("  ! ConstructConnect: run budget reached, stopping")
                     break
                 try:
-                    out.extend(self._run_saved_search(page, search_name, deadline))
+                    docs, matched = self._run_saved_search(page, search_name, deadline)
+                    found_any = found_any or matched
+                    out.extend(docs)
                 except Exception as e:
                     print(f"  ! ConstructConnect: saved search '{search_name}' failed: {e}")
+
+            if not found_any:
+                self._save_debug_screenshot(page)
 
             return out, login_result
         finally:
@@ -410,18 +414,48 @@ class ConstructConnectAdapter(SiteAdapter):
             finally:
                 pw.stop()
 
+    def _open_search_page(self, page):
+        """Land on wherever the Saved Searches sidebar actually lives —
+        going straight to a /results URL after login doesn't show it, so
+        this clicks the left icon nav's "Search" entry (like a real user
+        would), then "View All Searches" if the sidebar offers a short
+        default list rather than the full one."""
+        page.goto(self.BASE, wait_until="domcontentloaded", timeout=self.PAGE_TIMEOUT_MS)
+        page.wait_for_timeout(1500)
+        try:
+            nav = page.query_selector("text=Search")
+            if nav and nav.is_visible():
+                nav.click(timeout=5000)
+                page.wait_for_timeout(1500)
+            else:
+                print("  ! ConstructConnect: no 'Search' nav item found — "
+                      f"landed on {page.url}")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't click the Search nav: {e}")
+        try:
+            view_all = page.query_selector("text=View All Searches")
+            if view_all and view_all.is_visible():
+                view_all.click(timeout=5000)
+                page.wait_for_timeout(1500)
+        except Exception:
+            pass
+        print(f"  ConstructConnect: search page is {page.url}")
+
     def _run_saved_search(self, page, search_name, deadline):
+        """Returns ([doc_links...], matched) — `matched` is False when the
+        saved search couldn't even be found/opened, so the caller can tell
+        "found it, no projects" apart from "never found the sidebar at all"."""
         out = []
         print(f"  ConstructConnect: opening saved search '{search_name}'")
         try:
             el = page.query_selector(f"text={search_name}")
             if not el or not el.is_visible():
                 print(f"  ! ConstructConnect: '{search_name}' not found in the sidebar")
-                return out
+                return out, False
             el.click(timeout=5000)
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't open '{search_name}': {e}")
-            return out
+            return out, False
         page.wait_for_timeout(2000)
 
         project_count = 0
@@ -442,7 +476,23 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(1500)
         print(f"  ConstructConnect: '{search_name}' — {project_count} project(s) checked, "
               f"{len(out)} document(s) so far")
-        return out
+        return out, True
+
+    def _save_debug_screenshot(self, page):
+        """None of the saved searches matched anything — save a screenshot
+        (and the visible text of the page) so a person can see what the
+        crawler actually landed on, instead of guessing blind from another
+        failed run. Picked up by the GitHub Actions workflow as a build
+        artifact when present."""
+        try:
+            page.screenshot(path="constructconnect_debug.png", full_page=True)
+            text = page.evaluate("document.body.innerText") or ""
+            with open("constructconnect_debug.txt", "w") as f:
+                f.write(f"URL: {page.url}\n\n{text[:20000]}")
+            print("  ! ConstructConnect: found no saved searches at all — saved "
+                  "constructconnect_debug.png/.txt (uploaded as a workflow artifact)")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't save debug screenshot: {e}")
 
     def _project_labels(self, page):
         """The Project Name column's link text for every row on the current

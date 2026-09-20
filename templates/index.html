@@ -1659,13 +1659,6 @@ function onAdapterChange() {
     : 'https://example.com/bids';
   document.getElementById('listingFields').style.display = usingAdapter ? 'none' : '';
   document.getElementById('useAiListing').closest('label').style.display = usingAdapter ? 'none' : '';
-  // Login applies to the default browser crawl and to any adapter that
-  // needs its own logged-in session (a.needs_browser) — only a plain
-  // API/HTML adapter has no use for it.
-  const hideLogin = usingAdapter && !(a && a.needs_browser);
-  const loginTabBtn = document.getElementById('loginTabBtn');
-  loginTabBtn.style.display = hideLogin ? 'none' : '';
-  if (hideLogin && loginTabBtn.classList.contains('active')) selectAdvTab('discovery');
 }
 function selectAdvTab(tab) {
   document.getElementById('discoveryTabBtn').classList.toggle('active', tab === 'discovery');
