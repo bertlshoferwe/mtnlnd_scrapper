@@ -672,6 +672,21 @@ class ConstructConnectAdapter(SiteAdapter):
         print(f"  ! ConstructConnect: downloaded '{name}' — unrecognized type, skipping")
         return []
 
+    def _wait_downloads_ready(self, page, timeout_s=45):
+        """The docviewer tab loads its own document list asynchronously —
+        a debug screenshot caught "Download All" (and its arrow) still
+        greyed out under a "Document is loading, please wait..." overlay
+        well after the tab's browser-level load event had already fired.
+        Poll until the button actually reports enabled instead of assuming
+        a fixed short wait covers it."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            btn = page.query_selector("button:has-text('Download All')")
+            if btn and btn.is_enabled():
+                return True
+            page.wait_for_timeout(500)
+        return False
+
     def _download_zip(self, page):
         """Click "Download All", pick "Zipped PDFs", click "Start", and
         return the resulting file's bytes.
@@ -683,6 +698,14 @@ class ConstructConnectAdapter(SiteAdapter):
         "Zipped PDFs" radio options and a "Start" button. So the arrow is
         the only thing to click here — "Download All" itself must be left
         alone or it fires the unwanted merged-PDF download right away."""
+        if not self._wait_downloads_ready(page):
+            print("  ! ConstructConnect: document never finished loading — "
+                  "'Download All' stayed disabled")
+            if not getattr(self, "_saved_download_modal_debug", False):
+                self._saved_download_modal_debug = True
+                self._save_debug_screenshot(page, "download_modal")
+            return None
+
         try:
             caret = (page.query_selector("button:has-text('Download All') + button")
                      or page.query_selector("[aria-haspopup='true']"))
