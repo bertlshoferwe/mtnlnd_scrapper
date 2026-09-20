@@ -602,10 +602,15 @@ class ConstructConnectAdapter(SiteAdapter):
         doc_page = None
         try:
             doc_page, download = self._click_view_download(page)
-            if not download and doc_page:
-                download = self._click_download_all(doc_page)
             if download:
                 out = self._handle_download(download, label, project_url)
+            elif doc_page:
+                download = self._click_download_all(doc_page)
+                if download:
+                    out = self._handle_merged_pdf(download, label, project_url)
+                else:
+                    print(f"  ! ConstructConnect: 'Download All' didn't produce "
+                          f"anything for '{label}'")
             else:
                 print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
                       f"observable for '{label}'")
@@ -671,6 +676,25 @@ class ConstructConnectAdapter(SiteAdapter):
             return [(label, None, f"{label} - {name}", data, project_url, None)]
         print(f"  ! ConstructConnect: downloaded '{name}' — unrecognized type, skipping")
         return []
+
+    def _handle_merged_pdf(self, download, label, project_url):
+        """The docviewer's "Download All" always merges every document into
+        one PDF — trust that instead of the download's suggested filename,
+        which truncates unpredictably for a project name containing a
+        semicolon (ConstructConnect's Content-Disposition header isn't
+        quoted, so a bare ";" in the name — e.g. "US-6; Improve Ints..." —
+        ends the filename early; the browser then reports it as just "US-6",
+        with no extension at all, which broke the old extension-sniffing
+        check in _handle_download)."""
+        path = download.path()
+        if not path:
+            return []
+        if os.path.getsize(path) > self.MAX_ZIP_BYTES:
+            print("  ! ConstructConnect: download too large, skipping")
+            return []
+        with open(path, "rb") as f:
+            data = f.read()
+        return [(label, None, f"{label} - All Documents.pdf", data, project_url, None)]
 
     # The docviewer's "Download All" button has this stable id (confirmed
     # by the user via devtools) — target it directly rather than a text
