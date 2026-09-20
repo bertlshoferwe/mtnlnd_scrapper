@@ -612,5 +612,6 @@ def adapter_for_site(site):
 
 
 def list_adapters():
-    return [{"key": c.key, "label": c.label, "help": c.help, "hosts": list(c.hosts)}
+    return [{"key": c.key, "label": c.label, "help": c.help, "hosts": list(c.hosts),
+             "needs_browser": c.needs_browser}
             for c in _ADAPTER_CLASSES]
