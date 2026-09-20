@@ -448,16 +448,18 @@ class ConstructConnectAdapter(SiteAdapter):
 
     def _dismiss_cookie_banner(self, page):
         """The cookie consent banner sits fixed at the bottom of the
-        viewport and is still up in every debug screenshot from a run —
-        it's never been dismissed. Clear it once up front rather than
-        risk it overlapping a download modal's buttons later."""
+        viewport. It was still showing in a debug screenshot taken well
+        into a run (after several page.go_back() calls), so a one-time
+        dismissal right after landing isn't enough — this is also called
+        before each project, and is a cheap no-op once the banner is
+        actually gone (query_selector just finds nothing)."""
         try:
-            btn = page.query_selector("text=Necessary Only")
+            btn = page.query_selector("button:has-text('Necessary Only')")
             if btn and btn.is_visible():
                 btn.click(timeout=4000)
                 page.wait_for_timeout(300)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't dismiss the cookie banner ({e})")
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
@@ -579,6 +581,7 @@ class ConstructConnectAdapter(SiteAdapter):
         return False
 
     def _download_project(self, page, label):
+        self._dismiss_cookie_banner(page)
         try:
             page.click(f"text={label}", timeout=8000)
         except Exception as e:
@@ -632,6 +635,13 @@ class ConstructConnectAdapter(SiteAdapter):
                 pass
         if not zipped:
             print("  ! ConstructConnect: couldn't find the 'Zipped PDFs' option")
+            # One debug screenshot of the actual download-modal state is
+            # worth more than another "not found" line — every attempt
+            # this run has hit this, so capture it once rather than
+            # overwrite the same file on every miss.
+            if not getattr(self, "_saved_download_modal_debug", False):
+                self._saved_download_modal_debug = True
+                self._save_debug_screenshot(page, "download_modal")
             return None
 
         try:
