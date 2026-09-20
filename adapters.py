@@ -431,6 +431,7 @@ class ConstructConnectAdapter(SiteAdapter):
 
             print(f"  ConstructConnect: authenticated, landed on {page.url}")
             self._save_debug_screenshot(page, "landed")  # always, while this is still new
+            self._dismiss_cookie_banner(page)
 
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
             # parked for that) — first checking whether documents can be
@@ -445,6 +446,19 @@ class ConstructConnectAdapter(SiteAdapter):
             finally:
                 pw.stop()
 
+    def _dismiss_cookie_banner(self, page):
+        """The cookie consent banner sits fixed at the bottom of the
+        viewport and is still up in every debug screenshot from a run —
+        it's never been dismissed. Clear it once up front rather than
+        risk it overlapping a download modal's buttons later."""
+        try:
+            btn = page.query_selector("text=Necessary Only")
+            if btn and btn.is_visible():
+                btn.click(timeout=4000)
+                page.wait_for_timeout(300)
+        except Exception:
+            pass
+
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
         satisfied by the SSO's own stuck "Loading..." screen (no password
@@ -458,6 +472,13 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(1000)
         return "login.io.constructconnect.com" not in page.url
 
+    # Documents-column statuses that mean the project has nothing uploaded
+    # yet — attempting these always ends in either a disabled "View/Download
+    # Documents" button (8s timeout) or an opened-but-empty documents view
+    # (no "Zipped PDFs" option), so skip them instead of burning the run
+    # budget on a guaranteed miss.
+    NO_DOCS_STATUSES = {"Requesting Plans", "Sent to Scan", "Project Details Only"}
+
     def _scan_results_page(self, page, deadline):
         """Work through whatever project list is currently on screen —
         no Saved Search filtering yet (see SAVED_SEARCHES / the note in
@@ -465,13 +486,18 @@ class ConstructConnectAdapter(SiteAdapter):
         discovery + download first."""
         out = []
         project_count = 0
+        skipped_no_docs = 0
         while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
-            labels = self._project_labels(page)
-            if not labels:
+            rows = self._project_rows(page)
+            if not rows:
                 break
-            for label in labels:
+            for label, doc_status in rows:
                 if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
                     break
+                if doc_status in self.NO_DOCS_STATUSES:
+                    skipped_no_docs += 1
+                    project_count += 1
+                    continue
                 try:
                     out.extend(self._download_project(page, label))
                 except Exception as e:
@@ -481,6 +507,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 break
             page.wait_for_timeout(1500)
         print(f"  ConstructConnect: {project_count} project(s) checked, "
+              f"{skipped_no_docs} skipped (no documents posted yet), "
               f"{len(out)} document(s) found")
         return out
 
@@ -500,10 +527,11 @@ class ConstructConnectAdapter(SiteAdapter):
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't save debug screenshot ({tag}): {e}")
 
-    def _project_labels(self, page):
-        """The Project Name column's link text for every row on the current
-        results page — matched by header position so it doesn't accidentally
-        pick up the Documents column's short "Drawing"/"Specs..." links."""
+    def _project_rows(self, page):
+        """The Project Name column's link text plus the Documents column's
+        status text, for every row on the current results page — matched by
+        header position so the name doesn't accidentally pick up the
+        Documents column's own short "Drawing"/"Specs..." links."""
         try:
             page.wait_for_selector("table", timeout=10000)
         except Exception:
@@ -511,8 +539,9 @@ class ConstructConnectAdapter(SiteAdapter):
         headers = [(h.inner_text() or "").strip()
                    for h in page.query_selector_all("table thead th, table tr:first-child th")]
         name_col = headers.index("Project Name") if "Project Name" in headers else None
+        docs_col = headers.index("Documents") if "Documents" in headers else None
 
-        labels = []
+        rows = []
         for tr in page.query_selector_all("table tbody tr"):
             cells = tr.query_selector_all("td")
             a = None
@@ -526,9 +555,16 @@ class ConstructConnectAdapter(SiteAdapter):
                 label = (a.inner_text() or "").strip()
             except Exception:
                 continue
-            if label:
-                labels.append(label)
-        return labels
+            if not label:
+                continue
+            doc_status = ""
+            if docs_col is not None and docs_col < len(cells):
+                try:
+                    doc_status = (cells[docs_col].inner_text() or "").strip()
+                except Exception:
+                    doc_status = ""
+            rows.append((label, doc_status))
+        return rows
 
     def _go_to_next_page(self, page):
         try:
