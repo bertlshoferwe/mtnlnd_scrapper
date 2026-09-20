@@ -314,12 +314,14 @@ class ConstructConnectAdapter(SiteAdapter):
     successful login to fool the generic password-field heuristic), then
     works through whatever project list that lands on: page through it
     (MAX_PROJECTS_PER_SEARCH cap), open each project, click "View/Download
-    Documents", choose "Zipped PDFs" from the "Download All" split button,
-    and capture the resulting zip — unzipped here into individual PDFs so
-    each keeps its own filename for keyword matching and "already scanned"
-    tracking (each extracted filename is prefixed with the project name so
-    two different projects' same-named files, e.g. "Addendum 1.pdf", don't
-    collide in that dedup).
+    Documents" (opens a new tab), and click "Download All" there — every
+    document in the project merged into one PDF. (The split button also
+    offers a "Zipped PDFs" format that keeps documents separate, but that
+    picker needs the docviewer sidebar in a state that hasn't shown up
+    reliably; one merged PDF per project is simpler and was confirmed by
+    the user as the intended approach.) That merged PDF becomes a single
+    document for the project in the keyword-matching pipeline — not split
+    back into per-document files.
 
     Next phase (not wired up yet): ConstructConnect's own filter UI doesn't
     put its state in the URL — applying filters leaves the address bar
@@ -600,12 +602,10 @@ class ConstructConnectAdapter(SiteAdapter):
         doc_page = None
         try:
             doc_page, download = self._click_view_download(page)
+            if not download and doc_page:
+                download = self._click_download_all(doc_page)
             if download:
                 out = self._handle_download(download, label, project_url)
-            elif doc_page:
-                zip_bytes = self._download_zip(doc_page)
-                if zip_bytes:
-                    out = self._extract_zip(zip_bytes, label, project_url)
             else:
                 print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
                       f"observable for '{label}'")
@@ -687,17 +687,13 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(500)
         return False
 
-    def _download_zip(self, page):
-        """Click "Download All", pick "Zipped PDFs", click "Start", and
-        return the resulting file's bytes.
-
-        "Download All" is a split button: clicking the button itself
-        immediately downloads every document merged into one PDF — it does
-        NOT open a picker. Confirmed via screenshot: the small separate
-        arrow beside it opens a "File Format" panel with "Multi-page PDF" /
-        "Zipped PDFs" radio options and a "Start" button. So the arrow is
-        the only thing to click here — "Download All" itself must be left
-        alone or it fires the unwanted merged-PDF download right away."""
+    def _click_download_all(self, page):
+        """Click "Download All" on the docviewer tab and return the
+        resulting Download — every document in the project merged into one
+        PDF. (The split button's arrow also offers a "Zipped PDFs" format
+        that keeps documents separate, but that picker needs the sidebar in
+        a state that hasn't shown up reliably; a single merged PDF per
+        project is simpler and is the intended approach here.)"""
         if not self._wait_downloads_ready(page):
             print("  ! ConstructConnect: document never finished loading — "
                   "'Download All' stayed disabled")
@@ -707,43 +703,12 @@ class ConstructConnectAdapter(SiteAdapter):
             return None
 
         try:
-            caret = (page.query_selector("button:has-text('Download All') + button")
-                     or page.query_selector("[aria-haspopup='true']"))
-            if caret:
-                caret.click(timeout=4000)
-            page.wait_for_timeout(600)
-        except Exception:
-            pass
-
-        zipped = page.query_selector("text=Zipped PDFs")
-        if not zipped:
-            print("  ! ConstructConnect: couldn't find the 'Zipped PDFs' option")
-            # One debug screenshot of the actual download-modal state is
-            # worth more than another "not found" line — every attempt
-            # this run has hit this, so capture it once rather than
-            # overwrite the same file on every miss.
-            if not getattr(self, "_saved_download_modal_debug", False):
-                self._saved_download_modal_debug = True
-                self._save_debug_screenshot(page, "download_modal")
-            return None
-
-        try:
-            zipped.click(timeout=4000)
             with page.expect_download(timeout=45000) as dl_info:
-                page.click("text=Start", timeout=8000)
-            download = dl_info.value
+                page.click("text=Download All", timeout=8000)
+            return dl_info.value
         except Exception as e:
             print(f"  ! ConstructConnect: download didn't start: {e}")
             return None
-
-        path = download.path()
-        if not path:
-            return None
-        if os.path.getsize(path) > self.MAX_ZIP_BYTES:
-            print("  ! ConstructConnect: zip too large, skipping")
-            return None
-        with open(path, "rb") as f:
-            return f.read()
 
     def _extract_zip(self, zip_bytes, label, project_url):
         out = []
