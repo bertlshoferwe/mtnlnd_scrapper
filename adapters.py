@@ -672,6 +672,12 @@ class ConstructConnectAdapter(SiteAdapter):
         print(f"  ! ConstructConnect: downloaded '{name}' — unrecognized type, skipping")
         return []
 
+    # The docviewer's "Download All" button has this stable id (confirmed
+    # by the user via devtools) — target it directly rather than a text
+    # match, which is more prone to ambiguity (e.g. matching a wrapping
+    # element instead of the actual clickable button).
+    DOWNLOAD_ALL_SELECTOR = "#download_button"
+
     def _wait_downloads_ready(self, page, timeout_s=45):
         """The docviewer tab loads its own document list asynchronously —
         a debug screenshot caught "Download All" (and its arrow) still
@@ -681,7 +687,7 @@ class ConstructConnectAdapter(SiteAdapter):
         a fixed short wait covers it."""
         deadline = time.time() + timeout_s
         while time.time() < deadline:
-            btn = page.query_selector("button:has-text('Download All')")
+            btn = page.query_selector(self.DOWNLOAD_ALL_SELECTOR)
             if btn and btn.is_enabled():
                 return True
             page.wait_for_timeout(500)
@@ -704,7 +710,7 @@ class ConstructConnectAdapter(SiteAdapter):
 
         try:
             with page.expect_download(timeout=45000) as dl_info:
-                page.click("text=Download All", timeout=8000)
+                page.click(self.DOWNLOAD_ALL_SELECTOR, timeout=8000)
             return dl_info.value
         except Exception as e:
             print(f"  ! ConstructConnect: download didn't start: {e}")
