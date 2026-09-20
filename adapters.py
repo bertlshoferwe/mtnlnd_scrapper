@@ -384,12 +384,18 @@ class ConstructConnectAdapter(SiteAdapter):
             accept_downloads=True,
             user_agent="Mozilla/5.0 (compatible; BidScoutBot/1.0)",
         )
+        page = ctx.new_page()
         try:
-            login_result = browser_crawl._attempt_login(ctx, login)
+            # Reuses this same page for login (rather than the default
+            # throwaway one _attempt_login would open and close) — the login
+            # goes through an SSO redirect (login.io.constructconnect.com ->
+            # /api/gciconsume?returnUrl=...), and a fresh page.goto() to a
+            # different URL right after was bouncing back to the login
+            # screen instead of landing in the authenticated app.
+            login_result = browser_crawl._attempt_login(ctx, login, page=page)
             if not login_result.get("ok"):
                 return [], login_result
 
-            page = ctx.new_page()
             self._open_search_page(page)
 
             found_any = False
@@ -415,13 +421,19 @@ class ConstructConnectAdapter(SiteAdapter):
                 pw.stop()
 
     def _open_search_page(self, page):
-        """Land on wherever the Saved Searches sidebar actually lives —
-        going straight to a /results URL after login doesn't show it, so
-        this clicks the left icon nav's "Search" entry (like a real user
-        would), then "View All Searches" if the sidebar offers a short
-        default list rather than the full one."""
-        page.goto(self.BASE, wait_until="domcontentloaded", timeout=self.PAGE_TIMEOUT_MS)
-        page.wait_for_timeout(1500)
+        """Land on wherever the Saved Searches sidebar actually lives, from
+        wherever the login's SSO redirect chain left off — deliberately
+        does NOT navigate to a fresh URL first; doing that once bounced
+        back to the login screen instead of the authenticated app (see the
+        note in find_documents_with_browser). Clicks the left icon nav's
+        "Search" entry (like a real user would) if it isn't already on a
+        page that has it, then "View All Searches" if the sidebar offers a
+        short default list rather than the full one."""
+        try:
+            page.wait_for_load_state("networkidle", timeout=self.PAGE_TIMEOUT_MS)
+        except Exception:
+            pass
+        print(f"  ConstructConnect: post-login page is {page.url}")
         try:
             nav = page.query_selector("text=Search")
             if nav and nav.is_visible():

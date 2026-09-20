@@ -189,15 +189,25 @@ _SUBMIT_SELECTOR = (
 )
 
 
-def _attempt_login(ctx, login):
+def _attempt_login(ctx, login, page=None):
     """Best-effort: open the login page, fill the first visible password
     field and a preceding username/email field, submit, and wait for the
     page to settle. Returns {"ok": bool, "message": str_or_None} — `ok` is a
     heuristic (the password field is gone after submitting, i.e. we're not
     still sitting on the login form), not a guarantee the site accepted the
     credentials, but it does catch the common case of a login page that just
-    reloads itself on a wrong password."""
-    page = ctx.new_page()
+    reloads itself on a wrong password.
+
+    `page`, when given, is used (and left open) instead of a throwaway page
+    that gets closed here — needed for a site whose login goes through an
+    SSO/OAuth redirect (a separate login.* origin handing back a session via
+    a returnUrl), where closing that page and opening a fresh one elsewhere
+    can lose the session the redirect just established. Callers that don't
+    care (the generic crawl, which does its own separate navigation
+    afterward and has no such redirect) can leave this out."""
+    owns_page = page is None
+    if page is None:
+        page = ctx.new_page()
     try:
         page.goto(login["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
         page.wait_for_timeout(800)
@@ -239,7 +249,8 @@ def _attempt_login(ctx, login):
         print(f"  ! Login attempt failed ({login['url']}): {msg}")
         return {"ok": False, "message": msg}
     finally:
-        page.close()
+        if owns_page:
+            page.close()
 
 
 def crawl_site(start_url, login=None):
