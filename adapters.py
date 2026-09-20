@@ -535,19 +535,43 @@ class ConstructConnectAdapter(SiteAdapter):
         """The Project Name column's link text plus the Documents column's
         status text, for every row on the current results page — matched by
         header position so the name doesn't accidentally pick up the
-        Documents column's own short "Drawing"/"Specs..." links."""
+        Documents column's own short "Drawing"/"Specs..." links.
+
+        The results grid turned out to have zero <table> rows in practice
+        (a debug run landed fine, with the grid's data visibly rendered in
+        page.innerText, but this method's `table` selector timed out and
+        the whole scan reported "0 project(s) checked"). Angular Material's
+        flex-based mat-table renders a div/role grid instead of a real
+        <table> — no <tr>/<td>/<th> at all, just role="row"/"columnheader"/
+        "cell" attributes on divs. Real <table> markup is tried first since
+        it's cheaper and was presumably what this was written against; the
+        role-based grid is the fallback that actually matches what's live.
+        """
         try:
-            page.wait_for_selector("table", timeout=10000)
+            page.wait_for_selector("table, [role='table']", timeout=10000)
         except Exception:
             return []
-        headers = [(h.inner_text() or "").strip()
-                   for h in page.query_selector_all("table thead th, table tr:first-child th")]
+
+        header_cells = page.query_selector_all("table thead th, table tr:first-child th")
+        if not header_cells:
+            header_cells = page.query_selector_all(
+                "[role='table'] [role='row']:first-of-type [role='columnheader'], "
+                "[role='table'] [role='row']:first-of-type [role='cell']"
+            )
+        headers = [(h.inner_text() or "").strip() for h in header_cells]
         name_col = headers.index("Project Name") if "Project Name" in headers else None
         docs_col = headers.index("Documents") if "Documents" in headers else None
 
+        body_rows = page.query_selector_all("table tbody tr")
+        if not body_rows:
+            all_role_rows = page.query_selector_all("[role='table'] [role='row']")
+            body_rows = all_role_rows[1:] if len(all_role_rows) > 1 else []
+
         rows = []
-        for tr in page.query_selector_all("table tbody tr"):
+        for tr in body_rows:
             cells = tr.query_selector_all("td")
+            if not cells:
+                cells = tr.query_selector_all("[role='cell'], [role='gridcell']")
             a = None
             if name_col is not None and name_col < len(cells):
                 a = cells[name_col].query_selector("a")
