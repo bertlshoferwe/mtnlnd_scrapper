@@ -245,7 +245,7 @@
     background: var(--accent-soft); color: var(--accent-soft-text);
   }
   .tag.tag-tabs { background: var(--warning-soft); color: var(--warning); }
-  .tag.tag-adapter { background: var(--accent); color: var(--accent-contrast); }
+  .adapter-mark { color: var(--accent); margin-left: 3px; cursor: default; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .chip {
@@ -1500,7 +1500,6 @@ async function loadSites() {
     const li = document.createElement('li');
     if (site.active === false) li.className = 'site-off';
     let tags = '';
-    if (site.adapter) tags += '<span class="tag tag-adapter">' + escapeHtml(adapterLabel(site.adapter)) + '</span>';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
     const linkable = /^https?:\/\//i.test(site.url || '');
@@ -1512,7 +1511,9 @@ async function loadSites() {
     li.innerHTML =
       '<div class="site-row">' +
         '<div style="min-width:0;">' +
-          '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
+          '<div class="site-name">' + escapeHtml(site.name) +
+            (site.adapter ? '<span class="adapter-mark" title="Portal adapter: ' + escapeHtml(adapterLabel(site.adapter)) + '">*</span>' : '') +
+          '</div>' +
           urlHtml +
           '<div class="site-tags">' + tags + '</div>' +
         '</div>' +
