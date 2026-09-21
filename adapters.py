@@ -340,8 +340,7 @@ class ConstructConnectAdapter(SiteAdapter):
     key = "constructconnect"
     label = "ConstructConnect"
     help = ("Logs in and downloads documents from whatever project list is "
-            "on screen after login (not yet scoped to a Saved Search — see "
-            "adapters.py). Needs a login set on the Login tab.")
+            "on screen after login. Needs a login set on the Login tab.")
     hosts = ("app.constructconnect.com",)
     needs_browser = True
 
