@@ -90,7 +90,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
 
     key = "udot_masterworks"
     label = "UDOT Contractor Zone (advertised projects)"
-    help = "Pulls every advertised project's plan set / NTC / items PDFs plus any addenda straight from contractorzone.udot.utah.gov. The site URL field is ignored."
+    help = "Automatically downloads plans, notices, and addenda for every advertised UDOT project."
     hosts = ("contractorzone.udot.utah.gov",)
 
     BASE = "https://contractorzone.udot.utah.gov"
@@ -161,9 +161,7 @@ class ITDAdvertisedAdapter(SiteAdapter):
 
     key = "itd_advertised"
     label = "Idaho Transportation Dept (advertised projects)"
-    help = ("Reads only the two 'Currently Advertised' tables on "
-            "itd.idaho.gov/contractor-bidding (Major Highways + SIA/IRP) and "
-            "their linked PDFs. Skips the bid-results archive. The site URL is ignored.")
+    help = "Automatically downloads plans and notices for Idaho DOT's currently advertised projects."
     hosts = ("itd.idaho.gov",)
 
     PAGE = "https://itd.idaho.gov/contractor-bidding/"
@@ -230,9 +228,9 @@ class WYDOTExevisionAdapter(SiteAdapter):
 
     key = "wydot_exevision"
     label = "Wyoming DOT (advertised projects)"
-    help = ("Reads wydot.exevision.com/ws and follows each project's Google "
-            "Drive links (E-79, bid items, addenda). Full plans are on QuestCDN "
-            "and not included. The site URL is ignored.")
+    help = ("Automatically downloads bid documents and addenda for Wyoming DOT's "
+            "advertised projects. Full plan sets aren't included — those require "
+            "a separate paid QuestCDN membership.")
     hosts = ("wydot.exevision.com",)
 
     PAGE = "https://wydot.exevision.com/ws/"
@@ -339,8 +337,7 @@ class ConstructConnectAdapter(SiteAdapter):
 
     key = "constructconnect"
     label = "ConstructConnect"
-    help = ("Logs in and downloads documents from whatever project list is "
-            "on screen after login. Needs a login set on the Login tab.")
+    help = "Logs in and automatically downloads bid documents for listed projects. Needs a login set on the Login tab."
     hosts = ("app.constructconnect.com",)
     needs_browser = True
 
