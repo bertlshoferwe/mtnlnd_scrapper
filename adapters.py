@@ -360,6 +360,11 @@ class ConstructConnectAdapter(SiteAdapter):
     RUN_BUDGET_S = 1800              # whole adapter run
     MAX_PROJECTS_PER_SEARCH = 100    # safety cap per results view
     MAX_ZIP_BYTES = 500 * 1024 * 1024
+    # A big project's merged PDF or zip is built server-side on demand — 45s
+    # wasn't enough for larger ones (e.g. "Pedestrian and Bicylce Paths" and
+    # "Dominion WSD - CBWRF Balance of Plant" both timed out and got skipped
+    # entirely 2026-09-20). Raised well past the largest projects seen so far.
+    DOWNLOAD_TIMEOUT_MS = 180000
     LOGIN_REDIRECT_TIMEOUT_S = 25    # how long to wait for the SSO redirect back into the app
     # A generic browser-flavored UA and Playwright's default navigator.webdriver=true
     # got the SSO login (login.io.constructconnect.com) stuck forever on a
@@ -781,7 +786,7 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_selector(self.ZIP_FORMAT_LABEL_SELECTOR, state="attached", timeout=5000)
             page.click(self.ZIP_FORMAT_LABEL_SELECTOR, timeout=4000, force=True)
             page.wait_for_selector(self.DOWNLOAD_START_SELECTOR, state="attached", timeout=5000)
-            with page.expect_download(timeout=45000) as dl_info:
+            with page.expect_download(timeout=self.DOWNLOAD_TIMEOUT_MS) as dl_info:
                 page.click(self.DOWNLOAD_START_SELECTOR, timeout=8000, force=True)
             return dl_info.value
         except Exception as e:
@@ -820,7 +825,7 @@ class ConstructConnectAdapter(SiteAdapter):
             return None
 
         try:
-            with page.expect_download(timeout=45000) as dl_info:
+            with page.expect_download(timeout=self.DOWNLOAD_TIMEOUT_MS) as dl_info:
                 page.click(self.DOWNLOAD_ALL_SELECTOR, timeout=8000)
             return dl_info.value
         except Exception as e:
