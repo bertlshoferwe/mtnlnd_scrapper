@@ -839,7 +839,15 @@ class ConstructConnectAdapter(SiteAdapter):
                     # Prefixed with the project name so the same filename
                     # (e.g. "Addendum 1.pdf") across different projects
                     # doesn't collide in the site-wide "already scanned" key.
-                    fn = f"{label} - {name.split('/')[-1]}"
+                    # Keeps the zip's full relative path (not just the
+                    # basename) — ConstructConnect's "Zipped PDFs" nests
+                    # deeply (plans/, specifications/<CSI division>/..., etc,
+                    # confirmed via a real download 2026-09-20) and the path
+                    # is the only thing that says which section a file like
+                    # "262726 Wiring Devices.pdf" came from; it also rules
+                    # out two different folders coincidentally reusing the
+                    # same filename within one project's zip.
+                    fn = f"{label} - {name}"
                     out.append((label, None, fn, data, project_url, None))
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't read the zip for '{label}': {e}")
