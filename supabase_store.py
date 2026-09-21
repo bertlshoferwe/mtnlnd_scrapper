@@ -11,6 +11,7 @@ not a shortcut. See schema.sql for the RLS setup that protects against the
 anon key ever being used by mistake.
 """
 
+import hashlib
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -21,6 +22,10 @@ _client = None
 # A project whose every non-failed document has missed this many consecutive
 # site reconciles is treated as "no longer listed" (see reconcile_seen).
 CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES", "2"))
+
+# Holds the raw bytes of browser-captured documents (no real per-document URL
+# to re-fetch from later, e.g. ConstructConnect) — see upload_document_bytes.
+DOCS_BUCKET = "scanned-documents"
 
 # How long a newly-discovered matched project shows the "New" pill. Extended
 # to 120h when the project was first seen on a Friday so it survives the
@@ -448,13 +453,14 @@ def get_latest_run(division_id):
 
 def log_scan_row(division_id, run_date, site, document_url, filename,
                   matched_keywords, match_count, keyword_locations, status, ai_notes,
-                  source_url=None):
+                  source_url=None, storage_path=None):
     get_client().table("scan_results").insert({
         "division_id": division_id,
         "run_date": run_date,
         "site": site,
         "document_url": document_url,
         "source_url": source_url,
+        "storage_path": storage_path,
         "filename": filename,
         "matched_keywords": matched_keywords,
         "match_count": match_count,
@@ -462,6 +468,56 @@ def log_scan_row(division_id, run_date, site, document_url, filename,
         "status": status,
         "ai_notes": ai_notes,
     }).execute()
+
+
+def ensure_docs_bucket():
+    """Creates the private Storage bucket that holds browser-captured
+    documents' raw bytes (idempotent — no-ops if it already exists). Called
+    once per scan run; if this fails (storage not set up, permissions, etc.)
+    uploads will just keep failing gracefully — see upload_document_bytes —
+    not break the scan itself."""
+    try:
+        get_client().storage.create_bucket(DOCS_BUCKET, options={"public": False})
+    except Exception:
+        pass
+
+
+def _storage_path_for(division_id, doc_key):
+    """A stable, filesystem/URL-safe Storage path for a document — hashed
+    since doc_key (the "already scanned" dedup key) can contain arbitrary
+    characters (slashes, unicode, a URL fragment) that aren't valid object
+    key segments."""
+    return f"{division_id}/{hashlib.sha256(doc_key.encode()).hexdigest()}.pdf"
+
+
+def upload_document_bytes(division_id, doc_key, data):
+    """Persists a browser-captured document's raw bytes to Supabase Storage
+    so it can be viewed/downloaded later — needed for adapters whose
+    documents never had a real per-document URL to live-fetch from (they
+    came from a JS-triggered browser download during the scan itself, e.g.
+    ConstructConnect's "Zipped PDFs"). Returns the storage path on success,
+    None on failure (a scan shouldn't fail just because storage is
+    unavailable — the document is still scanned and logged either way,
+    just not viewable afterward)."""
+    path = _storage_path_for(division_id, doc_key)
+    try:
+        get_client().storage.from_(DOCS_BUCKET).upload(
+            path, data, file_options={"content-type": "application/pdf", "upsert": "true"},
+        )
+        return path
+    except Exception as e:
+        print(f"  ! couldn't store document bytes ({e})")
+        return None
+
+
+def download_document_bytes(storage_path):
+    """Bytes previously saved by upload_document_bytes, or None if missing/
+    unavailable."""
+    try:
+        return get_client().storage.from_(DOCS_BUCKET).download(storage_path)
+    except Exception as e:
+        print(f"  ! couldn't fetch stored document ({e})")
+        return None
 
 
 def already_scanned_urls(division_id):
@@ -482,14 +538,18 @@ def already_scanned_urls(division_id):
     }
 
 
-def scanned_document_urls_all(division_id):
-    """Every document_url this division has ever logged (any status). Used to
-    gate the PDF proxy so it can't be pointed at an arbitrary URL."""
-    res = (
-        get_client().table("scan_results").select("document_url")
-        .eq("division_id", division_id).execute()
-    )
-    return {r["document_url"] for r in res.data if r.get("document_url")}
+def scanned_document_lookup(division_id):
+    """{document_url: {"storage_path", "filename"}} for every document this
+    division has ever logged (any status). Used by the PDF proxy both to
+    gate access (can't be pointed at an arbitrary URL) and to know whether a
+    document's bytes are in Supabase Storage (browser-captured content with
+    no real external URL to re-fetch from, e.g. ConstructConnect) rather
+    than live-fetchable — storage_path is None for the latter."""
+    rows = _fetch_all_scan_results(division_id, columns="document_url,storage_path,filename")
+    return {
+        r["document_url"]: {"storage_path": r.get("storage_path"), "filename": r.get("filename") or ""}
+        for r in rows if r.get("document_url")
+    }
 
 
 def backfill_source_url(division_id, document_url, source_url):
@@ -755,7 +815,7 @@ def save_project_bid_times(division_id, mapping):
 _SCAN_RESULTS_PAGE_SIZE = 1000
 
 
-def _fetch_all_scan_results(division_id):
+def _fetch_all_scan_results(division_id, columns="*"):
     """Every scan_results row for a division, paginated past PostgREST's
     default row cap. A flat .limit(N) here used to silently lose data once a
     division's row count crossed N: ordering by run_date desc means the
@@ -769,7 +829,7 @@ def _fetch_all_scan_results(division_id):
     rows, start = [], 0
     while True:
         batch = (
-            client.table("scan_results").select("*")
+            client.table("scan_results").select(columns)
             .eq("division_id", division_id).order("run_date", desc=True)
             .range(start, start + _SCAN_RESULTS_PAGE_SIZE - 1).execute()
         ).data

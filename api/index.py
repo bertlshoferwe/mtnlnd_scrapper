@@ -908,6 +908,12 @@ def api_proxy_pdf(division_id):
 
     SSRF guard: only proxies a URL this division has actually logged in
     scan_results — never an arbitrary URL.
+
+    Two sources of bytes: a stored document (storage_path set — browser-
+    captured content with no real per-document URL, e.g. ConstructConnect;
+    `url` here is just the synthetic dedup key used to look the row up, not
+    something we ever fetch) is read from Supabase Storage; everything else
+    is fetched live from `url` itself, same as always.
     """
     _, err = _require_division(division_id)
     if err:
@@ -916,8 +922,21 @@ def api_proxy_pdf(division_id):
     target = request.args.get("url", "")
     if not target.startswith(("http://", "https://")):
         abort(400, description="bad url")
-    if target not in supabase_store.scanned_document_urls_all(division_id):
+    doc = supabase_store.scanned_document_lookup(division_id).get(target)
+    if doc is None:
         abort(403, description="not a document from this division's scans")
+
+    disp = "attachment" if request.args.get("download") else "inline"
+
+    if doc["storage_path"]:
+        data = supabase_store.download_document_bytes(doc["storage_path"])
+        if data is None:
+            abort(502, description="couldn't fetch the stored file")
+        filename = doc["filename"].rsplit("/", 1)[-1] or "document.pdf"
+        return Response(data, mimetype="application/pdf", headers={
+            "Content-Disposition": f'{disp}; filename="{filename}"',
+            "Cache-Control": "private, max-age=300",
+        })
 
     try:
         upstream = requests.get(target, timeout=20, stream=True,
@@ -927,7 +946,6 @@ def api_proxy_pdf(division_id):
         abort(502, description=f"couldn't fetch the file: {e}")
 
     filename = _filename_from(target)
-    disp = "attachment" if request.args.get("download") else "inline"
 
     def stream():
         total = 0

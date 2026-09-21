@@ -908,6 +908,7 @@ def _scan_division(division):
     run_id = supabase_store.start_run(division_id)
     try:
         supabase_store.update_run_progress(run_id, label="Getting started")
+        supabase_store.ensure_docs_bucket()
         sites, keywords = load_config(division_id)
 
         # Sites toggled off in the dashboard stay configured but are skipped.
@@ -1053,6 +1054,16 @@ def _scan_division(division):
                     supabase_store.log_scan_row(division_id, *row, source_url=source_url)
                     continue
 
+                # Browser-captured content (no real per-document URL, e.g.
+                # ConstructConnect) can't be viewed later via a live re-fetch —
+                # persist the bytes once, now, while we actually have them
+                # ("already scanned" skipping means we'll never see them again
+                # after this run).
+                storage_path = (
+                    supabase_store.upload_document_bytes(division_id, doc_key, raw)
+                    if not doc_url else None
+                )
+
                 pages, page_numbers_are_real = extract_pages(raw, filename)
 
                 # Literal substring pass — the deterministic baseline, always runs.
@@ -1097,7 +1108,9 @@ def _scan_division(division):
                 row = [run_date, row_site_name, doc_key, filename,
                        ", ".join(matched), len(matched), locations, status, ai_notes]
                 rows.append(row)
-                supabase_store.log_scan_row(division_id, *row, source_url=source_url)
+                supabase_store.log_scan_row(
+                    division_id, *row, source_url=source_url, storage_path=storage_path
+                )
                 already_scanned[doc_key] = source_url
                 print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
 

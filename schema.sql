@@ -63,6 +63,13 @@ create table if not exists scan_results (
   site text,
   document_url text,       -- direct link to the file (may be a synthetic key for JS-captured downloads)
   source_url text,         -- the project/job page the file belongs to, for the "open project" link
+  -- Path in the "scanned-documents" Supabase Storage bucket, set only for
+  -- documents with no real per-document URL to re-fetch from later (browser-
+  -- captured JS downloads, e.g. ConstructConnect) — the raw bytes are
+  -- persisted once at scan time since they're only ever available then.
+  -- NULL for portal adapters (UDOT/ITD/WYDOT), whose document_url is a real,
+  -- live-fetchable link the PDF proxy re-fetches on demand instead.
+  storage_path text,
   filename text,
   matched_keywords text,
   match_count int default 0,
@@ -82,6 +89,11 @@ create table if not exists scan_results (
 --   alter table scan_results add column if not exists source_url text;
 --   alter table scan_results add column if not exists last_seen_at timestamptz;
 --   alter table scan_results add column if not exists misses int default 0;
+--   alter table scan_results add column if not exists storage_path text;
+-- Also needs a private Storage bucket named "scanned-documents" (Storage >
+-- New bucket in the Supabase dashboard, "Public bucket" left OFF) — the app
+-- creates it automatically on the next scan if missing, but you can create
+-- it by hand too.
 create index if not exists scan_results_division_idx on scan_results(division_id, run_date desc);
 
 -- Per-project extras (keyed by the scan_results.site value): the user-set
