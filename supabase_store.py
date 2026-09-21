@@ -752,6 +752,33 @@ def save_project_bid_times(division_id, mapping):
         print(f"  ! couldn't save bid times ({e})")
 
 
+_SCAN_RESULTS_PAGE_SIZE = 1000
+
+
+def _fetch_all_scan_results(division_id):
+    """Every scan_results row for a division, paginated past PostgREST's
+    default row cap. A flat .limit(N) here used to silently lose data once a
+    division's row count crossed N: ordering by run_date desc means the
+    newest N rows win, and one adapter logging hundreds of rows in a single
+    run (ConstructConnect's per-document zip extraction, 2026-09-20) could
+    fill that whole window by itself, crowding out other sites' older rows
+    entirely — they'd still exist in the table, just never get read. Paging
+    with .range() instead means every row is always seen regardless of how
+    lopsided one site's row count gets."""
+    client = get_client()
+    rows, start = [], 0
+    while True:
+        batch = (
+            client.table("scan_results").select("*")
+            .eq("division_id", division_id).order("run_date", desc=True)
+            .range(start, start + _SCAN_RESULTS_PAGE_SIZE - 1).execute()
+        ).data
+        rows.extend(batch)
+        if len(batch) < _SCAN_RESULTS_PAGE_SIZE:
+            return rows
+        start += _SCAN_RESULTS_PAGE_SIZE
+
+
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
                         updated_only=False, new_only=False, page=1, page_size=15):
@@ -769,11 +796,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     Projects the source site no longer lists ("closed") are dropped unless
     include_closed is set, in which case each carries closed=True.
     """
-    rows = (
-        get_client().table("scan_results").select("*")
-        .eq("division_id", division_id).order("run_date", desc=True)
-        .limit(5000).execute()
-    ).data
+    rows = _fetch_all_scan_results(division_id)
 
     # Newest row wins per (project, filename), so a re-scan doesn't duplicate.
     seen, latest = set(), []
@@ -961,11 +984,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 def get_stats(division_id):
     """Project- and document-level counts for the Results summary, plus the
     keywords hitting the most projects."""
-    rows = (
-        get_client().table("scan_results")
-        .select("site,filename,match_count,matched_keywords,status")
-        .eq("division_id", division_id).execute()
-    ).data
+    rows = _fetch_all_scan_results(division_id)
 
     projects_all, projects_flagged = set(), set()
     docs_scanned = docs_matched = 0
