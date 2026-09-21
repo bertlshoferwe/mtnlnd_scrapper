@@ -998,6 +998,10 @@
       <div class="row" style="gap:8px; margin-bottom:16px; flex-wrap:wrap;">
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
         <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; margin-left:auto;">
+          <input type="checkbox" id="hideNoMatchFiles" style="width:auto;" onchange="renderProjectFiles()">
+          Hide non-matching files
+        </label>
       </div>
       <div id="projectModalFiles"></div>
     </div>
@@ -2430,11 +2434,31 @@ function openProjectModal(i) {
 
   renderProjectDoneBtn(p);
 
+  renderProjectFiles();
+
+  openModal('project');
+}
+
+function renderProjectFiles() {
+  const p = currentProject;
+  if (!p) return;
+  const hideNoMatch = document.getElementById('hideNoMatchFiles').checked;
+
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
-  const orderedFiles = p.files.slice().sort(function(a, b) {
+  let orderedFiles = p.files.slice().sort(function(a, b) {
     return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0);
   });
+  if (hideNoMatch) {
+    orderedFiles = orderedFiles.filter(function(f) { return f.keywords.length > 0; });
+  }
+  if (!orderedFiles.length) {
+    const empty = document.createElement('p');
+    empty.className = 'desc';
+    empty.textContent = 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matching files" to see the rest.' : '.');
+    filesEl.appendChild(empty);
+    return;
+  }
   orderedFiles.forEach(function(f) {
     const row = document.createElement('div');
     row.className = 'file-row' + (f.is_new ? ' f-new' : '');
@@ -2530,8 +2554,6 @@ function openProjectModal(i) {
     }
     filesEl.appendChild(row);
   });
-
-  openModal('project');
 }
 
 function renderProjectDoneBtn(p) {
