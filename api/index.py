@@ -731,7 +731,7 @@ def api_get_results_grouped(division_id):
     new_only = request.args.get("new") in ("1", "true")
     try:
         page = max(1, int(request.args.get("page", 1)))
-        page_size = max(1, min(50, int(request.args.get("page_size", 15))))
+        page_size = max(1, min(100, int(request.args.get("page_size", 15))))
     except ValueError:
         return jsonify({"error": "page and page_size must be integers"}), 400
 

@@ -862,8 +862,19 @@
     <ul class="project-list" id="projectList"></ul>
     <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
 
-    <div class="row results-pagerbar" style="justify-content: space-between; margin-top: 12px; gap: 10px;">
-      <span class="status-line" id="resultsPageInfo"></span>
+    <div class="row results-pagerbar" style="justify-content: space-between; margin-top: 12px; gap: 10px; flex-wrap: wrap;">
+      <div class="row" style="gap:10px; align-items:center;">
+        <span class="status-line" id="resultsPageInfo"></span>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted);">
+          Per page
+          <select id="resultsPageSizeSelect" onchange="onPageSizeChange(this)" style="width:auto;">
+            <option value="15">15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
       <div class="pager" id="resultsPager"></div>
     </div>
   </div>
@@ -2074,7 +2085,24 @@ function formatBytes(bytes) {
 
 let resultsPage = 1;
 let resultsTotal = 0;
-const PROJECTS_PER_PAGE = 15;
+const PAGE_SIZE_OPTIONS = [15, 25, 50, 100];
+const PAGE_SIZE_STORAGE_KEY = 'bidscout_results_page_size';
+function loadPageSizePref() {
+  try {
+    const v = parseInt(localStorage.getItem(PAGE_SIZE_STORAGE_KEY), 10);
+    if (PAGE_SIZE_OPTIONS.includes(v)) return v;
+  } catch (e) { /* localStorage unavailable — fall through to the default */ }
+  return 15;
+}
+let resultsPageSize = loadPageSizePref();
+function onPageSizeChange(select) {
+  const v = parseInt(select.value, 10);
+  if (!PAGE_SIZE_OPTIONS.includes(v) || v === resultsPageSize) return;
+  resultsPageSize = v;
+  resultsPage = 1;
+  try { localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(v)); } catch (e) { /* per-viewer convenience only */ }
+  loadProjects();
+}
 const FIRST_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;
 const FIRST_SCAN_FRIDAY_WINDOW_MS = 120 * 60 * 60 * 1000;
 
@@ -2220,7 +2248,7 @@ async function loadProjects() {
   if (!currentDivision) return;
   const search = document.getElementById('resultsSearch').value.trim();
   const status = document.getElementById('resultsStatusFilter').value;
-  const params = new URLSearchParams({ page: resultsPage, page_size: PROJECTS_PER_PAGE });
+  const params = new URLSearchParams({ page: resultsPage, page_size: resultsPageSize });
   if (search) params.set('search', search);
   if (status) params.set('status', status);
   if (currentResultsSite) params.set('site', currentResultsSite);
@@ -2328,8 +2356,8 @@ async function loadProjects() {
   if (resultsTotal === 0) {
     pageInfo.textContent = '';
   } else {
-    const start = (resultsPage - 1) * PROJECTS_PER_PAGE + 1;
-    const end = Math.min(resultsPage * PROJECTS_PER_PAGE, resultsTotal);
+    const start = (resultsPage - 1) * resultsPageSize + 1;
+    const end = Math.min(resultsPage * resultsPageSize, resultsTotal);
     pageInfo.textContent = 'Showing ' + start + '–' + end + ' of ' + resultsTotal + ' project' + (resultsTotal === 1 ? '' : 's');
   }
   renderPager();
@@ -2338,7 +2366,7 @@ async function loadProjects() {
 function renderPager() {
   const pager = document.getElementById('resultsPager');
   pager.innerHTML = '';
-  const totalPages = Math.max(1, Math.ceil(resultsTotal / PROJECTS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
   if (resultsTotal === 0 || totalPages <= 1) return;
 
   const cur = resultsPage;
@@ -2373,7 +2401,7 @@ function renderPager() {
 }
 
 function goToResultsPage(page) {
-  const totalPages = Math.max(1, Math.ceil(resultsTotal / PROJECTS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
   page = Math.min(Math.max(1, page), totalPages);
   if (page === resultsPage) return;
   resultsPage = page;
@@ -2877,6 +2905,7 @@ async function init() {
   localizeSchedule();
   syncFilterUI();
   syncSortUI();
+  document.getElementById('resultsPageSizeSelect').value = String(resultsPageSize);
   await loadAdapters();
   await loadDivisions();
   await loadAllForCurrentDivision();
