@@ -721,6 +721,37 @@ def save_project_bid_dates(division_id, mapping):
         print(f"  ! couldn't save bid dates ({e})")
 
 
+def load_project_bid_times(division_id):
+    """{project_key: raw display string} (e.g. '10:00am MT') for projects
+    whose source portal shows a time alongside the bid-opening date — so far
+    only ConstructConnect. Empty if the column/table isn't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,bid_time")
+            .eq("division_id", division_id).execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: r["bid_time"] for r in res.data if r.get("bid_time")}
+
+
+def save_project_bid_times(division_id, mapping):
+    """Upsert {project_key: raw display string} from a scan. Only touches
+    bid_time, same as save_project_bid_dates. No-ops if the table/column is
+    missing."""
+    rows = [
+        {"division_id": division_id, "project_key": k, "bid_time": v,
+         "updated_at": datetime.now(timezone.utc).isoformat()}
+        for k, v in mapping.items() if v
+    ]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save bid times ({e})")
+
+
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
                         updated_only=False, new_only=False, page=1, page_size=15):
@@ -779,6 +810,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     done_keys = load_done_projects(division_id)
     bid_dates = load_project_bid_dates(division_id)
+    bid_times = load_project_bid_times(division_id)
     docs_ack = load_docs_ack(division_id)
 
     projects = []
@@ -833,6 +865,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "reopened": is_updated and (site_key in done_keys),
             "closed": closed, "last_seen_at": last_seen,
             "bid_date": bid_dates.get(site_key),
+            "bid_time": bid_times.get(site_key),
             "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })

@@ -2271,12 +2271,12 @@ async function loadProjects() {
     name.textContent = p.project;
     const subParts = [];
     if (p.source_prefix) subParts.push(p.source_prefix);
-    if (p.bid_date) subParts.push('bids ' + formatBidDate(p.bid_date));
+    if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
     if (subParts.length) {
       const sub = document.createElement('span');
       sub.className = 'p-sub';
       sub.textContent = subParts.join('  ·  ');
-      if (p.bid_date) sub.title = 'Bid opening ' + formatBidDate(p.bid_date, true);
+      if (p.bid_date) sub.title = 'Bid opening ' + formatBidWhen(p, true);
       name.appendChild(sub);
     }
 
@@ -2401,6 +2401,13 @@ function formatBidDate(iso, full) {
     : { month: 'short', day: 'numeric' });
 }
 
+// Appends the source portal's raw bid-time string (e.g. "10:00am MT") after
+// the formatted date, when one was captured — so far only ConstructConnect
+// provides a time; other portals are date-only and this is a no-op for them.
+function formatBidWhen(p, full) {
+  return formatBidDate(p.bid_date, full) + (p.bid_time ? ' @ ' + p.bid_time : '');
+}
+
 function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
@@ -2409,7 +2416,7 @@ function openProjectModal(i) {
 
   const meta = [];
   if (p.source_prefix) meta.push(p.source_prefix);
-  if (p.bid_date) meta.push('bids open ' + formatBidDate(p.bid_date, true));
+  if (p.bid_date) meta.push('bids open ' + formatBidWhen(p, true));
   if (p.closed) {
     let m = 'no longer listed on the source site';
     if (p.last_seen_at) m += ' — last seen ' + new Date(p.last_seen_at).toLocaleDateString([], { month: 'short', day: 'numeric' });

@@ -91,6 +91,11 @@ create table if not exists project_flags (
   project_key text not null,
   done boolean not null default false,
   bid_date date,
+  -- Raw display string for portals that show a time alongside the
+  -- bid-opening date (e.g. "10:00am MT") — so far only ConstructConnect.
+  -- Purely cosmetic (appended after bid_date wherever it's shown); not used
+  -- for date comparisons/sorting, so it doesn't need to be a real time type.
+  bid_time text,
   -- "New document" notification watermark. A project (that has matched
   -- keywords and was first seen on an earlier run) is flagged as updated
   -- when it has a file whose run_date is newer than the project's first
@@ -105,6 +110,7 @@ create table if not exists project_flags (
 --   create table above, then
 --   alter table project_flags add column if not exists bid_date date;
 --   alter table project_flags add column if not exists docs_ack_through timestamptz;
+--   alter table project_flags add column if not exists bid_time text;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (

@@ -71,11 +71,13 @@ class SiteAdapter:
     def find_documents_with_browser(self, site, login):
         """Only for needs_browser=True adapters. Return (doc_links, login_result):
         doc_links is [(label, document_url_or_None, filename, content_bytes_or_None,
-        project_page_url, bid_date), ...] — already in scan_site()'s final 6-tuple
-        shape, since a browser-driven adapter typically has content bytes rather
-        than a URL the caller can fetch later. `login_result` is the {"ok",
-        "message"} dict from the login attempt (or None if login was never
-        attempted). `login` is {"username", "password", "url"} or None."""
+        project_page_url, bid_date, bid_time), ...] — already in scan_site()'s
+        final 7-tuple shape, since a browser-driven adapter typically has content
+        bytes rather than a URL the caller can fetch later. `bid_time` is a raw
+        display string (e.g. '10:00am MT') for portals that show a time alongside
+        the bid-opening date, or None. `login_result` is the {"ok", "message"}
+        dict from the login attempt (or None if login was never attempted).
+        `login` is {"username", "password", "url"} or None."""
         raise NotImplementedError
 
 
@@ -625,6 +627,7 @@ class ConstructConnectAdapter(SiteAdapter):
             return []
 
         project_url = page.url
+        bid_date, bid_time = self._extract_bid_info(page)
         out = []
         doc_page = None
         try:
@@ -654,9 +657,57 @@ class ConstructConnectAdapter(SiteAdapter):
                 except Exception:
                     pass
 
+        if out and (bid_date or bid_time):
+            out = [(lbl, u, fn, data, src, bid_date, bid_time)
+                   for (lbl, u, fn, data, src, _bd, _bt) in out]
+
         page.go_back()
         page.wait_for_timeout(1200)
         return out
+
+    # Each event on the project page ("Bid Date", "Start Date", "End Date",
+    # ...) is one of these blocks — matched on a partial class name since the
+    # CSS-module hash suffix can change on ConstructConnect's next deploy.
+    BID_EVENT_ROW_SELECTOR = '[class*="ProjectInformation_projectDetails__attribute"]'
+
+    def _extract_bid_info(self, page):
+        """Reads the project page's "Events" section for the "Bid Date" row
+        and returns (bid_date_iso_or_None, bid_time_or_None) — e.g.
+        ('2026-09-17', '10:00am MT') from "Sep 17, 2026 @ 10:00am MT".
+
+        DOM structure confirmed via devtools 2026-09-20: each event block's
+        first <span> is its label ("Bid Date"/"Start Date"/"End Date"), and
+        its value sits in a <span> nested inside a
+        [class*="ProjectInformation_meeting__info"] div later in the same
+        block."""
+        try:
+            for row in page.query_selector_all(self.BID_EVENT_ROW_SELECTOR):
+                label = row.query_selector("span")
+                if not label or "Bid Date" not in label.inner_text():
+                    continue
+                value_el = row.query_selector(
+                    '[class*="ProjectInformation_meeting__info"] span'
+                )
+                return self._parse_bid_meeting_text(
+                    value_el.inner_text() if value_el else None
+                )
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't read the bid date ({e})")
+            return None, None
+        if not getattr(self, "_saved_bid_date_debug", False):
+            self._saved_bid_date_debug = True
+            self._save_debug_screenshot(page, "bid_date_not_found")
+        return None, None
+
+    @staticmethod
+    def _parse_bid_meeting_text(text):
+        """'Sep 17, 2026 @ 10:00am MT' -> ('2026-09-17', '10:00am MT'). Either
+        half may be missing (or the whole thing unparseable), in which case
+        that half is None."""
+        if not text:
+            return None, None
+        date_part, _, time_part = text.partition("@")
+        return parse_bid_date(date_part), (time_part.strip() or None)
 
     def _click_view_download(self, page):
         """A debug screenshot showed the project page completely unchanged
@@ -704,7 +755,7 @@ class ConstructConnectAdapter(SiteAdapter):
         if name.lower().endswith(".zip"):
             return self._extract_zip(data, label, project_url)
         if name.lower().endswith(DOC_EXTENSIONS):
-            return [(label, None, f"{label} - {name}", data, project_url, None)]
+            return [(label, None, f"{label} - {name}", data, project_url, None, None)]
         print(f"  ! ConstructConnect: downloaded '{name}' — unrecognized type, skipping")
         return []
 
@@ -725,7 +776,7 @@ class ConstructConnectAdapter(SiteAdapter):
             return []
         with open(path, "rb") as f:
             data = f.read()
-        return [(label, None, f"{label} - All Documents.pdf", data, project_url, None)]
+        return [(label, None, f"{label} - All Documents.pdf", data, project_url, None, None)]
 
     # The docviewer's "Download All" button has this stable id (confirmed
     # by the user via devtools) — target it directly rather than a text
@@ -849,7 +900,7 @@ class ConstructConnectAdapter(SiteAdapter):
                     # out two different folders coincidentally reusing the
                     # same filename within one project's zip.
                     fn = f"{label} - {name}"
-                    out.append((label, None, fn, data, project_url, None))
+                    out.append((label, None, fn, data, project_url, None, None))
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't read the zip for '{label}': {e}")
         return out

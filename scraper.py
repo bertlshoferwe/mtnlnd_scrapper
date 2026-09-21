@@ -528,14 +528,15 @@ def scan_site(site, ai_client):
     """
     Dispatch to the right document-finding strategy for a site and return
     (doc_links, cookies, login_result):
-      - doc_links: a uniform list of 6-tuples
+      - doc_links: a uniform list of 7-tuples
             (label_or_None, url_or_None, filename, content_bytes_or_None,
-             source_url_or_None, bid_date_or_None)
+             source_url_or_None, bid_date_or_None, bid_time_or_None)
         `content_bytes` is set only for files captured from a JavaScript
         download (no URL to fetch later); otherwise it's None and the caller
         downloads `url`. `source_url` is a link to the job/project page the
         file belongs to. `bid_date` ('YYYY-MM-DD') only comes from portal
-        adapters.
+        adapters and ConstructConnect. `bid_time` is a raw display string
+        (e.g. '10:00am MT') and so far only comes from ConstructConnect.
       - cookies: a {name: value} dict of the authenticated session's cookies
         when the site required a login (empty otherwise) — pass it to
         download_document() so linked (non-captured) documents can still be
@@ -552,7 +553,7 @@ def scan_site(site, ai_client):
             doc_links, login_result = adapter.find_documents_with_browser(site, _site_login(site))
             return doc_links, {}, login_result
         print(f"  Adapter: {adapter.label}")
-        return [(lbl, url, fn, None, src, bid)
+        return [(lbl, url, fn, None, src, bid, None)
                 for lbl, url, fn, src, bid in adapter.find_documents(site)], {}, None
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
@@ -563,10 +564,10 @@ def scan_site(site, ai_client):
         # Only a *configured* listing (has a selector or URL pattern) uses the
         # targeted listing crawl. An empty {} — left over from the old
         # "let AI find the links" checkbox — falls through to the browser crawler.
-        return [(lbl, url, fn, None, None, None)
+        return [(lbl, url, fn, None, None, None, None)
                 for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}, None
     if site.get("tabs"):
-        return [(lbl, url, fn, None, None, None)
+        return [(lbl, url, fn, None, None, None, None)
                 for lbl, url, fn in find_document_links_across_tabs(site)], {}, None
 
     # Default: a real browser crawl — renders JS, follows links, clicks
@@ -575,9 +576,9 @@ def scan_site(site, ai_client):
     # finder if Playwright/Chromium isn't available.
     crawled, cookies, login_result = browser_crawl.crawl_site(site["url"], login=_site_login(site))
     if crawled is not None:
-        return [(lbl, url, fn, content, page_url, None)
+        return [(lbl, url, fn, content, page_url, None, None)
                 for lbl, url, fn, content, page_url in crawled], cookies, login_result
-    return [(None, doc_url, fn, None, site["url"], None)
+    return [(None, doc_url, fn, None, site["url"], None, None)
             for doc_url, fn in find_document_links(site["url"])], {}, login_result
 
 
@@ -948,7 +949,8 @@ def _scan_division(division):
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
         stopped_early = False
         advertised_by_site = {}  # site name -> {doc_key} for seen-tracking reconcile
-        bid_dates = {}  # project_key -> "YYYY-MM-DD" (portal adapters only)
+        bid_dates = {}  # project_key -> "YYYY-MM-DD" (portal adapters + ConstructConnect)
+        bid_times = {}  # project_key -> raw display string, e.g. "10:00am MT" (ConstructConnect only, so far)
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
@@ -989,16 +991,19 @@ def _scan_division(division):
             # broke, and we don't want that to mark projects "no longer listed".
             if SEEN_TRACKING and site.get("active", True) and doc_links:
                 advertised_by_site[name] = {
-                    (du or f"{url}#{fn}") for _, du, fn, _, _, _ in doc_links
+                    (du or f"{url}#{fn}") for _, du, fn, _, _, _, _ in doc_links
                 }
 
-            # Bid-opening dates (portal adapters only), one per project.
-            for lbl, _, _, _, _, bd in doc_links:
+            # Bid-opening dates/times (portal adapters + ConstructConnect), one per project.
+            for lbl, _, _, _, _, bd, bt in doc_links:
+                key = f"{name} — {lbl}" if lbl else name
                 if bd:
-                    bid_dates[f"{name} — {lbl}" if lbl else name] = bd
+                    bid_dates[key] = bd
+                if bt:
+                    bid_times[key] = bt
 
             site_total = sum(
-                1 for _, du, fn, _, _, _ in doc_links
+                1 for _, du, fn, _, _, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
             )
             site_done = 0
@@ -1021,7 +1026,7 @@ def _scan_division(division):
                 supabase_store.log_scan_row(division_id, *row)
                 continue
 
-            for label, doc_url, filename, content, source_url, _bid in doc_links:
+            for label, doc_url, filename, content, source_url, _bid, _bid_time in doc_links:
                 # For a URL-less capture, key the "already scanned" / logged
                 # URL off the site + filename so re-runs still skip it.
                 doc_key = doc_url or f"{url}#{filename}"
@@ -1105,6 +1110,8 @@ def _scan_division(division):
 
         if bid_dates:
             supabase_store.save_project_bid_dates(division_id, bid_dates)
+        if bid_times:
+            supabase_store.save_project_bid_times(division_id, bid_times)
 
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
