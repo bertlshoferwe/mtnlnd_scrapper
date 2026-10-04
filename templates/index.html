@@ -723,6 +723,12 @@
     #pdfPager button { min-width: 38px; min-height: 38px; font-size: 20px; }
     #pdfPageInput { width: 3em; padding: 8px 2px; font-size: 15px; }
 
+    /* Project cards: name, then site/bid date, then file count + tags, each
+       on their own line — squeezing them onto one row (the desktop layout)
+       left almost no width for the name and wrapped it mid-word. */
+    .project-list li { flex-wrap: wrap; align-items: flex-start; row-gap: 6px; }
+    .project-list .p-name { flex-basis: 100%; }
+
     .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
     .pager { justify-content: center; }
     .pager button { min-width: 36px; height: 36px; }
