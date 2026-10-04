@@ -18,7 +18,7 @@ import os
 import re
 import time
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -847,18 +847,17 @@ class ConstructConnectAdapter(SiteAdapter):
     # Each event on the project page ("Bid Date", "Start Date", "End Date",
     # ...) is one of these blocks — matched on a partial class name since the
     # CSS-module hash suffix can change on ConstructConnect's next deploy.
-    BID_EVENT_ROW_SELECTOR = '[class*="ProjectInformation_projectDetails__attribute"]'
+    # Replaced ProjectInformation_* with EventItem_* as of ConstructConnect's
+    # 2026-10 redesign (confirmed via devtools 2026-10-04) — also split what
+    # used to be one combined "Sep 17, 2026 @ 10:00am MT" string into a
+    # separate day/month block (EventItem_date — no year at all) and a
+    # title/time block (EventItem_details).
+    BID_EVENT_ROW_SELECTOR = '[class*="EventItem_item"]'
 
     def _extract_bid_info(self, page):
         """Reads the project page's "Events" section for the "Bid Date" row
-        and returns (bid_date_iso_or_None, bid_time_or_None) — e.g.
-        ('2026-09-17', '10:00am MT') from "Sep 17, 2026 @ 10:00am MT".
-
-        DOM structure confirmed via devtools 2026-09-20: each event block's
-        first <span> is its label ("Bid Date"/"Start Date"/"End Date"), and
-        its value sits in a <span> nested inside a
-        [class*="ProjectInformation_meeting__info"] div later in the same
-        block.
+        and returns (bid_date_iso_or_None, bid_time_or_None), e.g.
+        ('2026-10-01', '2:00pm PT').
 
         Confirmed via debug screenshot 2026-10-04: the project page's
         "Events" section loads independently of (and slower than) the
@@ -873,15 +872,18 @@ class ConstructConnectAdapter(SiteAdapter):
             pass  # genuinely no events on this project is also possible
         try:
             for row in page.query_selector_all(self.BID_EVENT_ROW_SELECTOR):
-                label = row.query_selector("span")
-                if not label or "Bid Date" not in label.inner_text():
+                title_el = row.query_selector('[class*="EventItem_title"]')
+                if not title_el or "Bid Date" not in (title_el.inner_text() or ""):
                     continue
-                value_el = row.query_selector(
-                    '[class*="ProjectInformation_meeting__info"] span'
+                day_el = row.query_selector('[class*="EventItem_day"]')
+                month_el = row.query_selector('[class*="EventItem_month"]')
+                time_el = row.query_selector('[class*="EventItem_time"]')
+                bid_date = self._infer_event_date(
+                    day_el.inner_text() if day_el else None,
+                    month_el.inner_text() if month_el else None,
                 )
-                return self._parse_bid_meeting_text(
-                    value_el.inner_text() if value_el else None
-                )
+                time_text = (time_el.inner_text() if time_el else "") or ""
+                return bid_date, (time_text.strip() or None)
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't read the bid date ({e})")
             return None, None
@@ -891,14 +893,31 @@ class ConstructConnectAdapter(SiteAdapter):
         return None, None
 
     @staticmethod
-    def _parse_bid_meeting_text(text):
-        """'Sep 17, 2026 @ 10:00am MT' -> ('2026-09-17', '10:00am MT'). Either
-        half may be missing (or the whole thing unparseable), in which case
-        that half is None."""
-        if not text:
-            return None, None
-        date_part, _, time_part = text.partition("@")
-        return parse_bid_date(date_part), (time_part.strip() or None)
+    def _infer_event_date(day_text, month_abbr):
+        """EventItem_date gives only a day + 3-letter month ("1"/"Oct") —
+        no year anywhere on the page. Infers the nearest occurrence: this
+        year, unless that would be more than a week in the past, in which
+        case it's next year's (events are always upcoming, and ConstructConnect
+        presumably omits the year because within-a-year is assumed obvious).
+        Returns an ISO date string, or None if unparseable."""
+        if not day_text or not month_abbr:
+            return None
+        try:
+            month_num = datetime.strptime(month_abbr.strip()[:3], "%b").month
+            day_num = int(re.sub(r"\D", "", day_text))
+        except (ValueError, TypeError):
+            return None
+        today = datetime.now()
+        try:
+            candidate = datetime(today.year, month_num, day_num)
+        except ValueError:
+            return None
+        if candidate < today - timedelta(days=7):
+            try:
+                candidate = datetime(today.year + 1, month_num, day_num)
+            except ValueError:
+                return None
+        return candidate.date().isoformat()
 
     # ConstructConnect dropped the old single "View/Download Documents"
     # button in favor of a per-category Documents panel on the project page
