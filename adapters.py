@@ -548,6 +548,13 @@ class ConstructConnectAdapter(SiteAdapter):
             page.click("#location-listbox-option-county", timeout=8000)
 
             dialog = page.get_by_role("dialog")
+            # Confirmed via a debug screenshot 2026-10-04: the cookie
+            # banner reappeared sitting right on top of this dialog's
+            # Clear All/Apply row, blocking the very first click here even
+            # though it had already been dismissed once before the dialog
+            # opened — it comes back on its own, not just after
+            # page.go_back() (see _dismiss_cookie_banner's own note).
+            self._dismiss_cookie_banner(page)
             dialog.get_by_text("Clear All", exact=True).click(timeout=8000)
             for state in self.LOCATION_FILTER_STATES:
                 # Each state is a CountrySelect_stateItemWrapper containing
@@ -559,6 +566,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 wrapper = title.locator(
                     "xpath=ancestor::*[contains(@class, 'CountrySelect_stateItemWrapper')]")
                 wrapper.locator("label").click(timeout=5000)
+            self._dismiss_cookie_banner(page)  # belt-and-suspenders, see above
             dialog.get_by_role("button", name="Apply").click(timeout=8000)
             page.wait_for_timeout(1500)
 
