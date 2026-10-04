@@ -140,17 +140,45 @@ def delete_division(division_id):
 # ---------------------------------------------------------------------------
 
 def load_sites(division_id):
-    res = (
-        get_client().table("sites").select("*")
-        .eq("division_id", division_id).order("id").execute()
-    )
-    # `active` may be absent on a DB that skipped the migration — default it
-    # so both the dashboard and the scan worker see every site as active.
+    # Also the order the scan worker visits sites in (scraper.py just
+    # iterates whatever this returns) — falls back to insertion order on a
+    # DB that hasn't run the sort_order migration yet, rather than erroring
+    # the whole sites list out.
+    try:
+        res = (
+            get_client().table("sites").select("*")
+            .eq("division_id", division_id).order("sort_order").execute()
+        )
+    except Exception:
+        res = (
+            get_client().table("sites").select("*")
+            .eq("division_id", division_id).order("id").execute()
+        )
+    # `active`/`sort_order` may be absent on a DB that skipped a migration —
+    # default them so both the dashboard and the scan worker see sane values.
     for row in res.data:
         row.setdefault("active", True)
         if row.get("active") is None:
             row["active"] = True
+        if row.get("sort_order") is None:
+            row["sort_order"] = row["id"]
     return res.data
+
+
+def reorder_sites(division_id, ordered_ids):
+    """Persists a drag-to-reorder from the dashboard — ordered_ids is every
+    site id for this division, top to bottom. One update per site; this
+    list is always small (a handful to a few dozen sites). Raises
+    ValueError with a migration hint if the column is missing."""
+    try:
+        for i, site_id in enumerate(ordered_ids):
+            get_client().table("sites").update({"sort_order": i}) \
+                .eq("division_id", division_id).eq("id", site_id).execute()
+    except Exception as e:
+        raise ValueError(
+            "couldn't update 'sort_order' — run the migration in schema.sql: "
+            "alter table sites add column if not exists sort_order bigint"
+        ) from e
 
 
 def set_site_active(division_id, site_id, active):
@@ -191,7 +219,9 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, logi
     """`login`, when given, is {"username", "password_enc", "url"} — the
     password already encrypted by the caller (api/index.py), since this
     module has no opinion on how secrets are handled."""
-    row = {"division_id": division_id, "name": name, "url": url}
+    existing = load_sites(division_id)
+    next_order = (max(s["sort_order"] for s in existing) + 1) if existing else 0
+    row = {"division_id": division_id, "name": name, "url": url, "sort_order": next_order}
     if listing is not None:
         row["listing"] = listing
     if tabs is not None:
@@ -202,7 +232,13 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, logi
         row["login_username"] = login["username"]
         row["login_password_enc"] = login["password_enc"]
         row["login_url"] = login["url"]
-    res = get_client().table("sites").insert(row).execute()
+    try:
+        res = get_client().table("sites").insert(row).execute()
+    except Exception:
+        # sort_order column not migrated yet on this DB — fall back to the
+        # old insertion-order behavior rather than failing "add site" outright.
+        row.pop("sort_order", None)
+        res = get_client().table("sites").insert(row).execute()
     return res.data[0]
 
 

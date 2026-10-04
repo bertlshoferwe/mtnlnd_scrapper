@@ -199,6 +199,14 @@
   .site-row {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
   }
+  .site-grip {
+    color: var(--muted); flex-shrink: 0; cursor: grab; display: inline-flex;
+    opacity: 0; transition: opacity .12s ease; touch-action: none;
+  }
+  .site-grip svg { width: 16px; height: 16px; }
+  ul.list li:hover .site-grip, .site-grip:focus-visible { opacity: 1; }
+  @media (hover: none) { .site-grip { opacity: 1; } }
+  ul.list li.site-dragging { opacity: .4; }
   .site-edit-slot:empty { display: none; }
   .site-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .site-actions {
@@ -581,12 +589,20 @@
   .file-row:last-child { border-bottom: none; }
   .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; }
   .f-top-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .f-top-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .f-top-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
   .f-kw-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
+  .file-row .f-dl {
+    font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap;
+    flex-shrink: 0; background: none; border: none; cursor: pointer; font-family: inherit;
+    padding: 10px 8px; margin: -10px 0;  /* bigger touch target, no extra visual space */
+  }
   .file-row .f-dl:hover { text-decoration: underline; }
-  .f-chevron { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); align-self: center; transition: transform .15s; }
+  .f-chevron {
+    width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); transition: transform .15s;
+    padding: 10px; margin: -10px;  /* bigger touch target, no extra visual space */
+    box-sizing: content-box; display: inline-flex; align-items: center; justify-content: center;
+  }
   .file-row.f-open .f-chevron { transform: rotate(180deg); }
   .f-body { display: none; }
   .file-row.f-open .f-body { display: block; }
@@ -1558,6 +1574,7 @@ const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
 // The edit form is a single shared node: its home is at the top under the
 // "+ Add a site" button (used for adding), editSite() moves it into the row
@@ -1581,6 +1598,7 @@ async function loadSites() {
   sites.forEach(function(site, i) {
     const li = document.createElement('li');
     if (site.active === false) li.className = 'site-off';
+    li.dataset.siteId = site.id;
     let tags = '';
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
@@ -1593,7 +1611,8 @@ async function loadSites() {
       : '<div class="site-url" style="font-style:italic;">no URL — adapter decides where to look</div>';
     li.innerHTML =
       '<div class="site-row">' +
-        '<div style="min-width:0;">' +
+        '<span class="site-grip" draggable="true" title="Drag to reorder — this is also the scan order" aria-label="Drag to reorder">' + ICON_GRIP + '</span>' +
+        '<div style="min-width:0; flex:1;">' +
           '<div class="site-name">' + escapeHtml(site.name) +
             (site.adapter ? '<span class="adapter-mark" title="Portal adapter: ' + escapeHtml(adapterLabel(site.adapter)) + '">*</span>' : '') +
           '</div>' +
@@ -1614,6 +1633,7 @@ async function loadSites() {
       '</div>' +
       '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
     list.appendChild(li);
+    wireSiteDrag(li);
   });
 
   // A re-render mid-edit (e.g. deleting another site): re-mount the open form
@@ -1621,6 +1641,46 @@ async function loadSites() {
   if (editingSiteId != null) {
     if (sites.some(function(s) { return s.id === editingSiteId; })) mountEditForm(editingSiteId);
     else hideAddSite();
+  }
+}
+
+let siteDragEl = null;
+
+function wireSiteDrag(li) {
+  const grip = li.querySelector('.site-grip');
+  if (!grip) return;
+  grip.addEventListener('dragstart', function(e) {
+    siteDragEl = li;
+    li.classList.add('site-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    // Firefox needs setData to actually start a drag.
+    e.dataTransfer.setData('text/plain', li.dataset.siteId);
+  });
+  grip.addEventListener('dragend', function() {
+    li.classList.remove('site-dragging');
+    if (siteDragEl) { siteDragEl = null; saveSiteOrder(); }
+  });
+  li.addEventListener('dragover', function(e) {
+    if (!siteDragEl || siteDragEl === li) return;
+    e.preventDefault();
+    const list = document.getElementById('sitesList');
+    const rect = li.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    list.insertBefore(siteDragEl, before ? li : li.nextSibling);
+  });
+}
+
+async function saveSiteOrder() {
+  const ids = Array.from(document.getElementById('sitesList').children)
+    .map(function(li) { return parseInt(li.dataset.siteId, 10); });
+  try {
+    await api('/api/' + currentDivision + '/sites/reorder', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ order: ids }),
+    });
+    sitesCache.sort(function(a, b) { return ids.indexOf(a.id) - ids.indexOf(b.id); });
+  } catch (e) {
+    alert(e.message);
+    loadSites();  // revert the visual order on failure
   }
 }
 

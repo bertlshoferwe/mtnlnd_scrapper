@@ -16,6 +16,11 @@ create table if not exists sites (
   tabs jsonb,              -- null = no tabs; otherwise a list of {"label": "...", "selector": "..."}
   adapter text,            -- null = generic HTML crawl; otherwise a key from adapters.py (portal-specific API)
   active boolean not null default true,  -- false = kept in the list but skipped by every scan
+  -- Drag-to-reorder position in the dashboard — also the order sites are
+  -- scanned in (see scraper.py's _scan_division, which just iterates
+  -- load_sites() in the order it returns). Defaults to id so a fresh site
+  -- lands at the end of the list.
+  sort_order bigint,
   -- Login, for a site whose documents sit behind a login form. Only used by
   -- the generic browser crawl (adapters and listing/tabs crawls don't use a
   -- real browser session). login_password_enc is Fernet-encrypted with
@@ -40,6 +45,8 @@ create table if not exists sites (
 --   alter table sites add column if not exists login_last_ok boolean;
 --   alter table sites add column if not exists login_last_checked_at timestamptz;
 --   alter table sites add column if not exists login_last_error text;
+--   alter table sites add column if not exists sort_order bigint;
+--   update sites set sort_order = id where sort_order is null;
 
 create table if not exists keywords (
   id bigint generated always as identity primary key,

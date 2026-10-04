@@ -18,6 +18,7 @@ Routes:
   POST /api/<division_id>/sites              add a site
   PATCH /api/<division_id>/sites/<site_id>   edit a site (name, url, adapter, selector/pattern)
   POST /api/<division_id>/sites/<site_id>/active   toggle whether the site is scanned
+  POST /api/<division_id>/sites/reorder      persist a drag-to-reorder (also the scan order)
   DEL  /api/<division_id>/sites/<site_id>     remove a site
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
@@ -329,6 +330,25 @@ def api_set_site_active(division_id, site_id):
         msg = str(e)
         return jsonify({"error": msg}), (404 if msg == "site not found" else 400)
     return jsonify({"ok": True, "site": _public_site(site)})
+
+
+@app.route("/api/<division_id>/sites/reorder", methods=["POST"])
+def api_reorder_sites(division_id):
+    """Persists a drag-to-reorder from the dashboard — also the order sites
+    are scanned in (see scraper.py). Body: {"order": [site_id, ...]},
+    every site id for this division, top to bottom."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    order = data.get("order")
+    if not isinstance(order, list) or not order:
+        return jsonify({"error": "order is required"}), 400
+    try:
+        supabase_store.reorder_sites(division_id, order)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
 
 
 @app.route("/api/adapters", methods=["GET"])
