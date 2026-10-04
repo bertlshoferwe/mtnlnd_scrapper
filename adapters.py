@@ -535,6 +535,7 @@ class ConstructConnectAdapter(SiteAdapter):
         the run unfiltered (logged + screenshotted) rather than aborting
         the whole scan — a wider net is a much smaller problem than a
         crashed run."""
+        self._dismiss_cookie_banner(page)
         try:
             try:
                 page.click("button:has-text('Filters')", timeout=5000)
@@ -568,6 +569,20 @@ class ConstructConnectAdapter(SiteAdapter):
             print(f"  ! ConstructConnect: couldn't apply the location filter, "
                   f"scanning unfiltered instead ({e})")
             self._save_debug_screenshot(page, "location_filter_failed")
+            # A failure partway through can leave the dialog (or its
+            # backdrop) open on screen, which then blocks every click for
+            # the rest of the run — confirmed 2026-10-04: a failed filter
+            # attempt was followed by all 100 subsequent project-open
+            # clicks timing out, not just the filter itself. Escape closes
+            # it per the dialog's own "Press Escape to close" hint; a
+            # left/right-arrow-free click on the page body is a fallback
+            # in case Escape alone doesn't drop a lingering backdrop.
+            try:
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
+                page.mouse.click(5, 5)
+            except Exception:
+                pass
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
