@@ -541,13 +541,23 @@ class ConstructConnectAdapter(SiteAdapter):
             except Exception:
                 pass  # the filter sidebar may already be open
             page.click("text=Project Location", timeout=8000)
-            page.click("text=Select Location Type", timeout=8000)
-            page.click("text=Counties or States/Provinces", timeout=8000)
+            # Stable ids confirmed via devtools 2026-10-04 (not just text —
+            # this control is a custom combobox, not a real <select>).
+            page.click("#location", timeout=8000)
+            page.click("#location-listbox-option-county", timeout=8000)
 
             dialog = page.get_by_role("dialog")
             dialog.get_by_text("Clear All", exact=True).click(timeout=8000)
             for state in self.LOCATION_FILTER_STATES:
-                dialog.get_by_text(state, exact=True).click(timeout=5000)
+                # Each state is a CountrySelect_stateItemWrapper containing
+                # two siblings: a checkbox (what actually selects it) and a
+                # separate title/chevron row that just expands to show
+                # counties — clicking the title does NOT toggle selection.
+                # DOM confirmed via devtools 2026-10-04.
+                title = dialog.get_by_text(state, exact=True)
+                wrapper = title.locator(
+                    "xpath=ancestor::*[contains(@class, 'CountrySelect_stateItemWrapper')]")
+                wrapper.locator("label").click(timeout=5000)
             dialog.get_by_role("button", name="Apply").click(timeout=8000)
             page.wait_for_timeout(1500)
 
