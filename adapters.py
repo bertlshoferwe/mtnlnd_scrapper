@@ -858,7 +858,19 @@ class ConstructConnectAdapter(SiteAdapter):
         first <span> is its label ("Bid Date"/"Start Date"/"End Date"), and
         its value sits in a <span> nested inside a
         [class*="ProjectInformation_meeting__info"] div later in the same
-        block."""
+        block.
+
+        Confirmed via debug screenshot 2026-10-04: the project page's
+        "Events" section loads independently of (and slower than) the
+        Documents panel this is called right after — a project caught
+        mid-load still showed "Please wait while we load your project
+        information" with zero event rows yet. Waiting here for at least
+        one event row before reading avoids treating "hasn't loaded yet"
+        as "this project has no Bid Date"."""
+        try:
+            page.wait_for_selector(self.BID_EVENT_ROW_SELECTOR, timeout=8000)
+        except Exception:
+            pass  # genuinely no events on this project is also possible
         try:
             for row in page.query_selector_all(self.BID_EVENT_ROW_SELECTOR):
                 label = row.query_selector("span")
