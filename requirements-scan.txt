@@ -1,6 +1,7 @@
 # The scanner container (scraper.py + scanner_service.py) — the full
 # scraping/parsing/AI stack.
 flask>=3.0  # scanner_service.py's internal run-now/cancel HTTP endpoints
+gunicorn>=22.0
 requests>=2.31
 beautifulsoup4>=4.12
 pdfplumber>=0.11

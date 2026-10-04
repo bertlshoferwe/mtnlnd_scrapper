@@ -128,6 +128,10 @@ def _scheduler_loop():
 threading.Thread(target=_scheduler_loop, daemon=True).start()
 
 
+# Local testing only — the Docker image runs this under gunicorn instead
+# (see Dockerfile.scanner), which imports `app` directly and never hits
+# __main__. The scheduler thread above starts either way, since it's at
+# module level, not inside this block.
 if __name__ == "__main__":
     port = int(os.environ.get("SCANNER_PORT", "9100"))
     app.run(host="0.0.0.0", port=port)

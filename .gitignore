@@ -11,3 +11,4 @@ self-host/.env
 self-host/supabase/.env
 self-host/supabase/volumes/
 self-host/supabase/dev/
+.DS_Store

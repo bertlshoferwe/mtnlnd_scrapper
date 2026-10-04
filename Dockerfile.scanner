@@ -18,4 +18,6 @@ RUN pip install --no-cache-dir -r requirements-scan.txt \
 COPY . .
 
 EXPOSE 9100
-CMD ["python", "scanner_service.py"]
+# -w 1: the subprocess lock/handle in scanner_service.py lives in process
+# memory — multiple gunicorn workers would each think no scan is running.
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:9100", "scanner_service:app"]
