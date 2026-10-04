@@ -313,9 +313,11 @@ class ConstructConnectAdapter(SiteAdapter):
     identity provider's own stuck "Loading..." screen looks enough like a
     successful login to fool the generic password-field heuristic), then
     works through whatever project list that lands on: page through it
-    (MAX_PROJECTS_PER_SEARCH cap), open each project, click "View/Download
-    Documents" (opens a new tab), and on the docviewer tab use the split
-    button's arrow to pick "Zipped PDFs" and click Start — every document
+    (MAX_PROJECTS_PER_SEARCH cap), open each project, click into its
+    Documents panel (see DOCUMENT_CATEGORIES — replaced the site's old
+    single "View/Download Documents" button as of 2026-10-04, opens a new
+    tab the same way), and on the docviewer tab use the split button's
+    arrow to pick "Zipped PDFs" and click Start — every document
     in the project comes back as a separate file. (The flyout that arrow
     opens renders at a fixed, occluded position — real and enabled per
     computed style, just never visible to a human because other page
@@ -683,9 +685,9 @@ class ConstructConnectAdapter(SiteAdapter):
         returns them. `label` is only used for log messages and tagging
         the returned tuples; it doesn't have to match on-page text here."""
         try:
-            page.wait_for_selector("text=View/Download Documents", timeout=self.PAGE_TIMEOUT_MS)
+            page.wait_for_selector("text=Documents", timeout=self.PAGE_TIMEOUT_MS)
         except Exception:
-            print(f"  ! ConstructConnect: '{label}' has no Documents button — skipping")
+            print(f"  ! ConstructConnect: '{label}' has no Documents panel — skipping")
             return []
 
         project_url = page.url
@@ -769,24 +771,41 @@ class ConstructConnectAdapter(SiteAdapter):
         date_part, _, time_part = text.partition("@")
         return parse_bid_date(date_part), (time_part.strip() or None)
 
+    # ConstructConnect dropped the old single "View/Download Documents"
+    # button in favor of a per-category Documents panel on the project page
+    # (Plans / Specifications / Addenda / Other, each row reading e.g.
+    # "Plans   Available ›" when that category has anything) — confirmed via
+    # screenshot 2026-10-04. Clicking any one "Available" category opens the
+    # same docviewer tab listing every category together, so trying these in
+    # order and taking whichever one actually opens something is enough —
+    # no need to parse which categories are non-empty first.
+    DOCUMENT_CATEGORIES = ("Plans", "Specifications", "Addenda", "Other")
+
     def _click_view_download(self, page):
-        """A debug screenshot showed the project page completely unchanged
-        right after clicking "View/Download Documents" — no in-page modal
-        ever appears there. So instead of assuming one, catch whichever of
-        the two things the button actually does: open the download picker
-        in a new tab, or trigger a file download directly on this same
-        page. Returns (new_page_or_None, download_or_None)."""
+        """Clicks through the project page's Documents panel (see
+        DOCUMENT_CATEGORIES) and catches whichever of the two things it
+        actually does: open the download picker in a new tab, or trigger a
+        file download directly on this same page. Returns
+        (new_page_or_None, download_or_None)."""
         ctx = page.context
         new_pages = []
         downloads = []
         ctx.on("page", lambda p: new_pages.append(p))
         page.on("download", lambda d: downloads.append(d))
-        page.click("text=View/Download Documents", timeout=8000)
-        deadline = time.time() + 6
-        while time.time() < deadline and not new_pages and not downloads:
-            page.wait_for_timeout(200)
+
+        for cat in self.DOCUMENT_CATEGORIES:
+            try:
+                page.click(f"text={cat}", timeout=3000)
+            except Exception:
+                continue
+            deadline = time.time() + 6
+            while time.time() < deadline and not new_pages and not downloads:
+                page.wait_for_timeout(200)
+            if new_pages or downloads:
+                break
+
         if downloads:
-            print("  ConstructConnect: 'View/Download Documents' triggered a direct download")
+            print("  ConstructConnect: Documents panel triggered a direct download")
             return None, downloads[0]
         if new_pages:
             doc_page = new_pages[0]
@@ -794,8 +813,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 doc_page.wait_for_load_state(timeout=self.PAGE_TIMEOUT_MS)
             except Exception:
                 pass
-            print(f"  ConstructConnect: 'View/Download Documents' opened a new tab "
-                  f"({doc_page.url})")
+            print(f"  ConstructConnect: Documents panel opened a new tab ({doc_page.url})")
             return doc_page, None
         return None, None
 
