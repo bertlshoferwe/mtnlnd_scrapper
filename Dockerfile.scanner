@@ -20,4 +20,9 @@ COPY . .
 EXPOSE 9100
 # -w 1: the subprocess lock/handle in scanner_service.py lives in process
 # memory — multiple gunicorn workers would each think no scan is running.
-CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:9100", "scanner_service:app"]
+# --threads 4: still one process (so that lock stays correct), but lets
+# /health, /run-now, /cancel keep responding while a slow /refetch-document
+# call (a real ConstructConnect login + browser session, up to a few
+# minutes) is in flight on another thread.
+# --timeout 200: matches the refetch path's own realistic ceiling.
+CMD ["gunicorn", "-w", "1", "--threads", "4", "--timeout", "200", "-b", "0.0.0.0:9100", "scanner_service:app"]

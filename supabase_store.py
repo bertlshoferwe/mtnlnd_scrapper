@@ -23,6 +23,10 @@ _client = None
 # site reconciles is treated as "no longer listed" (see reconcile_seen).
 CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES", "2"))
 
+# How long a matched document shows the "New" badge (see get_results_grouped)
+# before it ages out on its own, even if nobody hits "Mark done".
+NEW_BADGE_HOURS = int(os.environ.get("NEW_BADGE_HOURS", "48"))
+
 # Holds the raw bytes of browser-captured documents (no real per-document URL
 # to re-fetch from later, e.g. ConstructConnect) — see upload_document_bytes.
 DOCS_BUCKET = "scanned-documents"
@@ -461,6 +465,7 @@ def log_scan_row(division_id, run_date, site, document_url, filename,
         "document_url": document_url,
         "source_url": source_url,
         "storage_path": storage_path,
+        "is_cached_document": bool(storage_path),
         "filename": filename,
         "matched_keywords": matched_keywords,
         "match_count": match_count,
@@ -520,6 +525,40 @@ def download_document_bytes(storage_path):
         return None
 
 
+def delete_document_bytes(storage_path):
+    """Removes a previously-uploaded document from Storage (used by the
+    retention job). No-ops quietly on failure — a missed delete just means
+    the next run tries again, not a reason to fail the cleanup pass."""
+    try:
+        get_client().storage.from_(DOCS_BUCKET).remove([storage_path])
+    except Exception as e:
+        print(f"  ! couldn't delete stored document ({e})")
+
+
+def clear_storage_path(division_id, document_url):
+    """Nulls storage_path after its Storage object has been deleted by the
+    retention job. is_cached_document is left True — that's the permanent
+    "this one needs a live re-fetch, not a plain URL fetch" signal."""
+    (get_client().table("scan_results").update({"storage_path": None})
+     .eq("division_id", division_id).eq("document_url", document_url).execute())
+
+
+def list_expired_cached_documents(cutoff_iso):
+    """Every (division_id, document_url, storage_path) still holding a
+    Storage object older than cutoff_iso (compared against run_date) —
+    feeds the retention job. Only ever matches browser-captured documents,
+    since storage_path is only set for those in the first place."""
+    res = (
+        get_client().table("scan_results")
+        .select("division_id,document_url,storage_path,run_date")
+        .eq("is_cached_document", True)
+        .not_.is_("storage_path", "null")
+        .lt("run_date", cutoff_iso)
+        .execute()
+    )
+    return res.data
+
+
 def already_scanned_urls(division_id):
     """{document_url: source_url_or_None} for every document this division has
     already attempted — including past download failures — so a re-run
@@ -539,17 +578,38 @@ def already_scanned_urls(division_id):
 
 
 def scanned_document_lookup(division_id):
-    """{document_url: {"storage_path", "filename"}} for every document this
-    division has ever logged (any status). Used by the PDF proxy both to
-    gate access (can't be pointed at an arbitrary URL) and to know whether a
-    document's bytes are in Supabase Storage (browser-captured content with
-    no real external URL to re-fetch from, e.g. ConstructConnect) rather
-    than live-fetchable — storage_path is None for the latter."""
-    rows = _fetch_all_scan_results(division_id, columns="document_url,storage_path,filename")
+    """{document_url: {"storage_path", "filename", "site", "source_url",
+    "is_cached_document"}} for every document this division has ever logged
+    (any status). Used by the PDF proxy both to gate access (can't be
+    pointed at an arbitrary URL) and to know whether a document's bytes are
+    in Supabase Storage (browser-captured content with no real external URL
+    to re-fetch from, e.g. ConstructConnect) rather than live-fetchable —
+    storage_path is None for the latter, or once its cached copy has
+    expired (see is_cached_document, which stays True either way so the
+    proxy knows to live re-fetch instead of trying a plain URL GET)."""
+    rows = _fetch_all_scan_results(
+        division_id,
+        columns="document_url,storage_path,filename,site,source_url,is_cached_document",
+    )
     return {
-        r["document_url"]: {"storage_path": r.get("storage_path"), "filename": r.get("filename") or ""}
+        r["document_url"]: {
+            "storage_path": r.get("storage_path"),
+            "filename": r.get("filename") or "",
+            "site": r.get("site") or "",
+            "source_url": r.get("source_url"),
+            "is_cached_document": bool(r.get("is_cached_document")),
+        }
         for r in rows if r.get("document_url")
     }
+
+
+def set_storage_path(division_id, document_url, storage_path):
+    """Writes a freshly re-fetched document's new Storage path back onto its
+    existing scan_results row (the inverse of clear_storage_path) — used
+    after a live re-fetch re-uploads bytes for a document whose cached copy
+    had expired."""
+    (get_client().table("scan_results").update({"storage_path": storage_path})
+     .eq("division_id", division_id).eq("document_url", document_url).execute())
 
 
 def backfill_source_url(division_id, document_url, source_url):
@@ -895,6 +955,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
     docs_ack = load_docs_ack(division_id)
+    # "New" badge visibility window — a match stops counting as new after
+    # this long even if it's never acknowledged via "Mark done".
+    new_cutoff = (datetime.now(timezone.utc) - timedelta(hours=NEW_BADGE_HOURS)).isoformat()
 
     projects = []
     for site_key, g in groups.items():
@@ -921,9 +984,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         # "New document" flag: a file counts as new when it itself matched a
         # keyword (a file with no match, or one that failed to download,
         # wasn't actually a find — it shouldn't raise the flag even if some
-        # other file in the project did) and post-dates both the project's
+        # other file in the project did), post-dates both the project's
         # first run_date (so a brand-new project isn't "updated") and the
-        # user's acknowledgement watermark (set by "Mark done").
+        # user's acknowledgement watermark (set by "Mark done"), AND is
+        # within the last NEW_BADGE_HOURS — otherwise an unacknowledged
+        # match would stay flagged "New" forever.
         real_runs = [f["run_date"] for f in real_files if f["run_date"]]
         first_run = min(real_runs) if real_runs else ""
         ack = docs_ack.get(site_key) or ""
@@ -932,6 +997,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             f["is_new"] = bool(
                 f["filename"] and f["run_date"] and f["status"].startswith("Matched")
                 and f["run_date"] > first_run and f["run_date"] > ack
+                and f["run_date"] > new_cutoff
             )
             if f["is_new"]:
                 new_file_count += 1

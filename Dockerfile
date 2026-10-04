@@ -10,4 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8080
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "api.index:app"]
+# --timeout 200: api_proxy_pdf's ConstructConnect live-refetch path calls
+# through to the scanner and waits for it — can legitimately take minutes,
+# well past gunicorn's 30s default worker timeout.
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "--timeout", "200", "api.index:app"]

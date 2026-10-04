@@ -380,20 +380,66 @@ class ConstructConnectAdapter(SiteAdapter):
             print("  ! ConstructConnect: no login configured on this site — skipping")
             return [], None
 
+        deadline = time.time() + self.RUN_BUDGET_S
+        pw, browser, page, login_result = self._start_login(login)
+        try:
+            if page is None:
+                return [], login_result
+
+            # Not filtering by Saved Search yet (SAVED_SEARCHES above is
+            # parked for that) — first checking whether documents can be
+            # found and downloaded at all from whatever login lands us on.
+            out = self._scan_results_page(page, deadline)
+            if not out:
+                self._save_debug_screenshot(page, "no_docs_found")
+            return out, login_result
+        finally:
+            self._close_browser(pw, browser)
+
+    def refetch_project_documents(self, login, project_url, label):
+        """Re-fetches one project's documents live — for when a previously
+        cached copy (see is_cached_document in schema.sql) has expired and
+        someone views it again. Reuses the same login flow
+        find_documents_with_browser uses, then jumps straight to the
+        project's own page (its stored source_url) instead of paging
+        through the results list to find it by name again."""
+        if not login:
+            print("  ! ConstructConnect: no login configured — can't re-fetch")
+            return []
+        pw, browser, page, login_result = self._start_login(login)
+        try:
+            if page is None:
+                print(f"  ! ConstructConnect: re-fetch login failed ({login_result.get('message')})")
+                return []
+            try:
+                page.goto(project_url, timeout=self.PAGE_TIMEOUT_MS)
+            except Exception as e:
+                print(f"  ! ConstructConnect: couldn't open {project_url} ({e})")
+                return []
+            return self._download_current_project(page, label)
+        finally:
+            self._close_browser(pw, browser)
+
+    def _start_login(self, login):
+        """Launches headless Chromium and logs into ConstructConnect.
+        Returns (pw, browser, page, login_result) — page is None on any
+        failure (caller should treat that as "couldn't do it" and stop).
+        pw/browser may also be None if Playwright/Chromium itself never
+        came up, in which case there's nothing to close. Shared by
+        find_documents_with_browser (a full scan) and
+        refetch_project_documents (a single project, live) so the login
+        dance only lives in one place."""
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
             print("  ! ConstructConnect: Playwright not installed — skipping")
-            return [], None
+            return None, None, None, {"ok": False, "message": "Playwright not installed"}
 
-        import browser_crawl  # reuse its best-effort login helper
-
-        deadline = time.time() + self.RUN_BUDGET_S
         try:
             pw = sync_playwright().start()
         except Exception as e:
             print(f"  ! ConstructConnect: could not start Playwright ({e})")
-            return [], None
+            return None, None, None, {"ok": False, "message": str(e)}
 
         try:
             browser = pw.chromium.launch(
@@ -402,7 +448,7 @@ class ConstructConnectAdapter(SiteAdapter):
         except Exception as e:
             print(f"  ! ConstructConnect: Chromium not available ({e})")
             pw.stop()
-            return [], None
+            return None, None, None, {"ok": False, "message": str(e)}
 
         ctx = browser.new_context(
             accept_downloads=True,
@@ -413,44 +459,42 @@ class ConstructConnectAdapter(SiteAdapter):
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
         page = ctx.new_page()
+
+        import browser_crawl  # reuse its best-effort login helper
+
+        # Reuses this same page for login (rather than the default
+        # throwaway one _attempt_login would open and close) — the login
+        # goes through an SSO redirect (login.io.constructconnect.com ->
+        # /api/gcipconsume?returnUrl=...), and a fresh page.goto() to a
+        # different URL right after was bouncing back to the login screen
+        # instead of landing in the authenticated app.
+        login_result = browser_crawl._attempt_login(ctx, login, page=page)
+        if not login_result.get("ok"):
+            return pw, browser, None, login_result
+
+        # _attempt_login's "password field is gone" heuristic is also
+        # satisfied by the SSO's own stuck "Loading..." screen (it has no
+        # password field either) — confirm we actually left that host
+        # before treating this as a real login.
+        if not self._wait_left_login_host(page):
+            msg = (f"stuck on the SSO login page ({page.url}) after submitting "
+                   "credentials — looks like it's being blocked as automated, "
+                   "not a bad password")
+            print(f"  ! ConstructConnect: {msg}")
+            self._save_debug_screenshot(page, "stuck_on_login")
+            return pw, browser, None, {"ok": False, "message": msg}
+
+        print(f"  ConstructConnect: authenticated, landed on {page.url}")
+        self._save_debug_screenshot(page, "landed")  # always, while this is still new
+        self._dismiss_cookie_banner(page)
+        return pw, browser, page, login_result
+
+    def _close_browser(self, pw, browser):
         try:
-            # Reuses this same page for login (rather than the default
-            # throwaway one _attempt_login would open and close) — the login
-            # goes through an SSO redirect (login.io.constructconnect.com ->
-            # /api/gcipconsume?returnUrl=...), and a fresh page.goto() to a
-            # different URL right after was bouncing back to the login
-            # screen instead of landing in the authenticated app.
-            login_result = browser_crawl._attempt_login(ctx, login, page=page)
-            if not login_result.get("ok"):
-                return [], login_result
-
-            # _attempt_login's "password field is gone" heuristic is also
-            # satisfied by the SSO's own stuck "Loading..." screen (it has
-            # no password field either) — confirm we actually left that
-            # host before treating this as a real login.
-            if not self._wait_left_login_host(page):
-                msg = (f"stuck on the SSO login page ({page.url}) after submitting "
-                       "credentials — looks like it's being blocked as automated, "
-                       "not a bad password")
-                print(f"  ! ConstructConnect: {msg}")
-                self._save_debug_screenshot(page, "stuck_on_login")
-                return [], {"ok": False, "message": msg}
-
-            print(f"  ConstructConnect: authenticated, landed on {page.url}")
-            self._save_debug_screenshot(page, "landed")  # always, while this is still new
-            self._dismiss_cookie_banner(page)
-
-            # Not filtering by Saved Search yet (SAVED_SEARCHES above is
-            # parked for that) — first checking whether documents can be
-            # found and downloaded at all from whatever login lands us on.
-            out = self._scan_results_page(page, deadline)
-            if not out:
-                self._save_debug_screenshot(page, "no_docs_found")
-            return out, login_result
-        finally:
-            try:
+            if browser:
                 browser.close()
-            finally:
+        finally:
+            if pw:
                 pw.stop()
 
     def _dismiss_cookie_banner(self, page):
@@ -612,18 +656,32 @@ class ConstructConnectAdapter(SiteAdapter):
         return False
 
     def _download_project(self, page, label):
+        """Navigates to `label`'s project from the current results list,
+        downloads its documents, and returns to the list. For a live
+        re-fetch of an already-known project (expired cache, see
+        refetch_project_documents), use _download_current_project directly
+        instead — there's no list to come back to in that case."""
         self._dismiss_cookie_banner(page)
         try:
             page.click(f"text={label}", timeout=8000)
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't open '{label}': {e}")
             return []
+        out = self._download_current_project(page, label)
+        page.go_back()
+        page.wait_for_timeout(1200)
+        return out
+
+    def _download_current_project(self, page, label):
+        """Assumes `page` is already on a project's detail page (just
+        navigated there from the results list, or via a direct page.goto()
+        for a live re-fetch) — clicks through to the actual documents and
+        returns them. `label` is only used for log messages and tagging
+        the returned tuples; it doesn't have to match on-page text here."""
         try:
             page.wait_for_selector("text=View/Download Documents", timeout=self.PAGE_TIMEOUT_MS)
         except Exception:
             print(f"  ! ConstructConnect: '{label}' has no Documents button — skipping")
-            page.go_back()
-            page.wait_for_timeout(1000)
             return []
 
         project_url = page.url
@@ -661,8 +719,6 @@ class ConstructConnectAdapter(SiteAdapter):
             out = [(lbl, u, fn, data, src, bid_date, bid_time)
                    for (lbl, u, fn, data, src, _bd, _bt) in out]
 
-        page.go_back()
-        page.wait_for_timeout(1200)
         return out
 
     # Each event on the project page ("Bid Date", "Start Date", "End Date",

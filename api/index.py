@@ -841,11 +841,15 @@ def api_proxy_pdf(division_id):
     SSRF guard: only proxies a URL this division has actually logged in
     scan_results — never an arbitrary URL.
 
-    Two sources of bytes: a stored document (storage_path set — browser-
+    Three sources of bytes: a stored document (storage_path set — browser-
     captured content with no real per-document URL, e.g. ConstructConnect;
     `url` here is just the synthetic dedup key used to look the row up, not
-    something we ever fetch) is read from Supabase Storage; everything else
-    is fetched live from `url` itself, same as always.
+    something we ever fetch) is read from Supabase Storage; one whose cached
+    copy expired (is_cached_document True, storage_path cleared by the
+    scanner's retention sweep) triggers a live re-fetch through the scanner
+    container first — slow (a real login + browser session), see
+    scanner_service.py; everything else is fetched live from `url` itself,
+    same as always.
     """
     _, err = _require_division(division_id)
     if err:
@@ -859,6 +863,23 @@ def api_proxy_pdf(division_id):
         abort(403, description="not a document from this division's scans")
 
     disp = "attachment" if request.args.get("download") else "inline"
+
+    if not doc["storage_path"] and doc.get("is_cached_document"):
+        base, cfg_err = _scanner_url()
+        if cfg_err:
+            return cfg_err
+        try:
+            resp = requests.post(f"{base}/refetch-document",
+                                 json={"division_id": division_id, "document_url": target},
+                                 timeout=200)
+        except requests.RequestException as e:
+            abort(502, description=f"couldn't reach the scan worker to re-fetch this file: {e}")
+        if resp.status_code >= 300:
+            detail = (resp.json().get("error") if resp.headers.get("content-type", "").startswith("application/json") else resp.text)
+            abort(502, description=f"couldn't re-fetch this file: {detail}")
+        doc = supabase_store.scanned_document_lookup(division_id).get(target)
+        if doc is None or not doc["storage_path"]:
+            abort(502, description="re-fetched, but the file still isn't in storage")
 
     if doc["storage_path"]:
         data = supabase_store.download_document_bytes(doc["storage_path"])

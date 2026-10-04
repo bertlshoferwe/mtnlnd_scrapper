@@ -70,6 +70,11 @@ create table if not exists scan_results (
   -- NULL for portal adapters (UDOT/ITD/WYDOT), whose document_url is a real,
   -- live-fetchable link the PDF proxy re-fetches on demand instead.
   storage_path text,
+  -- True forever once a row is first inserted with storage_path set, even
+  -- after the retention job later clears storage_path back to NULL —
+  -- distinguishes "cached copy expired, needs a live re-fetch" from "this
+  -- adapter never stores anything, document_url is always live-fetchable."
+  is_cached_document boolean not null default false,
   filename text,
   matched_keywords text,
   match_count int default 0,
@@ -90,6 +95,7 @@ create table if not exists scan_results (
 --   alter table scan_results add column if not exists last_seen_at timestamptz;
 --   alter table scan_results add column if not exists misses int default 0;
 --   alter table scan_results add column if not exists storage_path text;
+--   alter table scan_results add column if not exists is_cached_document boolean not null default false;
 -- Also needs a private Storage bucket named "scanned-documents" (Storage >
 -- New bucket in the Supabase dashboard, "Public bucket" left OFF) — the app
 -- creates it automatically on the next scan if missing, but you can create
