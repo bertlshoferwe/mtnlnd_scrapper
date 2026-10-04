@@ -559,6 +559,37 @@ def list_expired_cached_documents(cutoff_iso):
     return res.data
 
 
+def list_cached_documents_for_overdue_projects():
+    """[{"division_id", "document_url", "storage_path"}, ...] for every
+    stored document belonging to a project whose bid_date has passed
+    without being marked done — feeds the retention job, same as
+    list_expired_cached_documents, just a different trigger (the project
+    itself is moot, not just old) than a fixed day count. A later view
+    still works via the normal live re-fetch path (see api_proxy_pdf) since
+    is_cached_document stays True."""
+    today = date.today().isoformat()
+    res = (
+        get_client().table("project_flags")
+        .select("division_id,project_key")
+        .eq("done", False)
+        .not_.is_("bid_date", "null")
+        .lt("bid_date", today)
+        .execute()
+    )
+    out = []
+    for row in res.data:
+        docs = (
+            get_client().table("scan_results")
+            .select("division_id,document_url,storage_path")
+            .eq("division_id", row["division_id"]).eq("site", row["project_key"])
+            .eq("is_cached_document", True)
+            .not_.is_("storage_path", "null")
+            .execute()
+        )
+        out.extend(docs.data)
+    return out
+
+
 def already_scanned_urls(division_id):
     """{document_url: source_url_or_None} for every document this division has
     already attempted — including past download failures — so a re-run
@@ -958,6 +989,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     # "New" badge visibility window — a match stops counting as new after
     # this long even if it's never acknowledged via "Mark done".
     new_cutoff = (datetime.now(timezone.utc) - timedelta(hours=NEW_BADGE_HOURS)).isoformat()
+    today_str = date.today().isoformat()
 
     projects = []
     for site_key, g in groups.items():
@@ -1002,6 +1034,13 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             if f["is_new"]:
                 new_file_count += 1
         is_updated = new_file_count > 0
+        is_done = (site_key in done_keys) and not is_updated
+        bid_date = bid_dates.get(site_key)
+        # Bid already opened and nobody acted on it — faded in the list (not
+        # hidden; still here to act on) and, separately, the scanner's daily
+        # retention sweep clears any stored document bytes for it (see
+        # supabase_store.list_cached_documents_for_overdue_projects).
+        overdue = bool(bid_date and bid_date < today_str and not is_done)
 
         projects.append({
             "key": site_key,
@@ -1009,11 +1048,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "source_url": g["source_url"], "latest_date": g["latest_date"],
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
-            "done": (site_key in done_keys) and not is_updated,
+            "done": is_done,
             "updated": is_updated, "new_file_count": new_file_count,
             "reopened": is_updated and (site_key in done_keys),
-            "closed": closed, "last_seen_at": last_seen,
-            "bid_date": bid_dates.get(site_key),
+            "closed": closed, "overdue": overdue, "last_seen_at": last_seen,
+            "bid_date": bid_date,
             "bid_time": bid_times.get(site_key),
             "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),

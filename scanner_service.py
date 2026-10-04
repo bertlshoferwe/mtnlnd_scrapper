@@ -16,7 +16,8 @@ network, at SCANNER_URL) with five jobs:
   4. Re-fetch a single ConstructConnect document live, on demand, when its
      cached copy in Storage has expired (see the retention loop below and
      api/index.py's api_proxy_pdf) — and once a day, delete cached copies
-     older than CACHED_DOCUMENT_RETENTION_DAYS.
+     either older than CACHED_DOCUMENT_RETENTION_DAYS or belonging to a
+     project whose bid date has passed without being marked done.
   5. Group near-duplicate keywords (embeddings + an AI confirmation pass)
      for the dashboard's keyword cleanup tool — review only, nothing is
      changed here; api/index.py's /keywords/merge applies what's approved.
@@ -340,16 +341,26 @@ CACHED_DOCUMENT_RETENTION_DAYS = int(os.environ.get("CACHED_DOCUMENT_RETENTION_D
 def _run_retention_sweep():
     cutoff = (datetime.now(timezone.utc) - timedelta(days=CACHED_DOCUMENT_RETENTION_DAYS)).isoformat()
     expired = supabase_store.list_expired_cached_documents(cutoff)
-    if not expired:
-        print("[retention] nothing older than the retention window", flush=True)
+    overdue = supabase_store.list_cached_documents_for_overdue_projects()
+    # A document can show up in both (old AND its project's bid date has
+    # passed) — dedupe by the pair the delete/clear calls key on.
+    seen = set()
+    to_clear = []
+    for row in expired + overdue:
+        key = (row["division_id"], row["document_url"])
+        if key not in seen:
+            seen.add(key)
+            to_clear.append(row)
+
+    if not to_clear:
+        print("[retention] nothing to clear (none past the retention window or an overdue project)", flush=True)
         return
-    cleared = 0
-    for row in expired:
+    for row in to_clear:
         supabase_store.delete_document_bytes(row["storage_path"])
         supabase_store.clear_storage_path(row["division_id"], row["document_url"])
-        cleared += 1
-    print(f"[retention] cleared {cleared} cached document(s) older than "
-          f"{CACHED_DOCUMENT_RETENTION_DAYS} day(s)", flush=True)
+    print(f"[retention] cleared {len(to_clear)} cached document(s) "
+          f"({len(expired)} past {CACHED_DOCUMENT_RETENTION_DAYS} day(s), "
+          f"{len(overdue)} from an overdue/not-done project)", flush=True)
 
 
 def _retention_loop():

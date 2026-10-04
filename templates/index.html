@@ -544,6 +544,8 @@
   .project-list li.p-done .pill { opacity: .55; }
   .project-list li.p-closed .p-name,
   .project-list li.p-closed .p-count { opacity: .45; }
+  .project-list li.p-overdue .p-name,
+  .project-list li.p-overdue .p-count { opacity: .5; }
   .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .pill.match { background: var(--accent); color: var(--accent-contrast); }
   .pill.nomatch { background: var(--surface-2); color: var(--muted); }
@@ -572,13 +574,16 @@
   .f-new-tag {
     font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
     color: var(--warning); border: 1px solid var(--warning); border-radius: 4px;
-    padding: 1px 5px; margin-left: 8px; margin-right: auto; flex-shrink: 0; align-self: center;
+    padding: 1px 5px; flex-shrink: 0; align-self: center;
   }
 
   .file-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .file-row:last-child { border-bottom: none; }
   .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; }
+  .f-top-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .f-top-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+  .f-kw-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .file-row .f-dl { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
   .file-row .f-dl:hover { text-decoration: underline; }
   .f-chevron { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); align-self: center; transition: transform .15s; }
@@ -2425,6 +2430,7 @@ async function loadProjects() {
     if (p.closed) li.classList.add('p-closed');
     if (p.updated) li.classList.add('p-updated');
     if (p.reopened) li.classList.add('p-reopened');
+    if (p.overdue) li.classList.add('p-overdue');
     li.onclick = function() { openProjectModal(i); };
 
     if (p.done || p.reopened) {
@@ -2641,16 +2647,31 @@ function renderProjectFiles() {
 
     const top = document.createElement('div');
     top.className = 'f-top';
+
+    const left = document.createElement('div');
+    left.className = 'f-top-left';
     const nm = document.createElement('span');
     nm.className = 'f-name';
     nm.textContent = f.filename || '(document)';
-    top.appendChild(nm);
+    left.appendChild(nm);
     if (f.is_new) {
       const tag = document.createElement('span');
       tag.className = 'f-new-tag';
       tag.textContent = 'New';
-      top.appendChild(tag);
+      left.appendChild(tag);
     }
+    top.appendChild(left);
+
+    const right = document.createElement('div');
+    right.className = 'f-top-right';
+
+    const count = document.createElement('span');
+    count.className = 'f-kw-count';
+    count.textContent = f.keywords.length
+      ? (f.keywords.length + ' keyword' + (f.keywords.length === 1 ? '' : 's'))
+      : 'No matches';
+    right.appendChild(count);
+
     const canPreviewPdf = !!(f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url));
     if (canPreviewPdf) {
       const btn = document.createElement('button');
@@ -2658,18 +2679,20 @@ function renderProjectFiles() {
       btn.className = 'f-dl';
       btn.textContent = 'View PDF';
       btn.onclick = function(e) { e.stopPropagation(); openPdfPreview(f.url, f.filename); };
-      top.appendChild(btn);
+      right.appendChild(btn);
     } else if (f.url && /^https?:/.test(f.url)) {
       const a = document.createElement('a');
       a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
       a.textContent = 'Open ↗';
       a.onclick = function(e) { e.stopPropagation(); };
-      top.appendChild(a);
+      right.appendChild(a);
     }
     const chevron = document.createElement('span');
     chevron.className = 'f-chevron';
     chevron.innerHTML = ICON_CHEVRON;
-    top.appendChild(chevron);
+    right.appendChild(chevron);
+    top.appendChild(right);
+
     top.onclick = function() { row.classList.toggle('f-open'); };
     row.appendChild(top);
 
