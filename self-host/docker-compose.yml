@@ -36,6 +36,12 @@ services:
     env_file: .env
     environment:
       TZ: America/Denver
+    volumes:
+      # ConstructConnect's debug screenshots (adapters.py's
+      # _save_debug_screenshot) — the old GitHub Actions workflow used to
+      # upload these as build artifacts; this is how to reach them now
+      # that scanning runs in this always-on container instead.
+      - ./debug:/app/debug
     networks:
       - homelab-network
     labels:

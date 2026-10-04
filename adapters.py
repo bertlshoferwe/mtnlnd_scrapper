@@ -568,15 +568,16 @@ class ConstructConnectAdapter(SiteAdapter):
         """Save a screenshot + the page's visible text under a distinct
         name for this point in the run, so a person can see what the
         crawler actually saw instead of guessing blind from the text log
-        alone. Picked up by the GitHub Actions workflow as a build artifact
-        when present."""
+        alone. Written under debug/ (see self-host/docker-compose.yml's
+        scanner volume mount) so they survive the run and are reachable
+        from the host without exec'ing into the container."""
         try:
-            page.screenshot(path=f"constructconnect_{tag}.png", full_page=True)
+            os.makedirs("debug", exist_ok=True)
+            page.screenshot(path=f"debug/constructconnect_{tag}.png", full_page=True)
             text = page.evaluate("document.body.innerText") or ""
-            with open(f"constructconnect_{tag}.txt", "w") as f:
+            with open(f"debug/constructconnect_{tag}.txt", "w") as f:
                 f.write(f"URL: {page.url}\n\n{text[:20000]}")
-            print(f"  ConstructConnect: saved constructconnect_{tag}.png/.txt "
-                  "(uploaded as a workflow artifact)")
+            print(f"  ConstructConnect: saved debug/constructconnect_{tag}.png/.txt")
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't save debug screenshot ({tag}): {e}")
 
@@ -599,6 +600,9 @@ class ConstructConnectAdapter(SiteAdapter):
         try:
             page.wait_for_selector("table, [role='table']", timeout=10000)
         except Exception:
+            print(f"  ! ConstructConnect: no results grid found on {page.url} "
+                  "within 10s — landed page may not be a results list")
+            self._save_debug_screenshot(page, "no_grid")
             return []
 
         header_cells = page.query_selector_all("table thead th, table tr:first-child th")
