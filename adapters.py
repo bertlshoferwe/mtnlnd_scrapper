@@ -557,6 +557,7 @@ class ConstructConnectAdapter(SiteAdapter):
             self._dismiss_cookie_banner(page)
             dialog.get_by_text("Clear All", exact=True).click(timeout=8000)
             for state in self.LOCATION_FILTER_STATES:
+                self._dismiss_cookie_banner(page)  # it can reappear mid-loop too
                 # Each state is a CountrySelect_stateItemWrapper containing
                 # two siblings: a checkbox (what actually selects it) and a
                 # separate title/chevron row that just expands to show
