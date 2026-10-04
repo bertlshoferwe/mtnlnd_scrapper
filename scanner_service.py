@@ -4,7 +4,7 @@ Bid Scout — local scan worker service (self-hosted Docker edition).
 Replaces the GitHub Actions workflow_dispatch plumbing that api/index.py used
 to drive scraper.py. This is a small, internal-only Flask app (not reachable
 through Traefik — only the app container talks to it, over the Docker
-network, at SCANNER_URL) with four jobs:
+network, at SCANNER_URL) with five jobs:
 
   1. Run scraper.py as a subprocess on demand ("Run Now"), one at a time.
   2. Kill that subprocess on demand ("Cancel scan") — a direct OS-level
@@ -17,6 +17,9 @@ network, at SCANNER_URL) with four jobs:
      cached copy in Storage has expired (see the retention loop below and
      api/index.py's api_proxy_pdf) — and once a day, delete cached copies
      older than CACHED_DOCUMENT_RETENTION_DAYS.
+  5. Group near-duplicate keywords (embeddings + an AI confirmation pass)
+     for the dashboard's keyword cleanup tool — review only, nothing is
+     changed here; api/index.py's /keywords/merge applies what's approved.
 
 Routes:
   GET  /health              liveness probe for the compose healthcheck
@@ -25,12 +28,15 @@ Routes:
   POST /refetch-document      body: {"division_id", "document_url"} — only
                               works for documents whose adapter captures
                               bytes directly (currently just ConstructConnect)
+  POST /cluster-keywords      body: {"division_id"} — returns suggested
+                              merge groups, see cluster_keywords() below
 
 Environment variables: same SUPABASE_URL / SUPABASE_SERVICE_KEY /
 AI_PROVIDER / ANTHROPIC_API_KEY / GEMINI_API_KEY / FIRECRAWL_API_KEY /
 CREDENTIALS_KEY as scraper.py always needed, plus DISPLAY_SCHEDULE_UTC
 (reused — same value the dashboard already shows), SCANNER_PORT (default
-9100), and CACHED_DOCUMENT_RETENTION_DAYS (default 30).
+9100), CACHED_DOCUMENT_RETENTION_DAYS (default 30), and
+KEYWORD_CLUSTER_THRESHOLD (default 0.85).
 """
 
 import os
@@ -43,8 +49,12 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Flask, jsonify, request
 
+import numpy as np
+
 import adapters
+import ai_provider
 import credentials
+import scraper
 import supabase_store
 
 app = Flask(__name__)
@@ -184,6 +194,114 @@ def refetch_document():
     if refreshed == 0:
         return jsonify({"ok": False, "error": "re-fetched but couldn't store any files"}), 502
     return jsonify({"ok": True, "refreshed": refreshed})
+
+
+KEYWORD_CLUSTER_THRESHOLD = float(os.environ.get("KEYWORD_CLUSTER_THRESHOLD", "0.85") or "0.85")
+
+
+def _cluster_by_similarity(keywords, vectors, threshold):
+    """Groups keyword indices whose cosine similarity meets `threshold`,
+    transitively (union-find), via a vectorized numpy similarity matrix —
+    fast even at 1000+ keywords, unlike a pure-Python pairwise loop.
+    Returns only clusters with 2+ keywords; singletons are dropped."""
+    n = len(keywords)
+    if n < 2:
+        return []
+
+    mat = np.array(vectors, dtype=np.float32)
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0] = 1  # guards a (shouldn't-happen) all-zero vector
+    unit = mat / norms
+    sim = np.triu(unit @ unit.T, k=1)  # upper triangle only — no self/dupe pairs
+
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, j in np.argwhere(sim >= threshold):
+        ri, rj = find(int(i)), find(int(j))
+        if ri != rj:
+            parent[ri] = rj
+
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(keywords[i])
+    return [g for g in groups.values() if len(g) > 1]
+
+
+def _ai_confirm_clusters(provider, clusters):
+    """clusters: list[list[str]], each 2+ keywords flagged as *possibly*
+    redundant by embedding similarity alone (noisy for short phrases —
+    "storm drain" vs "storm water" embed close but aren't interchangeable
+    here). Asks the AI to confirm genuine redundancy and propose one
+    canonical phrase per confirmed group; returns only the confirmed ones."""
+    if provider is None or not clusters:
+        return []
+
+    numbered = "\n".join(f"{i}. " + " | ".join(c) for i, c in enumerate(clusters))
+    prompt = (
+        "Each numbered line below is a group of keywords/phrases from a "
+        "construction bid-document keyword list that *might* be redundant "
+        "with each other (flagged by text similarity, not confirmed).\n\n"
+        f"{numbered}\n\n"
+        "For each line, decide: are these genuinely redundant — would "
+        "matching any ONE of them in a document reliably mean the others "
+        "are relevant too? If yes, propose a single canonical phrase "
+        "that best represents the whole group. If the terms actually mean "
+        "different things and shouldn't be merged, say so.\n\n"
+        "Respond with ONLY a JSON array, no other text, one entry per line "
+        "above, in this exact shape:\n"
+        '[{"index": <int>, "redundant": true, "suggested": "..."}, '
+        '{"index": <int>, "redundant": false}, ...]'
+    )
+    text = provider.complete(prompt, max_tokens=4000)
+    parsed = scraper._extract_json(text) if text else None
+    if not isinstance(parsed, list):
+        return []
+
+    out = []
+    for entry in parsed:
+        if not isinstance(entry, dict):
+            continue
+        idx = entry.get("index")
+        if not isinstance(idx, int) or not (0 <= idx < len(clusters)) or not entry.get("redundant"):
+            continue
+        suggested = (entry.get("suggested") or "").strip()
+        if not suggested:
+            continue
+        out.append({"keywords": clusters[idx], "suggested": suggested})
+    return out
+
+
+@app.route("/cluster-keywords", methods=["POST"])
+def cluster_keywords():
+    """Groups near-duplicate keywords (embedding similarity + an AI
+    confirmation pass) so the dashboard can offer to merge them — review
+    only, nothing is changed here. See api/index.py's
+    /api/<division_id>/keywords/cluster (the only caller) and
+    /keywords/merge (applies whatever the user approves)."""
+    body = request.get_json(silent=True) or {}
+    division_id = (body.get("division_id") or "").strip()
+    if not division_id:
+        return jsonify({"ok": False, "error": "division_id required"}), 400
+
+    embedder = ai_provider.get_embedder()
+    have = scraper.ensure_keyword_embeddings(division_id, embedder)
+    if len(have) < 2:
+        return jsonify({"ok": True, "groups": []})
+
+    keywords = list(have.keys())
+    vectors = [have[k] for k in keywords]
+    clusters = _cluster_by_similarity(keywords, vectors, KEYWORD_CLUSTER_THRESHOLD)
+    if not clusters:
+        return jsonify({"ok": True, "groups": []})
+
+    groups = _ai_confirm_clusters(ai_provider.get_provider(), clusters)
+    return jsonify({"ok": True, "groups": groups})
 
 
 def _run_daily_scan():

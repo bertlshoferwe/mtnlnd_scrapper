@@ -123,18 +123,21 @@ MAX_LISTING_ANCHORS_FOR_AI = 300  # cap on links sent per AI job-link identifica
 # them for a given document — it sees the literal-substring hits plus the
 # AI_PREFILTER_TOP_N keywords whose embeddings are closest to that document.
 # Keeps the per-document AI prompt (and its cost) flat as the list grows.
-AI_PREFILTER_SEND_ALL_MAX = int(os.environ.get("AI_PREFILTER_SEND_ALL_MAX", "60"))
-AI_PREFILTER_TOP_N = int(os.environ.get("AI_PREFILTER_TOP_N", "50"))
+# `or "default"` rather than `.get(NAME, "default")` throughout this block —
+# an env var that's *present but blank* (e.g. a Docker Compose env box with
+# the line left empty) still makes .get() return "", which skips the
+# two-arg default entirely and crashes int()/float() on an empty string.
+AI_PREFILTER_SEND_ALL_MAX = int(os.environ.get("AI_PREFILTER_SEND_ALL_MAX") or "60")
+AI_PREFILTER_TOP_N = int(os.environ.get("AI_PREFILTER_TOP_N") or "50")
 EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
-# Hard wall-clock budget for one division's scan. The GitHub Actions job caps
-# out at 120 min (see .github/workflows/daily-scan.yml); if the scan runs past
-# that the runner is killed mid-flight and finish_run() never fires, leaving
-# the dashboard showing a phantom "Checking …" forever. Stopping ourselves
-# before then means the run always closes cleanly (as a partial success) and
-# the next run resumes where this one left off (already-scanned docs are
-# skipped). Scanning every division shares one job, so keep this well under
-# 120 min. Override with SCAN_DIVISION_BUDGET_S.
-SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S", str(95 * 60)))
+# Hard wall-clock budget for one division's scan. If something wedges
+# mid-run (a hung network call, a slow site), stopping ourselves well before
+# that means the run always closes cleanly (as a partial success) instead of
+# showing a phantom "Checking …" forever, and the next run resumes where
+# this one left off (already-scanned docs are skipped). Scanning every
+# division shares one run, so keep this well under whatever's reasonable
+# for a whole day's worth of scanning. Override with SCAN_DIVISION_BUDGET_S.
+SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S") or str(95 * 60))
 
 # After each scan, reconcile which advertised documents are still listed so a
 # project that drops off the source site can be flagged "no longer listed"

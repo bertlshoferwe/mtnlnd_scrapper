@@ -20,3 +20,4 @@ playwright>=1.44
 # later (via GitHub Actions secrets) doesn't require touching this file.
 anthropic>=0.40
 google-genai>=1.0
+numpy>=1.26  # fast cosine-similarity clustering for the keyword cleanup tool

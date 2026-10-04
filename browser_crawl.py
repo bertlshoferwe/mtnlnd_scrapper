@@ -44,11 +44,14 @@ from urllib.parse import urlparse
 
 DOC_EXT = (".pdf", ".docx", ".doc")
 
-MAX_PAGES = int(os.environ.get("CRAWL_MAX_PAGES", "40"))
-MAX_DEPTH = int(os.environ.get("CRAWL_MAX_DEPTH", "3"))
-MAX_DOCS = int(os.environ.get("CRAWL_MAX_DOCS", "250"))
-PAGE_TIMEOUT_MS = int(os.environ.get("CRAWL_PAGE_TIMEOUT_MS", "25000"))
-SITE_BUDGET_S = int(os.environ.get("CRAWL_SITE_BUDGET_S", "600"))
+# `or "default"` rather than `.get(NAME, "default")` — an env var that's
+# present but blank still makes .get() return "", skipping the two-arg
+# default and crashing int() on an empty string.
+MAX_PAGES = int(os.environ.get("CRAWL_MAX_PAGES") or "40")
+MAX_DEPTH = int(os.environ.get("CRAWL_MAX_DEPTH") or "3")
+MAX_DOCS = int(os.environ.get("CRAWL_MAX_DOCS") or "250")
+PAGE_TIMEOUT_MS = int(os.environ.get("CRAWL_PAGE_TIMEOUT_MS") or "25000")
+SITE_BUDGET_S = int(os.environ.get("CRAWL_SITE_BUDGET_S") or "600")
 MAX_CAPTURED_BYTES = 130 * 1024 * 1024
 
 # A link is worth following if its text/href hints at more bid content.

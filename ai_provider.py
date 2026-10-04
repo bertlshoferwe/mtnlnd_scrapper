@@ -39,7 +39,7 @@ def _genai_http_options():
     to accept it."""
     try:
         from google.genai import types
-        secs = float(os.environ.get("AI_HTTP_TIMEOUT", "90"))
+        secs = float(os.environ.get("AI_HTTP_TIMEOUT") or "90")
         return {"http_options": types.HttpOptions(timeout=int(secs * 1000))}
     except Exception:
         return {}
@@ -64,10 +64,10 @@ class AnthropicProvider(AIProvider):
         # budget (see scraper.py), and a hung AI call must not eat it.
         self.client = anthropic.Anthropic(
             api_key=api_key,
-            timeout=float(os.environ.get("AI_HTTP_TIMEOUT", "90")),
+            timeout=float(os.environ.get("AI_HTTP_TIMEOUT") or "90"),
             max_retries=1,
         )
-        self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+        self.model = model or os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5-20251001"
 
     def complete(self, prompt, max_tokens):
         try:
@@ -92,7 +92,7 @@ class GeminiProvider(AIProvider):
         # GEMINI_MODEL env var to the current one from https://ai.google.dev
         # — as of late 2026 that's the 3.x flash line (gemini-3.6-flash,
         # gemini-3.7-flash, …).
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+        self.model = model or os.environ.get("GEMINI_MODEL") or "gemini-3.6-flash"
 
     def complete(self, prompt, max_tokens):
         try:
@@ -124,7 +124,7 @@ class GeminiEmbedder:
     def __init__(self, api_key, model=None):
         from google import genai
         self.client = genai.Client(api_key=api_key, **_genai_http_options())
-        self.model = model or os.environ.get("EMBED_MODEL", "gemini-embedding-001")
+        self.model = model or os.environ.get("EMBED_MODEL") or "gemini-embedding-001"
 
     BATCH = 100  # Gemini caps batchEmbedContents at 100 requests per call
 

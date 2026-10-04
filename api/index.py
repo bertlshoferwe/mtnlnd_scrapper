@@ -23,6 +23,8 @@ Routes:
   POST /api/<division_id>/keywords           add a keyword
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
   DEL  /api/<division_id>/keywords            remove one keyword (?keyword=…) or all of them
+  POST /api/<division_id>/keywords/cluster    suggest merge groups for near-duplicate keywords (review only)
+  POST /api/<division_id>/keywords/merge      apply a set of approved merge groups from /keywords/cluster
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            tell the local scan worker to start now
@@ -77,7 +79,7 @@ COLUMN_HEADERS = [
 # scanner_service.py) — also shown in the dashboard so it's not a mystery
 # where/when scans run. Set via self-host/.env; the app and scanner read the
 # same env var, so there's only one place to change it.
-DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC", "06:41 UTC")
+DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC") or "06:41 UTC"
 
 
 def _schedule_hm(text):
@@ -490,6 +492,69 @@ def api_delete_keywords(division_id):
     else:
         keywords = supabase_store.clear_keywords(division_id)
     return jsonify({"ok": True, "keywords": keywords})
+
+
+@app.route("/api/<division_id>/keywords/cluster", methods=["POST"])
+def api_cluster_keywords(division_id):
+    """Review-only: groups likely-redundant keywords and suggests a
+    canonical phrase for each group, for the dashboard's "Clean up with
+    AI" tool. Does the actual embedding + AI work via the scanner
+    container (scanner_service.py's /cluster-keywords — this app has none
+    of the AI/embedding deps installed, same reason run-now proxies to it).
+    Nothing is changed by this call; see /keywords/merge for that."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    base, cfg_err = _scanner_url()
+    if cfg_err:
+        return cfg_err
+    try:
+        resp = requests.post(f"{base}/cluster-keywords", json={"division_id": division_id}, timeout=200)
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 502
+    if resp.status_code >= 300:
+        detail = (resp.json().get("error")
+                  if resp.headers.get("content-type", "").startswith("application/json")
+                  else resp.text)
+        return jsonify({"error": f"Scan worker error: {detail}"}), 502
+    return jsonify(resp.json())
+
+
+@app.route("/api/<division_id>/keywords/merge", methods=["POST"])
+def api_merge_keywords(division_id):
+    """Applies a set of user-approved groups from /keywords/cluster — adds
+    each group's (possibly user-edited) canonical phrase, then removes the
+    keywords it replaces. Pure reuse of the existing add/delete keyword
+    functions; no new storage logic."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    groups = data.get("groups")
+    if not isinstance(groups, list) or not groups:
+        return jsonify({"error": "groups is required"}), 400
+
+    merged, removed = 0, 0
+    keywords = supabase_store.load_keywords(division_id)
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        keep = (group.get("keep") or "").strip()
+        remove = [k for k in (group.get("remove") or []) if isinstance(k, str)]
+        if not keep or not remove:
+            continue
+        try:
+            keywords = supabase_store.add_keyword(division_id, keep)
+        except ValueError:
+            pass  # looked like a section heading or was already blank — skip, still remove the rest
+        merged += 1
+        for kw in remove:
+            if kw.lower() == keep.lower():
+                continue  # the kept phrase might be one of the originals — don't delete what we just kept
+            keywords = supabase_store.delete_keyword(division_id, kw)
+            removed += 1
+
+    return jsonify({"ok": True, "merged": merged, "removed": removed, "keywords": keywords})
 
 
 # ---------------------------------------------------------------------------

@@ -21,11 +21,11 @@ _client = None
 
 # A project whose every non-failed document has missed this many consecutive
 # site reconciles is treated as "no longer listed" (see reconcile_seen).
-CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES", "2"))
+CLOSED_AFTER_MISSES = int(os.environ.get("CLOSED_AFTER_MISSES") or "2")
 
 # How long a matched document shows the "New" badge (see get_results_grouped)
 # before it ages out on its own, even if nobody hits "Mark done".
-NEW_BADGE_HOURS = int(os.environ.get("NEW_BADGE_HOURS", "48"))
+NEW_BADGE_HOURS = int(os.environ.get("NEW_BADGE_HOURS") or "48")
 
 # Holds the raw bytes of browser-captured documents (no real per-document URL
 # to re-fetch from later, e.g. ConstructConnect) — see upload_document_bytes.

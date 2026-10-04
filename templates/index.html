@@ -413,6 +413,13 @@
   .kw-scroll .empty { padding: 2px 0; }
   .kw-count { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .chip mark { background: var(--accent); color: var(--accent-contrast); border-radius: 2px; padding: 0 1px; }
+  .kw-cleanup-group {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; margin-top: 8px; background: var(--surface-2);
+  }
+  .kw-cleanup-group .chip { cursor: default; }
+  .kw-cleanup-group .chip button { display: none; }
+  .kw-cleanup-suggested { width: 100%; }
 
   .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 11px 16px; flex: 1; min-width: 150px; }
   .stat-tile .stat-label { font-size: 12px; color: var(--muted); }
@@ -983,6 +990,10 @@
 
       <div class="kw-toolbar">
         <input type="text" id="keywordFilter" placeholder="Filter keywords&hellip;" oninput="renderKeywordChips()" style="flex:1;">
+        <select id="keywordSort" onchange="renderKeywordChips()" title="Sort">
+          <option value="added">Added order</option>
+          <option value="az">A&ndash;Z</option>
+        </select>
         <button class="btn-danger" id="clearKeywordsBtn" onclick="clearAllKeywords()">Clear all</button>
       </div>
       <div class="kw-scroll" id="keywordScroll">
@@ -991,6 +1002,21 @@
         <div class="empty" id="keywordsNoMatch" style="display:none;">No keywords match that filter.</div>
       </div>
       <div class="kw-count" id="keywordCountLine"></div>
+
+      <div class="adv-toggle" onclick="toggleKeywordCleanup()" style="margin-top:14px;">+ Clean up with AI</div>
+      <div class="adv-fields" id="keywordCleanupFields">
+        <p class="desc" style="margin-bottom:8px;">
+          Finds likely-duplicate keywords and suggests one phrase to keep for each
+          group. Nothing changes until you check a group below and hit Apply.
+        </p>
+        <button class="btn-primary" id="keywordCleanupRunBtn" onclick="runKeywordCleanup()">Find duplicates</button>
+        <div class="status-line" id="keywordCleanupStatus"></div>
+        <div id="keywordCleanupGroups"></div>
+        <div class="row" id="keywordCleanupActions" style="display:none; margin-top:10px;">
+          <button class="btn-primary" onclick="applyKeywordCleanup()">Apply selected</button>
+          <button class="btn-ghost" onclick="toggleKeywordCleanup()">Close</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1851,7 +1877,9 @@ function renderKeywordChips() {
   const filterInput = document.getElementById('keywordFilter');
   const q = (filterInput.value || '').trim().toLowerCase();
 
-  const shown = q ? allKeywords.filter(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; }) : allKeywords;
+  let shown = q ? allKeywords.filter(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; }) : allKeywords.slice();
+  const sortMode = document.getElementById('keywordSort').value;
+  if (sortMode === 'az') shown = shown.slice().sort(function(a, b) { return a.localeCompare(b); });
 
   chips.innerHTML = '';
   shown.forEach(function(kw) {
@@ -1926,6 +1954,114 @@ async function clearAllKeywords() {
 
 function toggleKeywordUpload() {
   document.getElementById('keywordUploadFields').classList.toggle('open');
+}
+
+let keywordCleanupGroups = [];
+
+function toggleKeywordCleanup() {
+  document.getElementById('keywordCleanupFields').classList.toggle('open');
+}
+
+async function runKeywordCleanup() {
+  const btn = document.getElementById('keywordCleanupRunBtn');
+  const status = document.getElementById('keywordCleanupStatus');
+  const actions = document.getElementById('keywordCleanupActions');
+  btn.disabled = true;
+  actions.style.display = 'none';
+  document.getElementById('keywordCleanupGroups').innerHTML = '';
+  status.textContent = 'Analyzing ' + allKeywords.length + ' keyword' + (allKeywords.length === 1 ? '' : 's') +
+    '… this can take a little while the first time (computing embeddings for any that don’t have one yet).';
+  try {
+    const res = await api('/api/' + currentDivision + '/keywords/cluster', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}),
+    });
+    keywordCleanupGroups = res.groups || [];
+    if (!keywordCleanupGroups.length) {
+      status.textContent = 'No likely duplicates found.';
+    } else {
+      status.textContent = keywordCleanupGroups.length + ' possible group' +
+        (keywordCleanupGroups.length === 1 ? '' : 's') + ' found — review below, nothing changes until you Apply.';
+      renderKeywordCleanupGroups();
+      actions.style.display = '';
+    }
+  } catch (e) {
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderKeywordCleanupGroups() {
+  const container = document.getElementById('keywordCleanupGroups');
+  container.innerHTML = '';
+  keywordCleanupGroups.forEach(function(g, i) {
+    const row = document.createElement('div');
+    row.className = 'kw-cleanup-group';
+
+    const label = document.createElement('label');
+    label.className = 'row';
+    label.style.alignItems = 'flex-start';
+    label.style.gap = '8px';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'kw-cleanup-check';
+    check.dataset.index = i;
+
+    const body = document.createElement('div');
+    body.style.flex = '1';
+
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    chips.style.marginBottom = '6px';
+    g.keywords.forEach(function(kw) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const span = document.createElement('span');
+      span.textContent = kw;
+      chip.appendChild(span);
+      chips.appendChild(chip);
+    });
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'kw-cleanup-suggested';
+    input.value = g.suggested;
+
+    body.appendChild(chips);
+    body.appendChild(input);
+    label.appendChild(check);
+    label.appendChild(body);
+    row.appendChild(label);
+    container.appendChild(row);
+  });
+}
+
+async function applyKeywordCleanup() {
+  const checks = document.querySelectorAll('.kw-cleanup-check:checked');
+  if (!checks.length) { alert('Check at least one group to apply.'); return; }
+  const groups = [];
+  checks.forEach(function(c) {
+    const g = keywordCleanupGroups[parseInt(c.dataset.index, 10)];
+    const input = c.closest('.kw-cleanup-group').querySelector('.kw-cleanup-suggested');
+    const keep = input.value.trim();
+    if (keep) groups.push({ keep: keep, remove: g.keywords });
+  });
+  if (!groups.length) { alert('Check at least one group to apply.'); return; }
+  try {
+    const res = await api('/api/' + currentDivision + '/keywords/merge', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ groups: groups }),
+    });
+    keywordCleanupGroups = [];
+    document.getElementById('keywordCleanupGroups').innerHTML = '';
+    document.getElementById('keywordCleanupActions').style.display = 'none';
+    document.getElementById('keywordCleanupStatus').textContent =
+      'Merged ' + res.merged + ' group' + (res.merged === 1 ? '' : 's') +
+      ', removed ' + res.removed + ' keyword' + (res.removed === 1 ? '' : 's') + '.';
+    loadKeywords();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function uploadKeywordsFile() {
