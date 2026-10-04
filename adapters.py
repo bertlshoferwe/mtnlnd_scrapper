@@ -556,7 +556,16 @@ class ConstructConnectAdapter(SiteAdapter):
             # opened — it comes back on its own, not just after
             # page.go_back() (see _dismiss_cookie_banner's own note).
             self._dismiss_cookie_banner(page)
-            dialog.get_by_text("Clear All", exact=True).click(timeout=8000)
+            # Best-effort: confirmed via debug screenshot 2026-10-04 that
+            # the dialog can open with nothing already selected, in which
+            # case "Clear All" is itself disabled (nothing to clear) and
+            # waiting on a permanently-disabled button just times out —
+            # it's a no-op we wanted for a clean slate, not a required step,
+            # so skip it rather than let it sink the whole filter attempt.
+            try:
+                dialog.get_by_text("Clear All", exact=True).click(timeout=3000)
+            except Exception:
+                pass
             for state in self.LOCATION_FILTER_STATES:
                 self._dismiss_cookie_banner(page)  # it can reappear mid-loop too
                 # Each state is a CountrySelect_stateItemWrapper containing
@@ -608,6 +617,11 @@ class ConstructConnectAdapter(SiteAdapter):
         here just leaves the run less scoped, not aborted."""
         try:
             self._dismiss_cookie_banner(page)
+            # Confirmed via debug screenshot 2026-10-04: this section is
+            # collapsed by default (same as Project Location), so its
+            # checkbox isn't interactable until expanded — missing this
+            # step is why the first attempt just timed out.
+            page.click("text=Project Stage", timeout=8000)
             page.click("label[for='stageFilter-Bidding']", timeout=8000)
             page.wait_for_timeout(1000)
             print("  ConstructConnect: scoped results to Bidding-stage projects")
