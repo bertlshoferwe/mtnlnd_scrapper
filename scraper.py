@@ -953,8 +953,6 @@ def _scan_division(division):
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
         stopped_early = False
         advertised_by_site = {}  # site name -> {doc_key} for seen-tracking reconcile
-        bid_dates = {}  # project_key -> "YYYY-MM-DD" (portal adapters + ConstructConnect)
-        bid_times = {}  # project_key -> raw display string, e.g. "10:00am MT" (ConstructConnect only, so far)
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
@@ -998,13 +996,23 @@ def _scan_division(division):
                     (du or f"{url}#{fn}") for _, du, fn, _, _, _, _ in doc_links
                 }
 
-            # Bid-opening dates/times (portal adapters + ConstructConnect), one per project.
+            # Bid-opening dates/times (portal adapters + ConstructConnect), one
+            # per project — saved immediately per site, same reasoning as
+            # log_scan_row inserting per-document instead of batching: a run
+            # that dies partway through (a crash, a container restart) still
+            # keeps whatever was already found, instead of losing bid dates
+            # for the whole division just because a later site failed.
+            site_bid_dates, site_bid_times = {}, {}
             for lbl, _, _, _, _, bd, bt in doc_links:
                 key = f"{name} — {lbl}" if lbl else name
                 if bd:
-                    bid_dates[key] = bd
+                    site_bid_dates[key] = bd
                 if bt:
-                    bid_times[key] = bt
+                    site_bid_times[key] = bt
+            if site_bid_dates:
+                supabase_store.save_project_bid_dates(division_id, site_bid_dates)
+            if site_bid_times:
+                supabase_store.save_project_bid_times(division_id, site_bid_times)
 
             site_total = sum(
                 1 for _, du, fn, _, _, _, _ in doc_links
@@ -1123,11 +1131,6 @@ def _scan_division(division):
         if SEEN_TRACKING and advertised_by_site:
             supabase_store.update_run_progress(run_id, label="Checking listings")
             supabase_store.reconcile_seen(division_id, advertised_by_site, run_date)
-
-        if bid_dates:
-            supabase_store.save_project_bid_dates(division_id, bid_dates)
-        if bid_times:
-            supabase_store.save_project_bid_times(division_id, bid_times)
 
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
