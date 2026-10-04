@@ -396,9 +396,10 @@ class ConstructConnectAdapter(SiteAdapter):
                 return [], login_result
 
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
-            # parked for that) — but _apply_location_filter at least scopes
-            # the default nationwide view down to the states that matter.
+            # parked for that) — but _apply_location_filter/_apply_stage_filter
+            # at least scope the default nationwide view down to what matters.
             self._apply_location_filter(page)
+            self._apply_stage_filter(page)
             out = self._scan_results_page(page, deadline)
             if not out:
                 self._save_debug_screenshot(page, "no_docs_found")
@@ -592,6 +593,29 @@ class ConstructConnectAdapter(SiteAdapter):
                 page.mouse.click(5, 5)
             except Exception:
                 pass
+
+    def _apply_stage_filter(self, page):
+        """Checks "Bidding" in the sidebar's Project Stage tree (confirmed
+        by the user via devtools 2026-10-04: dropped results from ~9,000
+        location-filtered down to 722, combined with _apply_location_filter)
+        — leaves Planning/Post-Bid/Canceled unchecked. Unlike the location
+        filter this isn't behind a modal, no separate Apply click needed:
+        it's a plain react-checkbox-tree node, a real
+        <input id="stageFilter-Bidding" type="checkbox"> with a matching
+        <label for="stageFilter-Bidding"> — checking "Bidding" auto-checks
+        its "GC Bidding"/"Sub-Bidding" children, so just the one click.
+        Best-effort, same reasoning as _apply_location_filter: any failure
+        here just leaves the run less scoped, not aborted."""
+        try:
+            self._dismiss_cookie_banner(page)
+            page.click("label[for='stageFilter-Bidding']", timeout=8000)
+            page.wait_for_timeout(1000)
+            print("  ConstructConnect: scoped results to Bidding-stage projects")
+            self._save_debug_screenshot(page, "stage_filter_applied")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't apply the stage filter, "
+                  f"scanning unfiltered instead ({e})")
+            self._save_debug_screenshot(page, "stage_filter_failed")
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
