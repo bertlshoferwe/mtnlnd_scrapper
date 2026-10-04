@@ -356,6 +356,13 @@ class ConstructConnectAdapter(SiteAdapter):
         "Southern Utah",
     )
 
+    # The states Mountainland actually cares about (confirmed by the user
+    # via screenshot 2026-10-04) — narrows the default unscoped nationwide
+    # view (12,941 results) down to ~9,000. This filter does NOT persist on
+    # the account (confirmed: resets every login — no "default service
+    # area" saved), so _apply_location_filter has to redo it every run.
+    LOCATION_FILTER_STATES = ("Arizona", "Colorado", "Idaho", "Nevada", "Utah", "Wyoming")
+
     BASE = "https://app.constructconnect.com"
     PAGE_TIMEOUT_MS = 25000
     RUN_BUDGET_S = 1800              # whole adapter run
@@ -389,8 +396,9 @@ class ConstructConnectAdapter(SiteAdapter):
                 return [], login_result
 
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
-            # parked for that) — first checking whether documents can be
-            # found and downloaded at all from whatever login lands us on.
+            # parked for that) — but _apply_location_filter at least scopes
+            # the default nationwide view down to the states that matter.
+            self._apply_location_filter(page)
             out = self._scan_results_page(page, deadline)
             if not out:
                 self._save_debug_screenshot(page, "no_docs_found")
@@ -513,6 +521,43 @@ class ConstructConnectAdapter(SiteAdapter):
                 page.wait_for_timeout(300)
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't dismiss the cookie banner ({e})")
+
+    def _apply_location_filter(self, page):
+        """Scopes the results grid to LOCATION_FILTER_STATES instead of
+        ConstructConnect's unfiltered nationwide default — walks the same
+        Filters -> Project Location -> "Counties or States/Provinces" ->
+        check states -> Apply flow a person would use (confirmed via user
+        screenshot 2026-10-04), starting from "Clear All" so the result is
+        deterministic regardless of whatever the dialog defaults to.
+
+        Best-effort: this is a lot of UI surface for ConstructConnect to
+        change out from under us again, so any failure here just leaves
+        the run unfiltered (logged + screenshotted) rather than aborting
+        the whole scan — a wider net is a much smaller problem than a
+        crashed run."""
+        try:
+            try:
+                page.click("button:has-text('Filters')", timeout=5000)
+            except Exception:
+                pass  # the filter sidebar may already be open
+            page.click("text=Project Location", timeout=8000)
+            page.click("text=Select Location Type", timeout=8000)
+            page.click("text=Counties or States/Provinces", timeout=8000)
+
+            dialog = page.get_by_role("dialog")
+            dialog.get_by_text("Clear All", exact=True).click(timeout=8000)
+            for state in self.LOCATION_FILTER_STATES:
+                dialog.get_by_text(state, exact=True).click(timeout=5000)
+            dialog.get_by_role("button", name="Apply").click(timeout=8000)
+            page.wait_for_timeout(1500)
+
+            print(f"  ConstructConnect: scoped results to "
+                  f"{', '.join(self.LOCATION_FILTER_STATES)}")
+            self._save_debug_screenshot(page, "location_filter_applied")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't apply the location filter, "
+                  f"scanning unfiltered instead ({e})")
+            self._save_debug_screenshot(page, "location_filter_failed")
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
