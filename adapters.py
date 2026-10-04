@@ -68,8 +68,9 @@ class SiteAdapter:
         `site` is the sites row (dict)."""
         raise NotImplementedError
 
-    def find_documents_with_browser(self, site, login):
-        """Only for needs_browser=True adapters. Return (doc_links, login_result):
+    def find_documents_with_browser(self, site, login, known_updated=None):
+        """Only for needs_browser=True adapters. Return (doc_links,
+        login_result, current_updated):
         doc_links is [(label, document_url_or_None, filename, content_bytes_or_None,
         project_page_url, bid_date, bid_time), ...] — already in scan_site()'s
         final 7-tuple shape, since a browser-driven adapter typically has content
@@ -77,7 +78,12 @@ class SiteAdapter:
         display string (e.g. '10:00am MT') for portals that show a time alongside
         the bid-opening date, or None. `login_result` is the {"ok", "message"}
         dict from the login attempt (or None if login was never attempted).
-        `login` is {"username", "password", "url"} or None."""
+        `login` is {"username", "password", "url"} or None. `known_updated`
+        (optional) and `current_updated` (always returned, {} if unused) are
+        an opaque {project_id: watermark} pair an adapter may use to skip
+        re-fetching a project whose listing hasn't changed since the previous
+        run — see ConstructConnectAdapter, the only adapter using this so
+        far."""
         raise NotImplementedError
 
 
@@ -365,8 +371,15 @@ class ConstructConnectAdapter(SiteAdapter):
 
     BASE = "https://app.constructconnect.com"
     PAGE_TIMEOUT_MS = 25000
-    RUN_BUDGET_S = 1800              # whole adapter run
-    MAX_PROJECTS_PER_SEARCH = 100    # safety cap per results view
+    # Scoped (location + stage filters) results run ~722 projects; at the
+    # ~23s/project pace seen 2026-10-04, a full pass takes ~4.5hrs. Raised
+    # from the original 1800s/100 (which only ever reached 79 projects
+    # before the old 30-min budget cut it off) — fine to run this long on
+    # the user's own self-hosted box (no shared-runner time limit to worry
+    # about), so size both to comfortably clear the whole scoped set in one
+    # run rather than crawling through it piecemeal over many days.
+    RUN_BUDGET_S = 6 * 3600          # whole adapter run
+    MAX_PROJECTS_PER_SEARCH = 1000   # safety cap per results view
     MAX_ZIP_BYTES = 500 * 1024 * 1024
     # A big project's merged PDF or zip is built server-side on demand — 45s
     # wasn't enough for larger ones (e.g. "Pedestrian and Bicylce Paths" and
@@ -384,26 +397,26 @@ class ConstructConnectAdapter(SiteAdapter):
     USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 
-    def find_documents_with_browser(self, site, login):
+    def find_documents_with_browser(self, site, login, known_updated=None):
         if not login:
             print("  ! ConstructConnect: no login configured on this site — skipping")
-            return [], None
+            return [], None, {}
 
         deadline = time.time() + self.RUN_BUDGET_S
         pw, browser, page, login_result = self._start_login(login)
         try:
             if page is None:
-                return [], login_result
+                return [], login_result, {}
 
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
             # parked for that) — but _apply_location_filter/_apply_stage_filter
             # at least scope the default nationwide view down to what matters.
             self._apply_location_filter(page)
             self._apply_stage_filter(page)
-            out = self._scan_results_page(page, deadline)
+            out, current_updated = self._scan_results_page(page, deadline, known_updated or {})
             if not out:
                 self._save_debug_screenshot(page, "no_docs_found")
-            return out, login_result
+            return out, login_result, current_updated
         finally:
             self._close_browser(pw, browser)
 
@@ -651,23 +664,47 @@ class ConstructConnectAdapter(SiteAdapter):
     # budget on a guaranteed miss.
     NO_DOCS_STATUSES = {"Requesting Plans", "Sent to Scan", "Project Details Only"}
 
-    def _scan_results_page(self, page, deadline):
-        """Work through whatever project list is currently on screen —
-        no Saved Search filtering yet (see SAVED_SEARCHES / the note in
-        find_documents_with_browser), just proving out login + document
-        discovery + download first."""
+    def _scan_results_page(self, page, deadline, known_updated):
+        """Work through whatever project list is currently on screen — no
+        Saved Search filtering yet (see SAVED_SEARCHES / the note in
+        find_documents_with_browser), just the location+stage filters
+        applied earlier.
+
+        known_updated is {project_id: 'Oct 4, 2026'} from the previous run
+        (see supabase_store.load_project_last_updated) — a project whose
+        grid "Last Updated" date hasn't changed since is skipped entirely
+        (no open, no download) instead of re-fetched from scratch every
+        single run, same reasoning as the existing NO_DOCS_STATUSES skip.
+        Added 2026-10-04 after raising MAX_PROJECTS_PER_SEARCH/RUN_BUDGET_S
+        to cover the whole ~722-project scoped set — without this, every
+        run would re-download everything nationwide-filter-sized runs used
+        to only ever get a random slice of.
+
+        Returns (out, current_updated) — current_updated is the fresh
+        {project_id: last_updated} map for every row actually seen this
+        run (whether downloaded, skipped as unchanged, or skipped as
+        no-docs-yet), for the caller to persist for next time."""
         out = []
+        current_updated = {}
         project_count = 0
         skipped_no_docs = 0
+        skipped_unchanged = 0
         while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
             rows = self._project_rows(page)
             if not rows:
                 break
-            for label, doc_status in rows:
+            for label, doc_status, project_id, last_updated in rows:
                 if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
                     break
+                if project_id and last_updated:
+                    current_updated[project_id] = last_updated
                 if doc_status in self.NO_DOCS_STATUSES:
                     skipped_no_docs += 1
+                    project_count += 1
+                    continue
+                if (project_id and last_updated
+                        and known_updated.get(project_id) == last_updated):
+                    skipped_unchanged += 1
                     project_count += 1
                     continue
                 try:
@@ -680,8 +717,9 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(1500)
         print(f"  ConstructConnect: {project_count} project(s) checked, "
               f"{skipped_no_docs} skipped (no documents posted yet), "
+              f"{skipped_unchanged} skipped (unchanged since last scan), "
               f"{len(out)} document(s) found")
-        return out
+        return out, current_updated
 
     def _save_debug_screenshot(self, page, tag):
         """Save a screenshot + the page's visible text under a distinct
@@ -701,10 +739,22 @@ class ConstructConnectAdapter(SiteAdapter):
             print(f"  ! ConstructConnect: couldn't save debug screenshot ({tag}): {e}")
 
     def _project_rows(self, page):
-        """The Project Name column's link text plus the Documents column's
-        status text, for every row on the current results page — matched by
-        header position so the name doesn't accidentally pick up the
-        Documents column's own short "Drawing"/"Specs..." links.
+        """Returns (label, doc_status, project_id, last_updated) for every
+        row on the current results page:
+        - label / doc_status: the Project Name column's link text and the
+          Documents column's status text.
+        - project_id: parsed out of the project link's own href
+          (/project2/<id>/...) — no separate column needed for this one.
+        - last_updated: the grid's own "Last Updated" column text (e.g.
+          "Oct 4, 2026"), used by _scan_results_page to skip re-downloading
+          an unchanged project.
+
+        Each <td> carries a data-label attribute matching its column header
+        (confirmed via devtools 2026-10-04, e.g.
+        <td data-label="Last Updated">Oct 4, 2026</td>) — tried first since
+        it's immune to column reordering, falling back to header-position
+        matching (confirmed working previously) in case data-label isn't
+        present on every column.
 
         The results grid turned out to have zero <table> rows in practice
         (a debug run landed fine, with the grid's data visibly rendered in
@@ -733,6 +783,7 @@ class ConstructConnectAdapter(SiteAdapter):
         headers = [(h.inner_text() or "").strip() for h in header_cells]
         name_col = headers.index("Project Name") if "Project Name" in headers else None
         docs_col = headers.index("Documents") if "Documents" in headers else None
+        updated_col = headers.index("Last Updated") if "Last Updated" in headers else None
 
         body_rows = page.query_selector_all("table tbody tr")
         if not body_rows:
@@ -744,8 +795,10 @@ class ConstructConnectAdapter(SiteAdapter):
             cells = tr.query_selector_all("td")
             if not cells:
                 cells = tr.query_selector_all("[role='cell'], [role='gridcell']")
-            a = None
-            if name_col is not None and name_col < len(cells):
+
+            name_cell = tr.query_selector('[data-label="Project Name"]')
+            a = name_cell.query_selector("a") if name_cell else None
+            if a is None and name_col is not None and name_col < len(cells):
                 a = cells[name_col].query_selector("a")
             if a is None:
                 a = tr.query_selector("a")  # fallback: first link in the row
@@ -757,13 +810,27 @@ class ConstructConnectAdapter(SiteAdapter):
                 continue
             if not label:
                 continue
-            doc_status = ""
-            if docs_col is not None and docs_col < len(cells):
-                try:
-                    doc_status = (cells[docs_col].inner_text() or "").strip()
-                except Exception:
-                    doc_status = ""
-            rows.append((label, doc_status))
+
+            project_id = None
+            try:
+                href = a.get_attribute("href") or ""
+                m = re.search(r"/project2?/(\d+)", href)
+                if m:
+                    project_id = m.group(1)
+            except Exception:
+                pass
+
+            docs_cell = tr.query_selector('[data-label="Documents"]')
+            if docs_cell is None and docs_col is not None and docs_col < len(cells):
+                docs_cell = cells[docs_col]
+            doc_status = (docs_cell.inner_text() or "").strip() if docs_cell else ""
+
+            updated_cell = tr.query_selector('[data-label="Last Updated"]')
+            if updated_cell is None and updated_col is not None and updated_col < len(cells):
+                updated_cell = cells[updated_col]
+            last_updated = (updated_cell.inner_text() or "").strip() if updated_cell else ""
+
+            rows.append((label, doc_status, project_id, last_updated))
         return rows
 
     def _go_to_next_page(self, page):

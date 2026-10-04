@@ -49,11 +49,15 @@ from datetime import datetime, timezone, timedelta
 
 # A scan_runs row can be left showing status='running' forever if the scanner
 # container's scraper.py subprocess is killed without warning (OOM, host
-# restart, docker kill) — _scan_division's finish_run() never executes. Any
-# "running" row older than this is definitely dead, not slow; the status
-# endpoint reports those as a failed run instead of a live one so the
-# dashboard stops showing a phantom "Checking …" indefinitely.
-STALE_RUN_AFTER = timedelta(minutes=150)
+# restart, docker kill, a Watchtower image update landing mid-scan — this
+# last one bit a real run 2026-10-04) — _scan_division's finish_run() never
+# executes. Any "running" row older than this is definitely dead, not slow;
+# the status endpoint reports those as a failed run instead of a live one so
+# the dashboard stops showing a phantom "Checking …" indefinitely. Must stay
+# comfortably above scraper.py's SCAN_DIVISION_BUDGET_S (raised to 8hrs
+# 2026-10-04 for ConstructConnect's own much bigger per-run budget) or this
+# would flag a run as stale while it's still legitimately working.
+STALE_RUN_AFTER = timedelta(minutes=600)
 
 from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response
 
@@ -582,8 +586,8 @@ def api_merge_keywords(division_id):
 # ---------------------------------------------------------------------------
 
 def _run_is_stale(run):
-    """True if a still-'running' scan_runs row is old enough that its GitHub
-    Actions job cannot still be alive (see STALE_RUN_AFTER)."""
+    """True if a still-'running' scan_runs row is old enough that its
+    scanner-container process cannot still be alive (see STALE_RUN_AFTER)."""
     started = run.get("started_at")
     if not started:
         return False

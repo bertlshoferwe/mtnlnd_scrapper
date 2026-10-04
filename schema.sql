@@ -128,6 +128,16 @@ create table if not exists project_flags (
   -- docs_ack_through = now(), acknowledging every file seen so far; the flag
   -- clears until the next new document. NULL = nothing acknowledged yet.
   docs_ack_through timestamptz,
+  -- ConstructConnect-only: the results grid's own "Last Updated" display
+  -- string (e.g. "Oct 4, 2026") as of the last time this project was
+  -- actually opened/downloaded. Keyed by the project's numeric
+  -- ConstructConnect id here (not "SiteName — label" like bid_date/bid_time
+  -- above), since it's purely an internal watermark the adapter checks
+  -- before re-opening a project, not something displayed. Unchanged since
+  -- last scan -> skip re-downloading it entirely (see adapters.py's
+  -- _scan_results_page) instead of re-fetching all ~700+ scoped projects
+  -- from scratch every single run.
+  cc_last_updated text,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -136,6 +146,7 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists bid_date date;
 --   alter table project_flags add column if not exists docs_ack_through timestamptz;
 --   alter table project_flags add column if not exists bid_time text;
+--   alter table project_flags add column if not exists cc_last_updated text;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (

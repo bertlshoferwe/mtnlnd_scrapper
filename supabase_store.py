@@ -939,6 +939,39 @@ def save_project_bid_times(division_id, mapping):
         print(f"  ! couldn't save bid times ({e})")
 
 
+def load_project_last_updated(division_id):
+    """{project_id: 'Oct 4, 2026'} — the ConstructConnect results grid's own
+    "Last Updated" date as of the last time each project was actually
+    opened/downloaded, keyed by the project's numeric ConstructConnect id
+    (not "SiteName — label" like bid_date/bid_time). Lets the adapter skip
+    re-opening a project whose grid date hasn't changed since. Empty if the
+    column/table isn't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,cc_last_updated")
+            .eq("division_id", division_id).execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: r["cc_last_updated"] for r in res.data if r.get("cc_last_updated")}
+
+
+def save_project_last_updated(division_id, mapping):
+    """Upsert {project_id: 'Oct 4, 2026'} from a scan. Only touches
+    cc_last_updated. No-ops if the table/column is missing."""
+    rows = [
+        {"division_id": division_id, "project_key": k, "cc_last_updated": v,
+         "updated_at": datetime.now(timezone.utc).isoformat()}
+        for k, v in mapping.items() if v
+    ]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save last-updated watermarks ({e})")
+
+
 _SCAN_RESULTS_PAGE_SIZE = 1000
 
 

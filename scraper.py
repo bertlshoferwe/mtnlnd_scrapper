@@ -137,7 +137,12 @@ EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
 # this one left off (already-scanned docs are skipped). Scanning every
 # division shares one run, so keep this well under whatever's reasonable
 # for a whole day's worth of scanning. Override with SCAN_DIVISION_BUDGET_S.
-SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S") or str(95 * 60))
+# Raised 2026-10-04 to give ConstructConnect's own (also raised) budget
+# room to actually use it — a full pass over its scoped ~722 projects can
+# take ~4.5hrs on its own; fine on this user's self-hosted box with no
+# shared-runner time limit to worry about (see api/index.py's matching
+# STALE_RUN_AFTER raise, which has to stay above this).
+SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S") or str(8 * 3600))
 
 # After each scan, reconcile which advertised documents are still listed so a
 # project that drops off the source site can be flagged "no longer listed"
@@ -553,7 +558,17 @@ def scan_site(site, ai_client):
     if adapter is not None:
         if adapter.needs_browser:
             print(f"  Adapter: {adapter.label} (browser)")
-            doc_links, login_result = adapter.find_documents_with_browser(site, _site_login(site))
+            division_id = site["division_id"]
+            # {project_id: 'Oct 4, 2026'} watermark from the last time each
+            # project was actually opened — lets a browser-driven adapter
+            # (so far only ConstructConnect) skip re-downloading a project
+            # whose listing hasn't changed since, instead of re-fetching
+            # everything from scratch every run.
+            known_updated = supabase_store.load_project_last_updated(division_id)
+            doc_links, login_result, current_updated = adapter.find_documents_with_browser(
+                site, _site_login(site), known_updated=known_updated)
+            if current_updated:
+                supabase_store.save_project_last_updated(division_id, current_updated)
             return doc_links, {}, login_result
         print(f"  Adapter: {adapter.label}")
         return [(lbl, url, fn, None, src, bid, None)
