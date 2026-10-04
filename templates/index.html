@@ -2901,6 +2901,31 @@ function localizeSchedule() {
   });
 }
 
+// Poll fast (every 4s) only while a scan is running or was just requested, so
+// progress still feels live. Otherwise there's nothing new to show — the
+// daily scan is kicked off externally by the scanner container's own
+// schedule, not by this tab — so the idle poll exists only to notice that
+// transition if the dashboard is left open, not to refresh unchanging data.
+// Also stop entirely while the tab is hidden/backgrounded — a dashboard left
+// open on a screen all day shouldn't keep generating requests unattended.
+const POLL_ACTIVE_MS = 4000;
+const POLL_IDLE_MS = 30 * 60 * 1000;
+let pollTimer = null;
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  if (document.hidden) return;
+  const delay = (scanRunning || runPending()) ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+  pollTimer = setTimeout(async function () {
+    await Promise.all([loadStatus(), loadResultsInfo()]);
+    schedulePoll();
+  }, delay);
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) schedulePoll();
+});
+
 async function init() {
   localizeSchedule();
   syncFilterUI();
@@ -2909,18 +2934,10 @@ async function init() {
   await loadAdapters();
   await loadDivisions();
   await loadAllForCurrentDivision();
-  setInterval(function() { loadStatus(); loadResultsInfo(); }, 4000);
+  schedulePoll();
 }
 
 init();
 </script>
-
-<!-- Vercel Speed Insights (Core Web Vitals). The script is served by Vercel
-     at /_vercel/speed-insights/script.js once Speed Insights is enabled for
-     this project in the Vercel dashboard; it's a no-op elsewhere. -->
-<script>
-  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-</script>
-<script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
 </html>

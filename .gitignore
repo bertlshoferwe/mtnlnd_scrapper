@@ -3,3 +3,11 @@ venv/
 __pycache__/
 *.pyc
 .vercel/
+
+# Self-hosted Supabase: docker-compose.yml and .env.example are pinned
+# in self-host/supabase/ (not fetched at setup time) — only real secrets
+# and runtime volume data are excluded here.
+self-host/.env
+self-host/supabase/.env
+self-host/supabase/volumes/
+self-host/supabase/dev/

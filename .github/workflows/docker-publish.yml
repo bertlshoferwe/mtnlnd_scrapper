@@ -1,0 +1,44 @@
+name: Build and publish Docker images
+
+# Builds the app and scanner images on every push to main and pushes them to
+# GHCR. Watchtower on the self-hosted server (see self-host/docker-compose.yml)
+# polls GHCR and auto-pulls/restarts — this is the "auto-update on push" half
+# of that pipeline, not a deploy by itself.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: app
+            dockerfile: Dockerfile
+          - name: scanner
+            dockerfile: Dockerfile.scanner
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.name }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.name }}:${{ github.sha }}

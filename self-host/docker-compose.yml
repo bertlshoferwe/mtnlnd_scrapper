@@ -1,0 +1,58 @@
+# Bid Scout — app + scanner, auto-updated by Watchtower whenever
+# .github/workflows/docker-publish.yml pushes a new image to GHCR.
+#
+# Follows this homelab's existing conventions (see the lubelogger stack):
+# one shared external "homelab-network", explicit container_name, TZ, and
+# Traefik's http->https redirect + cloudflare certresolver pattern.
+#
+# Expects local Supabase already running and joined to homelab-network too
+# (see supabase/README.md) so "kong" resolves by name.
+
+services:
+  app:
+    image: ghcr.io/bertlshoferwe/mtnlnd_scrapper-app:latest
+    container_name: bidscout
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: America/Denver
+    networks:
+      - homelab-network
+    labels:
+      - 'traefik.enable=true'
+      - "traefik.http.routers.bidscout-http.rule=Host(`bidscout.westonb.com`)"
+      - 'traefik.http.routers.bidscout-http.middlewares=redirect-to-https@file'
+      - 'traefik.http.routers.bidscout.entrypoints=websecure'
+      - "traefik.http.routers.bidscout.rule=Host(`bidscout.westonb.com`)"
+      - 'traefik.http.routers.bidscout.tls=true'
+      - 'traefik.http.routers.bidscout.tls.certresolver=cloudflare'
+      - 'traefik.http.services.bidscout.loadbalancer.server.port=8080'
+      - com.centurylinklabs.watchtower.enable=true
+
+  scanner:
+    image: ghcr.io/bertlshoferwe/mtnlnd_scrapper-scanner:latest
+    container_name: bidscout-scanner
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: America/Denver
+    networks:
+      - homelab-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: bidscout-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
+    command: --label-enable --interval 60 --cleanup
+    # Skip this service entirely if you already run a host-wide Watchtower
+    # elsewhere — --label-enable scoping means it'd pick up the app/scanner
+    # labels above just as well, and running two is harmless but redundant.
+
+networks:
+  homelab-network:
+    external: true

@@ -1,4 +1,6 @@
-# The GitHub Actions scan worker (scraper.py) — the full scraping/parsing/AI stack.
+# The scanner container (scraper.py + scanner_service.py) — the full
+# scraping/parsing/AI stack.
+flask>=3.0  # scanner_service.py's internal run-now/cancel HTTP endpoints
 requests>=2.31
 beautifulsoup4>=4.12
 pdfplumber>=0.11

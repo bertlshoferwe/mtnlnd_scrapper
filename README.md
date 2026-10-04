@@ -1,97 +1,55 @@
-# Bid Scout — Vercel + Supabase + GitHub Actions
+# Bid Scout — self-hosted Docker + Supabase
 
 Scans planning/bid sites daily for new construction plans, then reads each
 linked PDF/DOCX and flags the ones worth pursuing based on a user-supplied
-keyword list, using Claude for semantic matching. This edition splits the work across three
-services, each doing the part it's actually good at:
+keyword list, using Claude for semantic matching. Everything runs on your own
+Docker server, split into pieces each doing the part it's actually good at:
 
-| Service | What it does | Why it, not something else |
+| Piece | What it does | Why split out |
 |---|---|---|
-| **Vercel** | Hosts the dashboard (add/view sites, keywords, results) | Free, fast, zero server maintenance — but functions time out in ~10s on Hobby, so it never does the actual scanning |
-| **Supabase** (Postgres) | Stores every division's sites, keywords, and scan results | Vercel functions have no persistent filesystem — this replaces the local files/xlsx entirely |
-| **GitHub Actions** | Runs the actual daily scan (scraping, downloads, PDF parsing, Claude calls) | Jobs get up to 6 hours, not 10 seconds, and it's a full Ubuntu VM — so LibreOffice (real DOCX page numbers) still works, unlike on Vercel |
+| **app** container | Hosts the dashboard (add/view sites, keywords, results) | A normal long-running Flask app (gunicorn) — no function time limit to work around anymore |
+| **scanner** container | Runs the actual daily scan (scraping, downloads, PDF parsing, Claude calls) and a tiny internal API for "Run Now"/"Cancel" | Kept separate from the app so a multi-minute scan can't block dashboard requests, and so it alone needs the heavy Playwright/LibreOffice dependencies |
+| **local Supabase** (Postgres) | Stores every division's sites, keywords, and scan results, plus uploaded documents in Storage | Self-hosted via Supabase's own docker-compose, so nothing leaves your network |
+| **Watchtower** | Polls GHCR and auto-pulls/restarts the app/scanner images | Means pushing to `main` is enough to deploy — see `.github/workflows/docker-publish.yml` |
 
-The dashboard's "Run Now" button doesn't scan anything itself — it asks
-GitHub to run the same workflow immediately, via GitHub's API.
+The dashboard's "Run Now" button asks the scanner container's internal
+`/run-now` endpoint to start `scraper.py` immediately; "Cancel scan" asks its
+`/cancel` endpoint to kill that process.
 
 ## One-time setup
 
-### 1. Create the Supabase project
+See `self-host/README.md` for the full walkthrough. In short:
 
-1. Go to [supabase.com](https://supabase.com) → New Project. Free tier is enough for this.
-2. Once it's created: **Project Settings → API** → copy the **Project URL** and the **`service_role` secret key** (not the `anon` key — this app needs to bypass Row Level Security since it's trusted server-side code, not browser code). Keep the service_role key secret; it has full database access.
-3. **SQL Editor → New query** → paste the contents of `schema.sql` from this project → Run. This creates all six tables.
+1. **Local Supabase** — follow `self-host/supabase/README.md` to pull the
+   official self-hosted compose, generate secrets, start it, apply
+   `schema.sql`, and create the `scanned-documents` Storage bucket.
+2. **Configure the app stack** — `cp self-host/.env.example self-host/.env`
+   and fill in `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` (from step 1), your AI
+   provider key (see the table below), and anything else you need.
+3. **Push to GitHub** — `docker-publish.yml` builds and pushes
+   `ghcr.io/<you>/<repo>-app` and `-scanner` to GHCR on every push to `main`.
+4. **On the server**: `docker login ghcr.io` once (a PAT with
+   `read:packages` is enough) so Watchtower and `docker compose pull` can
+   fetch the (likely private) images, then
+   `docker compose -f self-host/docker-compose.yml up -d`.
+5. Point Traefik/Cloudflare Tunnel at the `app` service (see the labels in
+   `self-host/docker-compose.yml` — adjust to match your actual Traefik
+   network/entrypoint names).
+6. Open the dashboard and create your first division, add sites/keywords,
+   and click **"Run scan now"** to confirm the scanner container picks it up
+   (check `docker compose logs -f scanner`).
 
-### 2. Push this project to a GitHub repo
+From here, every push to `main` rebuilds the images; Watchtower picks up the
+new ones on its next poll (default every 60s) with no manual redeploy step.
 
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/<you>/<repo>.git
-git push -u origin main
-```
+### Choosing an AI provider
 
-### 3. Choose an AI provider and add GitHub Actions secrets
-
-This project can use **Anthropic (Claude) or Google Gemini** — pick one via the `AI_PROVIDER` secret, or leave it unset and it auto-picks whichever key you've added (Anthropic first, then Gemini). Both plug into the same code path (`ai_provider.py`) — switching later is just changing which secret is set, no code changes.
+This project can use **Anthropic (Claude) or Google Gemini** — pick one via the `AI_PROVIDER` env var, or leave it unset and it auto-picks whichever key is present (Anthropic first, then Gemini). Both plug into the same code path (`ai_provider.py`) — switching later is just changing an env var, no code changes.
 
 | Provider | Free? | Get a key at |
 |---|---|---|
 | **Anthropic (Claude)** | No — pay-as-you-go from the start, but cheap at this scan volume (Haiku, one call per document) | [console.anthropic.com](https://console.anthropic.com) |
 | **Google Gemini** | Yes, genuinely, no card required — but Google may use free-tier prompts/responses to improve their products. Worth weighing if your documents are commercially sensitive | [aistudio.google.com](https://aistudio.google.com) |
-
-In the repo: **Settings → Secrets and variables → Actions → New repository secret**. Add:
-
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
-- `AI_PROVIDER` — `anthropic` or `gemini` (optional if you're only adding one key below)
-- Whichever of `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` matches your chosen provider — see "How matching works" below for why this matters
-- `FIRECRAWL_API_KEY` (optional — get one at [firecrawl.dev](https://firecrawl.dev) if you need JS-rendered pages or anti-bot handling)
-- `CREDENTIALS_KEY` (optional — only needed if any site requires a login; see step 6 for how to generate it)
-
-You only need to add the secret for the provider you're actually using — the workflow passes both through as environment variables regardless, but `ai_provider.py` only initializes the one that's configured.
-
-### 4. Set your schedule
-
-Open `.github/workflows/daily-scan.yml` and edit the `cron` line. **GitHub Actions cron is UTC only** and only guarantees the job starts sometime *after* the given time — scheduled runs on the top of a popular hour (`:00`) queue during peak load and often fire hours late, so use an odd minute and start ~20 min early. Convert your local time to UTC — e.g. for ~1am Mountain Time (MDT, UTC-6) use `41 6 * * *`; during MST (UTC-7) use `41 7 * * *`. Commit and push the change.
-
-This is the **one shared schedule for every division** — Vercel Hobby doesn't support per-division dynamic scheduling (that would need a persistent process, which is exactly what Vercel doesn't offer), so all divisions scan together in one workflow run, looping through them in sequence.
-
-### 5. Create a GitHub Personal Access Token (for the dashboard's "Run Now" button)
-
-1. GitHub → **Settings** (your account, not the repo) → **Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. Scope it to this one repository, with **Actions: Read and write** permission.
-3. Copy the token — you'll paste it into Vercel next.
-
-### 6. Deploy to Vercel
-
-1. [vercel.com](https://vercel.com) → **Add New → Project** → import your GitHub repo. Vercel auto-detects the Python app in `api/index.py` — no build configuration needed.
-2. Before or after the first deploy, go to **Project Settings → Environment Variables** and add:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_KEY`
-   - `GITHUB_TOKEN` — the token from step 5
-   - `GITHUB_OWNER` — your GitHub username or org
-   - `GITHUB_REPO` — the repo name
-   - `GITHUB_WORKFLOW_FILE` — `daily-scan.yml` (matches the filename in `.github/workflows/`)
-   - `GITHUB_REF` — `main` (or whatever your default branch is)
-   - `DISPLAY_SCHEDULE_UTC` — optional, e.g. `07:00 UTC`, just cosmetic text shown on the dashboard (keep it matching the workflow's `cron`)
-   - `CREDENTIALS_KEY` — optional, only needed if any site requires a login. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set the **same value** here and as the GitHub Actions secret above — one side encrypts a site's saved password, the other decrypts it to log in.
-3. Redeploy if you added the environment variables after the first deploy (**Deployments → ⋯ → Redeploy**) so the function picks them up.
-4. Open the URL Vercel gives you (`https://<project>.vercel.app`). You should see the dashboard with one empty division ready to go, or create your first one with "+ New division".
-
-### 7. Add your divisions, sites, and keywords
-
-Everything from here is through the dashboard: create a division per team, add sites (with the "Advanced" toggle for listing-page CSS selectors, AI-detected job links, or a "Requires login" username/password for sites whose documents sit behind a login form), and add keywords. This writes straight to Supabase — the next scheduled GitHub Actions run (or a manual "Run Now") will pick it up.
-
-### 8. Test it
-
-Click **"Run scan now"** on any division. This should:
-- Return almost instantly (Vercel just tells GitHub to start the job — it doesn't wait for it)
-- Show up under the repo's **Actions** tab within a few seconds, running
-- Update the dashboard's Status card to "success" (or show the error) once it finishes — the dashboard polls every few seconds
-
-If "Run Now" returns an error about `GITHUB_TOKEN`/`GITHUB_OWNER`/`GITHUB_REPO`, double-check those three Vercel environment variables and redeploy.
 
 ## How matching works
 
@@ -129,18 +87,9 @@ daily run only downloads and AI-scans genuinely new documents.
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:
 
-- **Switching providers** is a one-line change: update the `AI_PROVIDER` secret (or just add/remove the relevant API key secret) and re-run — no code or redeploy needed on the Vercel side, since provider selection only affects the GitHub Actions scan worker.
-- **Quality**: both are strong at the structured-JSON-following this pipeline depends on. If a provider's response can't be parsed as valid JSON, the code falls back to treating that document as "AI scan found nothing" for that call — it never crashes the run, just silently does less on that one document. Check the Actions logs for `unparseable result` warnings if matches seem to be missing.
+- **Switching providers** is a one-line change: update `AI_PROVIDER` (or just add/remove the relevant API key) in `self-host/.env` and restart the scanner container — provider selection only affects `scraper.py`.
+- **Quality**: both are strong at the structured-JSON-following this pipeline depends on. If a provider's response can't be parsed as valid JSON, the code falls back to treating that document as "AI scan found nothing" for that call — it never crashes the run, just silently does less on that one document. Check `docker compose logs scanner` for `unparseable result` warnings if matches seem to be missing.
 - **Gemini's model name churns faster than Anthropic's** — Google renames/retires aliases often. If `ai_provider.py`'s default (`gemini-3.6-flash`) stops working, check [ai.google.dev](https://ai.google.dev) for the current model list and set `GEMINI_MODEL` to override. The semantic pre-filter also needs `GEMINI_API_KEY` for embeddings even when `AI_PROVIDER=anthropic`.
-
-## Known differences from the local/Docker version of this project
-
-- **No per-division custom schedule.** One shared cron in `daily-scan.yml` for everyone, per your Hobby-plan constraint. If you later upgrade to Vercel Pro or move off Vercel, per-division scheduling could come back (e.g. via a small always-on worker again).
-- **No local `.xlsx` file that persists between runs.** The Download button on the dashboard *builds* a fresh `.xlsx` on the spot from whatever's in Supabase — there's no file sitting on disk anywhere. Functionally equivalent, just generated on demand instead of accumulated.
-- **Results are browsable in the dashboard, not just downloadable.** The Results card shows document/match counts, the latest AI-written daily summary, and a searchable, filterable, paginated table of every logged row — you don't have to open the spreadsheet just to check whether anything matched today.
-- **"Run Now" triggers GitHub, not an immediate local scan.** There's a few seconds of latency between clicking the button and the scan actually starting (GitHub has to schedule the Actions runner), unlike the old design where a background thread started instantly.
-- **DOCX page numbers still work.** GitHub Actions' `ubuntu-latest` runners are full VMs — LibreOffice installs and runs there exactly like it did in the Docker/local versions. This was the one piece that genuinely couldn't run on Vercel itself.
-- **Deleting a division is permanent.** Supabase's `ON DELETE CASCADE` removes all its sites, keywords, and historical results immediately — there's no "data preserved on disk" safety net like the local-file version had. The dashboard still confirms before deleting, but there's no undo.
 
 ## Known limitations (carried over from the core scanning logic)
 

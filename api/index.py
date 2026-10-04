@@ -1,13 +1,10 @@
 """
-Web dashboard for Bid Scout — Vercel + Supabase edition.
+Web dashboard for Bid Scout — self-hosted Docker + Supabase edition.
 
-This is a stateless Flask app (a single Vercel serverless function). It does
-NOT run the scan itself and does NOT schedule anything in-process — Vercel
-functions don't stay running between requests, so there's nothing for an
-in-process scheduler (APScheduler) to live inside. Scheduling is handled
-entirely by .github/workflows/daily-scan.yml (a daily GitHub Actions cron);
-this app only reads/writes Supabase and, for "Run Now", asks GitHub to run
-that same workflow immediately via its API.
+This Flask app itself does NOT run the scan or schedule anything — that
+lives in scanner_service.py, a separate always-on container reachable at
+SCANNER_URL. This app only reads/writes Supabase and, for "Run Now"/
+"Cancel scan", asks the scanner service to start/stop scraper.py.
 
 Routes:
   GET  /                                    the dashboard page
@@ -28,17 +25,17 @@ Routes:
   DEL  /api/<division_id>/keywords            remove one keyword (?keyword=…) or all of them
   GET  /api/<division_id>/status             latest run status
   POST /api/<division_id>/cancel-scan        cancel the running scan
-  POST /api/<division_id>/run-now            trigger the GitHub Actions workflow now
+  POST /api/<division_id>/run-now            tell the local scan worker to start now
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
 
-Every route that touches Supabase or GitHub's API does one or two quick
-network calls and returns — well within Vercel Hobby's ~10s function
-duration limit, which is exactly why the actual scanning work (which can
-easily take minutes) does NOT happen here.
+Every route that touches Supabase or the scan worker does one or two quick
+network calls and returns almost immediately — the actual scanning work
+(which can easily take minutes) happens in scanner_service.py's own process,
+not here.
 """
 
 import os
@@ -47,20 +44,20 @@ import re
 import requests
 from datetime import datetime, timezone, timedelta
 
-# A scan_runs row can be left showing status='running' forever if the GitHub
-# Actions job that owns it is killed without warning — it hits the workflow's
-# timeout-minutes cap, the runner OOMs, or the process gets SIGKILLed — so
-# _scan_division's finish_run() never executes. The workflow caps a job at
-# 120 min, so any "running" row older than this is definitely dead, not slow;
-# the status endpoint reports those as a failed run instead of a live one so
-# the dashboard stops showing a phantom "Checking …" indefinitely.
+# A scan_runs row can be left showing status='running' forever if the scanner
+# container's scraper.py subprocess is killed without warning (OOM, host
+# restart, docker kill) — _scan_division's finish_run() never executes. Any
+# "running" row older than this is definitely dead, not slow; the status
+# endpoint reports those as a failed run instead of a live one so the
+# dashboard stops showing a phantom "Checking …" indefinitely.
 STALE_RUN_AFTER = timedelta(minutes=150)
 
 from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-import pypdf
-from docx import Document as DocxDocument
+
+# openpyxl / pypdf / python-docx are only needed by the xlsx download and
+# keyword-upload routes, so they're imported lazily inside those functions
+# instead of here — every other request (including the dashboard's frequent
+# status polling) would otherwise pay to load all three on every cold start.
 
 import supabase_store
 import adapters
@@ -76,9 +73,10 @@ COLUMN_HEADERS = [
     "Matched Keywords", "Match Count", "AI Notes",
 ]
 
-# Purely informational — the actual schedule lives in
-# .github/workflows/daily-scan.yml. Shown in the dashboard so it's not a
-# mystery where/when scans run. Update both places together if you change it.
+# This is the actual schedule the scanner container runs on (see
+# scanner_service.py) — also shown in the dashboard so it's not a mystery
+# where/when scans run. Set via self-host/.env; the app and scanner read the
+# same env var, so there's only one place to change it.
 DISPLAY_SCHEDULE_UTC = os.environ.get("DISPLAY_SCHEDULE_UTC", "06:41 UTC")
 
 
@@ -386,9 +384,11 @@ def _extract_text_for_keywords(file_bytes, filename):
     text, not per-page layout — keeps the Vercel function bundle smaller."""
     lower = filename.lower()
     if lower.endswith(".pdf"):
+        import pypdf
         reader = pypdf.PdfReader(io.BytesIO(file_bytes))
         return "\n".join((page.extract_text() or "") for page in reader.pages)
     elif lower.endswith(".docx"):
+        from docx import Document as DocxDocument
         doc = DocxDocument(io.BytesIO(file_bytes))
         return "\n".join(p.text for p in doc.paragraphs)
     return None
@@ -544,27 +544,13 @@ def api_status(division_id):
     })
 
 
-def _github_cfg():
-    """(headers, api_base, workflow_file, ref) or (None, error_response)."""
-    token = os.environ.get("GITHUB_TOKEN")
-    owner = os.environ.get("GITHUB_OWNER")
-    repo = os.environ.get("GITHUB_REPO")
-    if not (token and owner and repo):
+def _scanner_url():
+    url = os.environ.get("SCANNER_URL")
+    if not url:
         return None, (jsonify({
-            "error": "GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO not configured on this Vercel "
-                     "project — can't talk to the GitHub Actions workflow. See README.md."
+            "error": "SCANNER_URL is not configured — can't reach the local scan worker. See README.md."
         }), 500)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    return (
-        headers,
-        f"https://api.github.com/repos/{owner}/{repo}",
-        os.environ.get("GITHUB_WORKFLOW_FILE", "daily-scan.yml"),
-        os.environ.get("GITHUB_REF", "main"),
-    ), None
+    return url.rstrip("/"), None
 
 
 @app.route("/api/<division_id>/run-now", methods=["POST"])
@@ -573,34 +559,19 @@ def api_run_now(division_id):
     if err:
         return err
 
-    cfg, cfg_err = _github_cfg()
+    base, cfg_err = _scanner_url()
     if cfg_err:
         return cfg_err
-    gh_headers, base, workflow_file, ref = cfg
-    owner = base.rsplit("/", 2)[-2]
-    repo = base.rsplit("/", 1)[-1]
-    url = f"{base}/actions/workflows/{workflow_file}/dispatches"
     try:
-        resp = requests.post(
-            url, headers=gh_headers,
-            json={"ref": ref, "inputs": {"division_id": division_id}},
-            timeout=8,
-        )
+        resp = requests.post(f"{base}/run-now", json={"division_id": division_id}, timeout=8)
     except requests.RequestException as e:
-        return jsonify({"error": f"Failed to reach GitHub: {e}"}), 502
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 502
 
     if resp.status_code < 300:
         return jsonify({"ok": True})
-
-    # Non-2xx: figure out *which* part is wrong so the message is actionable.
-    if resp.status_code == 404:
-        detail = _diagnose_dispatch_404(base, workflow_file, gh_headers)
-        return jsonify({"error": (
-            f"GitHub couldn't run the workflow (404). Resolved to "
-            f"owner='{owner}', repo='{repo}', workflow='{workflow_file}', ref='{ref}'. {detail}"
-        )}), 502
-
-    return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 502
+    if resp.status_code == 409:
+        return jsonify({"error": "A scan is already running."}), 409
+    return jsonify({"error": f"Scan worker error {resp.status_code}: {resp.text}"}), 502
 
 
 @app.route("/api/<division_id>/cancel-scan", methods=["POST"])
@@ -610,64 +581,21 @@ def api_cancel_scan(division_id):
         return err
 
     # Mark this division's running scan as cancelled so the dashboard clears
-    # even if the GitHub call below fails or the runner is already gone.
+    # even if the scan worker call below fails or the process is already gone.
     run = supabase_store.get_latest_run(division_id)
     if run and run.get("status") == "running":
         supabase_store.finish_run(run["id"], "cancelled")
 
-    cfg, cfg_err = _github_cfg()
+    base, cfg_err = _scanner_url()
     if cfg_err:
         return cfg_err
-    gh_headers, base, workflow_file, _ = cfg
-
-    # Cancel every in-progress / queued run of the scan workflow. (workflow_
-    # dispatch doesn't hand back a run id, and there's usually only one scan
-    # in flight, so cancelling all of them is the pragmatic move.)
-    cancelled = 0
     try:
-        for state in ("in_progress", "queued"):
-            r = requests.get(
-                f"{base}/actions/workflows/{workflow_file}/runs",
-                headers=gh_headers, params={"status": state, "per_page": 20}, timeout=8,
-            )
-            if not r.ok:
-                continue
-            for wr in r.json().get("workflow_runs", []):
-                c = requests.post(f"{base}/actions/runs/{wr['id']}/cancel",
-                                  headers=gh_headers, timeout=8)
-                if c.status_code in (202, 409):  # 409 = already completing
-                    cancelled += 1
+        requests.post(f"{base}/cancel", timeout=8)
     except requests.RequestException as e:
-        return jsonify({"ok": True, "cancelled": cancelled,
-                        "warning": f"marked cancelled, but reaching GitHub failed: {e}"})
+        return jsonify({"ok": True,
+                        "warning": f"marked cancelled, but reaching the scan worker failed: {e}"})
 
-    return jsonify({"ok": True, "cancelled": cancelled})
-
-
-def _diagnose_dispatch_404(base, workflow_file, gh_headers):
-    """A workflow_dispatch 404 can mean: repo not found / token can't see it,
-    the workflow file isn't on the repo, or its name is misspelled. Probe to
-    say which."""
-    try:
-        r = requests.get(base, headers=gh_headers, timeout=6)
-        if r.status_code == 404:
-            return ("The repo isn't visible to this token — check GITHUB_OWNER/GITHUB_REPO "
-                    "and that GITHUB_TOKEN has access (a fine-grained token needs this repo "
-                    "selected, with Actions: read & write).")
-        if r.status_code == 401:
-            return "GITHUB_TOKEN is invalid or expired."
-        wr = requests.get(f"{base}/actions/workflows", headers=gh_headers, timeout=6)
-        if wr.ok:
-            names = sorted(w["path"].split("/")[-1] for w in wr.json().get("workflows", []))
-            if workflow_file not in names:
-                have = ", ".join(names) or "none"
-                return (f"No workflow file named '{workflow_file}' on the default branch. "
-                        f"Workflows present: {have}. Set GITHUB_WORKFLOW_FILE to one of those.")
-            return ("The workflow exists but the dispatch still 404'd — check GITHUB_REF names a "
-                    "real branch and GITHUB_TOKEN has Actions: write.")
-    except requests.RequestException:
-        pass
-    return "Check GITHUB_OWNER, GITHUB_REPO, GITHUB_WORKFLOW_FILE, GITHUB_REF and the token's scopes."
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -787,8 +715,6 @@ def _unique_sheet_name(name, used):
     return candidate
 
 
-JOB_BAND_FILL = PatternFill("solid", fgColor="F2F2F2")
-HEADER_FILL = PatternFill("solid", fgColor="D9DEE8")
 DATA_FONT_SIZE = 10
 # Columns short enough that wrapping would only ever waste vertical space —
 # everything else (Site, Filename, Matched Keywords, AI Notes) can genuinely
@@ -810,10 +736,14 @@ def _run_date_only(value):
 
 
 def _write_matches_sheet(ws, rows, bid_dates):
+    from openpyxl.styles import Font, Alignment, PatternFill
+    job_band_fill = PatternFill("solid", fgColor="F2F2F2")
+    header_fill = PatternFill("solid", fgColor="D9DEE8")
+
     ws.append(COLUMN_HEADERS)
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True, size=11)
-        cell.fill = HEADER_FILL
+        cell.fill = header_fill
         cell.alignment = Alignment(vertical="center")
     ws.row_dimensions[1].height = 20
     # Matched Keywords gets the lion's share of the extra room — it's the
@@ -861,12 +791,14 @@ def _write_matches_sheet(ws, rows, bid_dates):
             if band:
                 for r2 in range(job_start, row_idx):
                     for c2 in range(1, len(COLUMN_HEADERS) + 1):
-                        ws.cell(row=r2, column=c2).fill = JOB_BAND_FILL
+                        ws.cell(row=r2, column=c2).fill = job_band_fill
             band = not band
             job_start = row_idx
 
 
 def _build_results_workbook(division_id, division_name):
+    from openpyxl import Workbook
+
     # The download is a worklist — only documents that hit a keyword, and only
     # for projects the source site still lists. "No match" / "Download failed"
     # / closed projects stay visible in the dashboard but aren't exported.
@@ -988,6 +920,7 @@ def download_results(division_id):
     )
 
 
-# Local testing only — Vercel itself calls `app` directly, never __main__.
+# Local testing only — the Docker image runs this under gunicorn instead,
+# which imports `app` directly and never hits __main__.
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

@@ -1,0 +1,21 @@
+# The scan worker. Long-running — runs scanner_service.py, which launches
+# scraper.py as a subprocess on demand and on a daily schedule (replaces
+# .github/workflows/daily-scan.yml). Chromium + LibreOffice are baked in at
+# build time instead of installed lazily per-run, since this container
+# stays alive rather than being a disposable GitHub Actions runner.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-writer \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-scan.txt .
+RUN pip install --no-cache-dir -r requirements-scan.txt \
+    && playwright install --with-deps chromium
+
+COPY . .
+
+EXPOSE 9100
+CMD ["python", "scanner_service.py"]
