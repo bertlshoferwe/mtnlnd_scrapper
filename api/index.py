@@ -983,14 +983,24 @@ def api_proxy_pdf(division_id):
     except requests.RequestException as e:
         abort(502, description=f"couldn't fetch the file: {e}")
 
+    content_length = upstream.headers.get("Content-Length")
+    if content_length and int(content_length) > PROXY_MAX_BYTES:
+        upstream.close()
+        abort(502, description=f"file is too large to preview "
+              f"({int(content_length) // (1024 * 1024)}MB, limit {PROXY_MAX_BYTES // (1024 * 1024)}MB)")
+
     filename = _filename_from(target)
 
     def stream():
+        # No (or an under-reported) Content-Length means we only find out
+        # it's oversized mid-stream — raising here (instead of a clean
+        # `break`) drops the connection so the client sees a failed fetch,
+        # not a truncated file that looks like a short-but-valid PDF.
         total = 0
         for chunk in upstream.iter_content(65536):
             total += len(chunk)
             if total > PROXY_MAX_BYTES:
-                break
+                raise RuntimeError(f"file exceeded {PROXY_MAX_BYTES} bytes mid-stream")
             yield chunk
 
     return Response(stream(), mimetype="application/pdf", headers={

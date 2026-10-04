@@ -1304,8 +1304,10 @@ async function renderPdf(src, targetPage) {
     scrollEl.addEventListener('scroll', onPdfScroll, { passive: true });
   } catch (err) {
     if (token !== pdfRenderToken) return;
+    console.error('PDF preview failed:', err);
+    const reason = err && err.message ? ' (' + err.message + ')' : '';
     statusEl.innerHTML =
-      "Couldn't display this PDF here — <a href='" + src +
+      "Couldn't display this PDF here" + reason + " — <a href='" + src +
       "' target='_blank' rel='noopener'>open it in your browser</a>.";
   }
 }
