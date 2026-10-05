@@ -7,6 +7,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Unbuffered stdout/stderr: scraper.py runs as a subprocess of scanner_service.py
+# (not a TTY), so without this Python block-buffers its print() output — meaning
+# `docker logs -f` can look completely frozen for minutes while a scan is
+# actually running fine, only flushing once the buffer fills.
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
