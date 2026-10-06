@@ -33,6 +33,7 @@ Routes:
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
   POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars)
+  POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
 
@@ -842,6 +843,40 @@ def api_add_project_to_jira(division_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"})
+
+
+@app.route("/api/<division_id>/projects/jira/verify", methods=["POST"])
+def api_verify_project_jira(division_id):
+    """Check whether a previously-filed Jira issue still exists (it may have
+    been deleted on the Jira side since). Body: {"project_key", "jira_key"}.
+    If Jira reports it gone (404), clears the stored jira_key so the
+    dashboard's button reverts to "Add to Jira". Any other outcome (Jira
+    unreachable, not configured, auth error) leaves the stored key alone —
+    a transient failure here shouldn't make a real link disappear."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    jira_key = (data.get("jira_key") or "").strip()
+    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN) or not key or not jira_key:
+        return jsonify({"exists": True})
+    try:
+        resp = requests.get(
+            f"{JIRA_BASE_URL}/rest/api/3/issue/{jira_key}",
+            params={"fields": "summary"},
+            auth=(JIRA_EMAIL, JIRA_API_TOKEN),
+            timeout=10,
+        )
+    except requests.RequestException:
+        return jsonify({"exists": True})
+    if resp.status_code == 404:
+        try:
+            supabase_store.set_project_jira_key(division_id, key, None)
+        except ValueError:
+            pass
+        return jsonify({"exists": False})
+    return jsonify({"exists": True})
 
 
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")

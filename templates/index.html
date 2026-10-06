@@ -2688,6 +2688,7 @@ function openProjectModal(i) {
 
   renderProjectDoneBtn(p);
   renderProjectJiraBtn(p);
+  verifyProjectJira(p);
 
   renderProjectFiles();
 
@@ -2876,6 +2877,25 @@ function renderProjectJiraBtn(p) {
   const label = document.getElementById('projectJiraLabel');
   btn.classList.toggle('is-linked', !!p.jira_key);
   label.textContent = p.jira_key ? 'View in Jira (' + p.jira_key + ')' : 'Add to Jira';
+}
+
+// Called every time a project's modal opens, if it has a stored jira_key —
+// confirms the issue hasn't been deleted on the Jira side since. Reverts
+// the button to "Add to Jira" if it's gone; silently does nothing otherwise
+// (including if Jira is unreachable) so a network blip can't drop a real link.
+async function verifyProjectJira(p) {
+  if (!p.jira_key) return;
+  try {
+    const res = await api('/api/' + currentDivision + '/projects/jira/verify', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, jira_key: p.jira_key }),
+    });
+    if (!res.exists && currentProject === p) {
+      p.jira_key = null;
+      p.jira_url = null;
+      renderProjectJiraBtn(p);
+    }
+  } catch (e) { /* ignore — leave the button as-is */ }
 }
 
 async function addProjectToJira() {
