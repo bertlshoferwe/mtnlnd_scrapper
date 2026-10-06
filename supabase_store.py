@@ -908,6 +908,35 @@ def save_project_bid_dates(division_id, mapping):
         print(f"  ! couldn't save bid dates ({e})")
 
 
+def load_project_jira_keys(division_id):
+    """{project_key: 'GEO-23'} for projects already filed to Jira (via "Add
+    to Jira"). Empty if the column/table isn't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,jira_key")
+            .eq("division_id", division_id).execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: r["jira_key"] for r in res.data if r.get("jira_key")}
+
+
+def set_project_jira_key(division_id, project_key, jira_key):
+    """Record the Jira issue key created for a project. Raises ValueError
+    with a migration hint if the column is missing."""
+    try:
+        get_client().table("project_flags").upsert({
+            "division_id": division_id,
+            "project_key": project_key,
+            "jira_key": jira_key,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        raise ValueError(
+            "couldn't save — add the jira_key column from schema.sql"
+        ) from e
+
+
 def load_project_bid_times(division_id):
     """{project_key: raw display string} (e.g. '10:00am MT') for projects
     whose source portal shows a time alongside the bid-opening date — so far
@@ -1054,6 +1083,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     done_keys = load_done_projects(division_id)
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
+    jira_keys = load_project_jira_keys(division_id)
     docs_ack = load_docs_ack(division_id)
     # "New" badge visibility window — a match stops counting as new after
     # this long even if it's never acknowledged via "Mark done".
@@ -1123,6 +1153,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "closed": closed, "overdue": overdue, "last_seen_at": last_seen,
             "bid_date": bid_date,
             "bid_time": bid_times.get(site_key),
+            "jira_key": jira_keys.get(site_key),
             "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })

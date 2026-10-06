@@ -32,6 +32,7 @@ Routes:
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
   POST /api/<division_id>/projects/done      mark a project done / not done
+  POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars)
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
 
@@ -101,6 +102,19 @@ def _schedule_hm(text):
 
 
 SCHEDULE_UTC_HM = _schedule_hm(DISPLAY_SCHEDULE_UTC)
+
+# "Add to Jira" button — files a project as an issue via the Jira Cloud REST
+# API. JIRA_BASE_URL is the site root (e.g. https://yourteam.atlassian.net),
+# JIRA_EMAIL + JIRA_API_TOKEN are Basic-auth credentials for a Jira Cloud API
+# token (https://id.atlassian.com/manage-profile/security/api-tokens), and
+# JIRA_PROJECT_KEY is the target project's short key (e.g. "GEO"). New
+# issues land wherever the project's workflow puts a freshly-created issue
+# (its board's leftmost column) — nothing here sets status explicitly.
+JIRA_BASE_URL = (os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
+JIRA_EMAIL = os.environ.get("JIRA_EMAIL") or ""
+JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN") or ""
+JIRA_PROJECT_KEY = os.environ.get("JIRA_PROJECT_KEY") or ""
+JIRA_ISSUE_TYPE = os.environ.get("JIRA_ISSUE_TYPE") or "Task"
 
 
 def _require_division(division_id):
@@ -778,6 +792,56 @@ def api_set_project_done(division_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/projects/jira", methods=["POST"])
+def api_add_project_to_jira(division_id):
+    """File a project as a Jira issue. Body: {"project_key", "summary",
+    "due_date"}. project_key is the internal scan_results.site value (used
+    to remember the created issue); summary/due_date become the issue's
+    summary/due date. Returns the created issue's key + browse URL."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN and JIRA_PROJECT_KEY):
+        return jsonify({"error": "Jira isn't configured — set JIRA_BASE_URL, "
+                                  "JIRA_EMAIL, JIRA_API_TOKEN and JIRA_PROJECT_KEY."}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    summary = (data.get("summary") or "").strip()
+    if not key or not summary:
+        return jsonify({"error": "project_key and summary are required"}), 400
+    fields = {
+        "project": {"key": JIRA_PROJECT_KEY},
+        "summary": summary,
+        "issuetype": {"name": JIRA_ISSUE_TYPE},
+    }
+    due_date = (data.get("due_date") or "").strip()
+    if due_date:
+        fields["duedate"] = due_date
+    try:
+        resp = requests.post(
+            f"{JIRA_BASE_URL}/rest/api/3/issue",
+            auth=(JIRA_EMAIL, JIRA_API_TOKEN),
+            json={"fields": fields},
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        return jsonify({"error": f"couldn't reach Jira: {e}"}), 502
+    if not resp.ok:
+        detail = resp.text
+        try:
+            body = resp.json()
+            detail = "; ".join(body.get("errorMessages") or []) or str(body.get("errors") or body)
+        except Exception:
+            pass
+        return jsonify({"error": f"Jira error: {detail}"}), 502
+    issue_key = resp.json().get("key")
+    try:
+        supabase_store.set_project_jira_key(division_id, key, issue_key)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"})
 
 
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")

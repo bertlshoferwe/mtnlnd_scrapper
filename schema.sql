@@ -138,6 +138,11 @@ create table if not exists project_flags (
   -- _scan_results_page) instead of re-fetching all ~700+ scoped projects
   -- from scratch every single run.
   cc_last_updated text,
+  -- The Jira issue key created for this project via "Add to Jira" (e.g.
+  -- "GEO-23"), or NULL if it hasn't been filed. Set once and never cleared
+  -- automatically, so the dashboard button can switch to "View in Jira"
+  -- instead of letting a project be filed twice.
+  jira_key text,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -147,6 +152,7 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists docs_ack_through timestamptz;
 --   alter table project_flags add column if not exists bid_time text;
 --   alter table project_flags add column if not exists cc_last_updated text;
+--   alter table project_flags add column if not exists jira_key text;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (

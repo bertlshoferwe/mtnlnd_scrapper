@@ -189,6 +189,9 @@
   .done-btn.is-done {
     background: var(--success-soft); border-color: var(--success); color: var(--success);
   }
+  .done-btn.is-linked {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text);
+  }
   .done-btn:disabled { opacity: .5; cursor: default; }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
@@ -1066,6 +1069,7 @@
       <div class="row" style="gap:8px; margin-bottom:16px; flex-wrap:wrap;">
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
         <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
+        <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; margin-left:auto;">
           <input type="checkbox" id="hideNoMatchFiles" checked style="width:auto;" onchange="renderProjectFiles()">
           Hide non-matching files
@@ -2683,6 +2687,7 @@ function openProjectModal(i) {
   else { link.style.display = 'none'; }
 
   renderProjectDoneBtn(p);
+  renderProjectJiraBtn(p);
 
   renderProjectFiles();
 
@@ -2859,6 +2864,34 @@ async function toggleProjectDone() {
     }
     renderProjectDoneBtn(p);
     loadProjects();  // reflect the check + re-sort in the list behind the modal
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderProjectJiraBtn(p) {
+  const btn = document.getElementById('projectJiraBtn');
+  const label = document.getElementById('projectJiraLabel');
+  btn.classList.toggle('is-linked', !!p.jira_key);
+  label.textContent = p.jira_key ? 'View in Jira (' + p.jira_key + ')' : 'Add to Jira';
+}
+
+async function addProjectToJira() {
+  const p = currentProject;
+  if (!p) return;
+  if (p.jira_key) { window.open(p.jira_url || '#', '_blank'); return; }
+  const btn = document.getElementById('projectJiraBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/' + currentDivision + '/projects/jira', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, summary: p.project, due_date: p.bid_date }),
+    });
+    p.jira_key = res.jira_key;
+    p.jira_url = res.jira_url;
+    renderProjectJiraBtn(p);
   } catch (e) {
     alert(e.message);
   } finally {
