@@ -30,7 +30,7 @@ Routes:
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            tell the local scan worker to start now
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
-  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed)
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, done)
   POST /api/<division_id>/projects/done      mark a project done / not done
   POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars)
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
@@ -761,6 +761,7 @@ def api_get_results_grouped(division_id):
     include_closed = request.args.get("include_closed") in ("1", "true")
     updated_only = request.args.get("updated") in ("1", "true")
     new_only = request.args.get("new") in ("1", "true")
+    done_only = request.args.get("done") in ("1", "true")
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(100, int(request.args.get("page_size", 15))))
@@ -771,7 +772,7 @@ def api_get_results_grouped(division_id):
         division_id, search=search or None, status=status or None, site=site or None,
         keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
         include_closed=include_closed, updated_only=updated_only, new_only=new_only,
-        page=page, page_size=page_size,
+        done_only=done_only, page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "updated_total": updated_total, "new_total": new_total,

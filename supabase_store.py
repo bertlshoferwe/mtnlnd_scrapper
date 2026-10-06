@@ -1030,7 +1030,8 @@ def _fetch_all_scan_results(division_id, columns="*"):
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
-                        updated_only=False, new_only=False, page=1, page_size=15):
+                        updated_only=False, new_only=False, done_only=False,
+                        page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -1190,6 +1191,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects = [p for p in projects if p["updated"]]
     if new_only:
         projects = [p for p in projects if p["is_new"]]
+    if done_only:
+        projects = [p for p in projects if p["done"]]
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if keyword:

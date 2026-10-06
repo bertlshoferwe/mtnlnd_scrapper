@@ -835,6 +835,10 @@
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   Show closed projects
                 </button>
+                <button type="button" class="fm-toggle" id="fmDoneToggle" onclick="toggleDoneFilter()">
+                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  Done projects only
+                </button>
               </div>
             </div>
             <div class="fm-group" id="filterKeywordGroup" hidden>
@@ -1536,6 +1540,7 @@ function switchDivision(id) {
   currentResultsClosed = false;
   currentResultsUpdated = false;
   currentResultsNew = false;
+  currentResultsDone = false;
   currentResultsSort = 'flagged';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
@@ -2343,6 +2348,7 @@ let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
 let currentResultsUpdated = false;  // "New documents only" toggle
 let currentResultsNew = false;      // "New projects only" toggle
+let currentResultsDone = false;     // "Done projects only" toggle
 let currentResultsSort = 'flagged'; // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
@@ -2475,6 +2481,7 @@ async function loadProjects() {
   if (currentResultsClosed) params.set('include_closed', '1');
   if (currentResultsUpdated) params.set('updated', '1');
   if (currentResultsNew) params.set('new', '1');
+  if (currentResultsDone) params.set('done', '1');
   if (currentResultsSort && currentResultsSort !== 'flagged') params.set('sort', currentResultsSort);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
@@ -2488,8 +2495,8 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || (status && status !== 'Matched')) {
-    empty.textContent = 'No projects match that filter.';
+  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || currentResultsDone || (status && status !== 'Matched')) {
+    empty.textContent = currentResultsDone ? 'No done projects yet.' : 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
   } else {
@@ -3088,6 +3095,16 @@ function toggleClosedFilter() {
   syncFilterUI();
   loadProjects();
 }
+function toggleDoneFilter() {
+  currentResultsDone = !currentResultsDone;
+  // A done project can have any match status, not just "Matched" — switch
+  // to "All projects" so turning this on actually shows every done project,
+  // not just the ones still flagged.
+  if (currentResultsDone) document.getElementById('resultsStatusFilter').value = '';
+  resultsPage = 1;
+  syncFilterUI();
+  loadProjects();
+}
 function toggleUpdatedFilter() {
   currentResultsUpdated = !currentResultsUpdated;
   if (currentResultsUpdated) currentResultsNew = false; // mutually exclusive
@@ -3142,11 +3159,12 @@ function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
   const anyFilter = status !== 'Matched' || !!currentResultsKeyword
-    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew;
+    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || currentResultsDone;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
   document.getElementById('fmUpdatedToggle').classList.toggle('on', currentResultsUpdated);
   document.getElementById('fmNewToggle').classList.toggle('on', currentResultsNew);
+  document.getElementById('fmDoneToggle').classList.toggle('on', currentResultsDone);
   const badge = document.getElementById('updatesBadge');
   if (badge) badge.classList.toggle('on', currentResultsUpdated);
   const newBadge = document.getElementById('newBadge');
