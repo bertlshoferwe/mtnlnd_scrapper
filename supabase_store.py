@@ -1030,7 +1030,7 @@ def _fetch_all_scan_results(division_id, columns="*"):
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
-                        updated_only=False, new_only=False, done_only=False,
+                        updated_only=False, new_only=False, done_filter=None,
                         page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
@@ -1191,8 +1191,10 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects = [p for p in projects if p["updated"]]
     if new_only:
         projects = [p for p in projects if p["is_new"]]
-    if done_only:
+    if done_filter is True:
         projects = [p for p in projects if p["done"]]
+    elif done_filter is False:
+        projects = [p for p in projects if not p["done"]]
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if keyword:
@@ -1222,8 +1224,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             except ValueError:
                 pass
 
-    # A bid-date window with no explicit sort implies "soonest first".
-    if not sort and bid_window and bid_window != "none":
+    # Default sort is bid date, soonest first — matches the dashboard's
+    # default "Bid date — soonest" selection.
+    if not sort:
         sort = "bid"
 
     if sort == "bid":
@@ -1234,8 +1237,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     elif sort == "name":
         projects.sort(key=lambda p: p["project"].lower())
-    else:  # "flagged" (default): projects with new docs first, then matched,
-           # then most-recently-scanned
+    elif sort == "flagged":  # projects with new docs first, then matched,
+                             # then most-recently-scanned
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
         projects.sort(key=lambda p: (
             0 if p["status"] == "Matched" else 1,

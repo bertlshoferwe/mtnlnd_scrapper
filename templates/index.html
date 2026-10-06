@@ -168,23 +168,32 @@
   .btn-danger:hover { background: var(--danger-soft); }
   .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
   .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+  .project-actions-row {
+    gap: 6px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
   .ext-link {
-    display: none; align-items: center; gap: 7px; width: fit-content;
-    margin-bottom: 16px; padding: 7px 13px;
+    display: none; align-items: center; gap: 6px; width: fit-content;
+    flex-shrink: 0; margin-bottom: 0; padding: 7px 10px;
     background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px;
     color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+    white-space: nowrap;
     transition: border-color .12s, color .12s;
   }
   .ext-link:hover { border-color: var(--accent); color: var(--accent); }
   .ext-link svg { width: 14px; height: 14px; flex-shrink: 0; }
   .done-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 7px 13px; border-radius: 8px; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+    padding: 7px 10px; border-radius: 8px; font-family: inherit; white-space: nowrap;
     background: var(--surface-2); border: 1px solid var(--border-strong);
     color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
     transition: border-color .12s, color .12s, background .12s;
   }
   .done-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .hide-nomatch-toggle {
+    display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+    font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap;
+    margin-left: auto; padding-left: 10px;
+  }
   .done-btn:hover { border-color: var(--success); color: var(--success); }
   .done-btn.is-done {
     background: var(--success-soft); border-color: var(--success); color: var(--success);
@@ -454,6 +463,29 @@
   .site-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .site-tab .rtab-count { margin-left: 6px; font-weight: 500; opacity: .55; font-size: 12px; }
   .site-tab.active .rtab-count { opacity: .85; }
+
+  /* Folder-style tabs: each tab is a rounded-top box sitting on the
+     baseline; the active one's bottom border is painted the same color as
+     the card so it visually merges into the content below, like a raised
+     folder tab. */
+  .view-tabs {
+    display: flex; gap: 6px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .view-tab {
+    font-family: inherit; cursor: pointer;
+    padding: 9px 18px; margin-bottom: -1px;
+    font-size: 13px; font-weight: 700; color: var(--muted);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 10px 10px 0 0;
+    transition: color .12s, background .12s;
+  }
+  .view-tab:hover { color: var(--text); }
+  .view-tab.active {
+    color: var(--text); background: var(--card);
+    border-color: var(--border); border-bottom-color: var(--card);
+  }
 
   /* Results: one row per project. The status filter lives in the filter-menu
      (every width) — <select> is just a hidden state holder, never shown
@@ -822,7 +854,6 @@
                 <button type="button" data-val="Matched" onclick="pickFilter(this)">Flagged only</button>
                 <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
                 <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
-                <button type="button" data-val="Download failed" onclick="pickFilter(this)">Download issues</button>
                 <button type="button" class="fm-toggle" id="fmNewToggle" onclick="toggleNewFilter()">
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   New projects only
@@ -834,10 +865,6 @@
                 <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   Show closed projects
-                </button>
-                <button type="button" class="fm-toggle" id="fmDoneToggle" onclick="toggleDoneFilter()">
-                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                  Done projects only
                 </button>
               </div>
             </div>
@@ -880,6 +907,11 @@
       </div>
     </div>
 
+    <div class="view-tabs" role="tablist" aria-label="Active vs. done projects">
+      <button type="button" class="view-tab" id="viewTabActive" role="tab" onclick="switchResultsView('active')">Active</button>
+      <button type="button" class="view-tab" id="viewTabDone" role="tab" onclick="switchResultsView('done')">Done</button>
+    </div>
+
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
       <div class="stat-tile stat-tile-primary">
         <div class="stat-label">Projects flagged</div>
@@ -900,7 +932,6 @@
         <option value="Matched" selected>Flagged only</option>
         <option value="">All projects</option>
         <option value="No match">No matches</option>
-        <option value="Download failed">Download issues</option>
       </select>
     </div>
 
@@ -1070,13 +1101,13 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="row" style="gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-        <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open project page</a>
+      <div class="row project-actions-row" style="margin-bottom:16px;">
+        <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Project page</a>
         <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
-        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; margin-left:auto;">
+        <label class="hide-nomatch-toggle">
           <input type="checkbox" id="hideNoMatchFiles" checked style="width:auto;" onchange="renderProjectFiles()">
-          Hide non-matching files
+          Hide non-matches
         </label>
       </div>
       <div id="projectModalFiles"></div>
@@ -1540,8 +1571,8 @@ function switchDivision(id) {
   currentResultsClosed = false;
   currentResultsUpdated = false;
   currentResultsNew = false;
-  currentResultsDone = false;
-  currentResultsSort = 'flagged';
+  currentResultsView = 'active';
+  currentResultsSort = 'bid';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = 'Matched';
   document.getElementById('keywordFilter').value = '';
@@ -1551,6 +1582,7 @@ function switchDivision(id) {
   closeSortMenu();
   syncFilterUI();
   syncSortUI();
+  syncViewTabs();
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('siteTabs').style.display = 'none';
@@ -2348,8 +2380,8 @@ let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
 let currentResultsUpdated = false;  // "New documents only" toggle
 let currentResultsNew = false;      // "New projects only" toggle
-let currentResultsDone = false;     // "Done projects only" toggle
-let currentResultsSort = 'flagged'; // flagged | bid | keywords | recent | name
+let currentResultsView = 'active';  // "active" | "done" — the folder tabs
+let currentResultsSort = 'bid';     // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
   if (!currentDivision) return;
@@ -2481,8 +2513,8 @@ async function loadProjects() {
   if (currentResultsClosed) params.set('include_closed', '1');
   if (currentResultsUpdated) params.set('updated', '1');
   if (currentResultsNew) params.set('new', '1');
-  if (currentResultsDone) params.set('done', '1');
-  if (currentResultsSort && currentResultsSort !== 'flagged') params.set('sort', currentResultsSort);
+  params.set('view', currentResultsView);
+  if (currentResultsSort && currentResultsSort !== 'bid') params.set('sort', currentResultsSort);
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
@@ -2495,8 +2527,10 @@ async function loadProjects() {
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || currentResultsDone || (status && status !== 'Matched')) {
-    empty.textContent = currentResultsDone ? 'No done projects yet.' : 'No projects match that filter.';
+  if (currentResultsView === 'done') {
+    empty.textContent = 'No done projects yet.';
+  } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || (status && status !== 'Matched')) {
+    empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
     empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
   } else {
@@ -3050,7 +3084,7 @@ function onSortOutside(e) {
   if (!wrap.contains(e.target)) closeSortMenu();
 }
 function pickSort(el) {
-  const v = el.dataset.sort || 'flagged';
+  const v = el.dataset.sort || 'bid';
   if (currentResultsSort !== v) {
     currentResultsSort = v;
     resultsPage = 1;
@@ -3061,9 +3095,9 @@ function pickSort(el) {
 }
 function syncSortUI() {
   document.querySelectorAll('#sortOptions button').forEach(function(b) {
-    b.classList.toggle('sel', (b.dataset.sort || 'flagged') === currentResultsSort);
+    b.classList.toggle('sel', (b.dataset.sort || 'bid') === currentResultsSort);
   });
-  document.getElementById('sortToggleBtn').classList.toggle('active', currentResultsSort !== 'flagged');
+  document.getElementById('sortToggleBtn').classList.toggle('active', currentResultsSort !== 'bid');
 }
 function pickFilter(el) {
   const sel = document.getElementById('resultsStatusFilter');
@@ -3095,15 +3129,21 @@ function toggleClosedFilter() {
   syncFilterUI();
   loadProjects();
 }
-function toggleDoneFilter() {
-  currentResultsDone = !currentResultsDone;
+function switchResultsView(view) {
+  if (view === currentResultsView) return;
+  currentResultsView = view;
   // A done project can have any match status, not just "Matched" — switch
-  // to "All projects" so turning this on actually shows every done project,
+  // to "All projects" so the Done tab actually shows every done project,
   // not just the ones still flagged.
-  if (currentResultsDone) document.getElementById('resultsStatusFilter').value = '';
+  if (view === 'done') document.getElementById('resultsStatusFilter').value = '';
   resultsPage = 1;
+  syncViewTabs();
   syncFilterUI();
   loadProjects();
+}
+function syncViewTabs() {
+  document.getElementById('viewTabActive').classList.toggle('active', currentResultsView === 'active');
+  document.getElementById('viewTabDone').classList.toggle('active', currentResultsView === 'done');
 }
 function toggleUpdatedFilter() {
   currentResultsUpdated = !currentResultsUpdated;
@@ -3159,12 +3199,11 @@ function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
   const anyFilter = status !== 'Matched' || !!currentResultsKeyword
-    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || currentResultsDone;
+    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
   document.getElementById('fmUpdatedToggle').classList.toggle('on', currentResultsUpdated);
   document.getElementById('fmNewToggle').classList.toggle('on', currentResultsNew);
-  document.getElementById('fmDoneToggle').classList.toggle('on', currentResultsDone);
   const badge = document.getElementById('updatesBadge');
   if (badge) badge.classList.toggle('on', currentResultsUpdated);
   const newBadge = document.getElementById('newBadge');
@@ -3243,6 +3282,7 @@ async function init() {
   localizeSchedule();
   syncFilterUI();
   syncSortUI();
+  syncViewTabs();
   document.getElementById('resultsPageSizeSelect').value = String(resultsPageSize);
   await loadAdapters();
   await loadDivisions();
