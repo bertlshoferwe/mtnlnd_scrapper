@@ -486,6 +486,16 @@
     color: var(--text); background: var(--card);
     border-color: var(--border); border-bottom-color: var(--card);
   }
+  /* Unlabeled stats toggle, parked at the far end of the tab bar — not a
+     feature anyone needs to find, just there for whoever already knows. */
+  .stats-peek {
+    margin-left: auto; align-self: center;
+    width: 10px; height: 10px; padding: 0; margin-bottom: -1px;
+    border: none; border-radius: 50%; background: var(--muted);
+    opacity: .1; cursor: pointer; transition: opacity .15s;
+  }
+  .stats-peek:hover { opacity: .4; }
+  .stats-peek.active { opacity: .6; }
 
   /* Results: one row per project. The status filter lives in the filter-menu
      (every width) — <select> is just a hidden state holder, never shown
@@ -910,6 +920,7 @@
     <div class="view-tabs" role="tablist" aria-label="Active vs. done projects">
       <button type="button" class="view-tab" id="viewTabActive" role="tab" onclick="switchResultsView('active')">Active</button>
       <button type="button" class="view-tab" id="viewTabDone" role="tab" onclick="switchResultsView('done')">Done</button>
+      <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
     </div>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
@@ -2380,6 +2391,18 @@ let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
 let currentResultsClosed = false;   // "Show closed projects" toggle
 let currentResultsUpdated = false;  // "New documents only" toggle
 let currentResultsNew = false;      // "New projects only" toggle
+
+// Flagged-count tiles are hidden by default — only the unlabeled dot at the
+// end of the Active/Done tabs reveals them, remembered per browser.
+function statsPeekEnabled() {
+  try { return localStorage.getItem('statsPeek') === '1'; } catch (e) { return false; }
+}
+function toggleStatsPeek() {
+  const on = !statsPeekEnabled();
+  try { localStorage.setItem('statsPeek', on ? '1' : '0'); } catch (e) {}
+  document.getElementById('statsPeekBtn').classList.toggle('active', on);
+  loadResultsInfo();
+}
 let currentResultsView = 'active';  // "active" | "done" — the folder tabs
 let currentResultsSort = 'bid';     // flagged | bid | keywords | recent | name
 
@@ -2415,7 +2438,7 @@ async function loadResultsInfo() {
   document.getElementById('statDocs').textContent = st.documents_matched || 0;
   document.getElementById('statDocsSub').textContent =
     'of ' + (st.documents_scanned || 0) + ' scanned';
-  statsRow.style.display = 'flex';
+  statsRow.style.display = statsPeekEnabled() ? 'flex' : 'none';
 
   renderKeywordFilterOptions(st.top_keywords || []);
 
@@ -3262,14 +3285,48 @@ function localizeSchedule() {
 // open on a screen all day shouldn't keep generating requests unattended.
 const POLL_ACTIVE_MS = 4000;
 const POLL_IDLE_MS = 30 * 60 * 1000;
+const POLL_RETRY_MS = 5000;
 let pollTimer = null;
+let needsFullReload = false;
+
+// Loads everything needed on first paint (or to recover after a failed
+// load): adapters, divisions, then the current division's sites/keywords/
+// status/results. A transient failure here (e.g. the backend restarting
+// mid-request) must not leave the page stuck — it flags needsFullReload so
+// the poll loop keeps retrying instead of silently dying.
+async function loadEverything() {
+  try {
+    await loadAdapters();
+    await loadDivisions();
+    await loadAllForCurrentDivision();
+    needsFullReload = false;
+    return true;
+  } catch (e) {
+    console.error('Load failed, will retry:', e);
+    needsFullReload = true;
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    if (dot) dot.className = 'status-dot error';
+    if (text) text.textContent = "Couldn't load — retrying…";
+    return false;
+  }
+}
 
 function schedulePoll() {
   clearTimeout(pollTimer);
   if (document.hidden) return;
-  const delay = (scanRunning || runPending()) ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+  const delay = needsFullReload ? POLL_RETRY_MS : ((scanRunning || runPending()) ? POLL_ACTIVE_MS : POLL_IDLE_MS);
   pollTimer = setTimeout(async function () {
-    await Promise.all([loadStatus(), loadResultsInfo()]);
+    if (needsFullReload || !currentDivision) {
+      await loadEverything();
+    } else {
+      try {
+        await Promise.all([loadStatus(), loadResultsInfo()]);
+      } catch (e) {
+        console.error('Poll failed, will retry:', e);
+        needsFullReload = true;
+      }
+    }
     schedulePoll();
   }, delay);
 }
@@ -3283,10 +3340,9 @@ async function init() {
   syncFilterUI();
   syncSortUI();
   syncViewTabs();
+  document.getElementById('statsPeekBtn').classList.toggle('active', statsPeekEnabled());
   document.getElementById('resultsPageSizeSelect').value = String(resultsPageSize);
-  await loadAdapters();
-  await loadDivisions();
-  await loadAllForCurrentDivision();
+  await loadEverything();
   schedulePoll();
 }
 

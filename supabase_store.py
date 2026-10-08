@@ -1036,12 +1036,14 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
     site_tabs, updated_total, new_total) where site_tabs is
-    [{"name", "count", "flagged"}] over ALL projects (unaffected by the
-    current filters), updated_total is the count of projects with an
-    unacknowledged "new document" notification, and new_total is the count
-    of matched projects still inside their "New" window (see
-    _is_new_project) — both counts are over every visible project, not just
-    the current page/filter.
+    [{"name", "count", "flagged"}] reflecting every other active filter
+    (status, search, keyword, bid window, done/active view, updated/new
+    toggles) but not the `site` filter itself — so each tab's count matches
+    what selecting it actually shows. updated_total is the count of projects
+    with an unacknowledged "new document" notification, and new_total is the
+    count of matched projects still inside their "New" window (see
+    _is_new_project) — both of those are global badge counts over every
+    visible project, not scoped to the current filters.
 
     Projects the source site no longer lists ("closed") are dropped unless
     include_closed is set, in which case each carries closed=True.
@@ -1164,22 +1166,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     if not include_closed:
         projects = [p for p in projects if not p["closed"]]
 
-    # Per-site tab list, computed over every (visible) project, before filters.
-    # Every project has a source_prefix in practice (every adapter sets one),
-    # so a project without one just isn't offered its own tab — it still
-    # shows up under "All sites".
-    site_tabs = {}
-    for p in projects:
-        name = p["source_prefix"]
-        if not name:
-            continue
-        t = site_tabs.setdefault(name, {"name": name, "count": 0, "flagged": 0})
-        t["count"] += 1
-        if p["status"] == "Matched":
-            t["flagged"] += 1
-    site_tabs = sorted(site_tabs.values(), key=lambda t: (-t["flagged"], t["name"].lower()))
-
-    # "New document" notifications outstanding, over every visible project.
+    # "New document" notifications outstanding, over every visible project —
+    # a global badge count, not scoped to the current filters.
     updated_total = sum(1 for p in projects if p["updated"])
     # Matched projects still inside their "New" window (see _is_new_project).
     now = datetime.now(timezone.utc)
@@ -1195,8 +1183,6 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects = [p for p in projects if p["done"]]
     elif done_filter is False:
         projects = [p for p in projects if not p["done"]]
-    if site:
-        projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
     if keyword:
         projects = [p for p in projects if keyword in p["keywords"]]
     if status:
@@ -1223,6 +1209,27 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
                             if p["bid_date"] and today <= p["bid_date"] <= end]
             except ValueError:
                 pass
+
+    # Per-site tab list, computed AFTER every other active filter (status,
+    # search, keyword, bid window, done/active view, updated/new toggles) so
+    # each tab's count matches what actually appears when it's selected —
+    # just not filtered by the site itself, since that's the choice being
+    # offered. Every project has a source_prefix in practice (every adapter
+    # sets one), so a project without one just isn't offered its own tab —
+    # it still shows up under "All sites".
+    site_tabs = {}
+    for p in projects:
+        name = p["source_prefix"]
+        if not name:
+            continue
+        t = site_tabs.setdefault(name, {"name": name, "count": 0, "flagged": 0})
+        t["count"] += 1
+        if p["status"] == "Matched":
+            t["flagged"] += 1
+    site_tabs = sorted(site_tabs.values(), key=lambda t: (-t["flagged"], t["name"].lower()))
+
+    if site:
+        projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
 
     # Default sort is bid date, soonest first — matches the dashboard's
     # default "Bid date — soonest" selection.
