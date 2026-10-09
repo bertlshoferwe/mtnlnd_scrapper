@@ -590,10 +590,16 @@
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
   .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .project-list .p-check { color: var(--success); flex-shrink: 0; display: inline-flex; }
+  .project-list .p-badges { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+  .project-list .p-check { color: var(--success); display: inline-flex; }
   .project-list .p-check svg { width: 16px; height: 16px; }
-  .project-list .p-jira { color: var(--accent); flex-shrink: 0; display: inline-flex; }
+  .project-list .p-jira { color: var(--accent); display: inline-flex; }
   .project-list .p-jira svg { width: 15px; height: 15px; }
+  /* Both badges at once: shrink so the stack stays close to one badge's
+     height instead of pushing the row taller. */
+  .project-list .p-badges.p-badges-two { gap: 1px; }
+  .project-list .p-badges-two .p-check svg,
+  .project-list .p-badges-two .p-jira svg { width: 9px; height: 9px; }
   .project-list li.p-done .p-name,
   .project-list li.p-done .p-count { opacity: .5; }
   .project-list li.p-done .pill { opacity: .55; }
@@ -645,6 +651,8 @@
     padding: 10px 8px; margin: -10px 0;  /* bigger touch target, no extra visual space */
   }
   .file-row .f-dl:hover { text-decoration: underline; }
+  .f-dl-icon { padding: 6px; margin: -6px 0; color: var(--muted); }
+  .f-dl-icon:hover { color: var(--accent); background: transparent; }
   .f-chevron {
     width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); transition: transform .15s;
     padding: 10px; margin: -10px;  /* bigger touch target, no extra visual space */
@@ -1637,6 +1645,7 @@ const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const ICON_JIRA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>';
 const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
 // The edit form is a single shared node: its home is at the top under the
@@ -2572,19 +2581,24 @@ async function loadProjects() {
     if (p.overdue) li.classList.add('p-overdue');
     li.onclick = function() { openProjectModal(i); };
 
-    if (p.done || p.reopened) {
-      const chk = document.createElement('span');
-      chk.className = 'p-check';
-      chk.title = p.reopened ? 'Was marked done — new document since' : 'Marked done';
-      chk.innerHTML = ICON_CHECK;
-      li.appendChild(chk);
-    }
-    if (p.jira_key) {
-      const jk = document.createElement('span');
-      jk.className = 'p-jira';
-      jk.title = 'Added to Jira (' + p.jira_key + ')';
-      jk.innerHTML = ICON_JIRA;
-      li.appendChild(jk);
+    if ((p.done || p.reopened) || p.jira_key) {
+      const badges = document.createElement('div');
+      badges.className = 'p-badges' + ((p.done || p.reopened) && p.jira_key ? ' p-badges-two' : '');
+      if (p.done || p.reopened) {
+        const chk = document.createElement('span');
+        chk.className = 'p-check';
+        chk.title = p.reopened ? 'Was marked done — new document since' : 'Marked done';
+        chk.innerHTML = ICON_CHECK;
+        badges.appendChild(chk);
+      }
+      if (p.jira_key) {
+        const jk = document.createElement('span');
+        jk.className = 'p-jira';
+        jk.title = 'Added to Jira (' + p.jira_key + ')';
+        jk.innerHTML = ICON_JIRA;
+        badges.appendChild(jk);
+      }
+      li.appendChild(badges);
     }
 
     const name = document.createElement('div');
@@ -2828,6 +2842,17 @@ function renderProjectFiles() {
       btn.textContent = 'View PDF';
       btn.onclick = function(e) { e.stopPropagation(); openPdfPreview(f.url, f.filename); };
       right.appendChild(btn);
+
+      const dlSrc = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(f.url) + '&download=1';
+      const dl = document.createElement('a');
+      dl.className = 'icon-btn f-dl-icon';
+      dl.href = dlSrc;
+      dl.title = 'Download';
+      dl.setAttribute('aria-label', 'Download ' + (f.filename || 'this file'));
+      if (f.filename) dl.setAttribute('download', f.filename);
+      dl.innerHTML = ICON_DOWNLOAD;
+      dl.onclick = function(e) { e.stopPropagation(); };
+      right.appendChild(dl);
     } else if (f.url && /^https?:/.test(f.url)) {
       const a = document.createElement('a');
       a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
