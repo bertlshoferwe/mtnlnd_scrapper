@@ -1231,7 +1231,19 @@ async function cancelScan() {
 }
 
 async function api(path, opts) {
-  const res = await fetch(path, opts);
+  // A hung connection (dead tunnel, stalled proxy) would otherwise leave the
+  // caller waiting forever with no visible error — cap it so failures show
+  // up instead of silently never resolving.
+  const controller = new AbortController();
+  const timeout = setTimeout(function() { controller.abort(); }, 15000);
+  let res;
+  try {
+    res = await fetch(path, Object.assign({ signal: controller.signal }, opts));
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'Timed out reaching the server' : (e.message || 'Network error'));
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || ('Request failed (' + res.status + ')'));
@@ -3361,8 +3373,10 @@ async function loadEverything() {
     needsFullReload = true;
     const dot = document.getElementById('statusDot');
     const text = document.getElementById('statusText');
+    const detail = document.getElementById('statusDetail');
     if (dot) dot.className = 'status-dot error';
     if (text) text.textContent = "Couldn't load — retrying…";
+    if (detail) detail.textContent = e.message || '';
     return false;
   }
 }
