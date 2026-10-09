@@ -592,6 +592,8 @@
   .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .project-list .p-check { color: var(--success); flex-shrink: 0; display: inline-flex; }
   .project-list .p-check svg { width: 16px; height: 16px; }
+  .project-list .p-jira { color: var(--accent); flex-shrink: 0; display: inline-flex; }
+  .project-list .p-jira svg { width: 15px; height: 15px; }
   .project-list li.p-done .p-name,
   .project-list li.p-done .p-count { opacity: .5; }
   .project-list li.p-done .pill { opacity: .55; }
@@ -1633,6 +1635,7 @@ let editingSiteId = null;
 const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const ICON_JIRA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
@@ -2575,6 +2578,13 @@ async function loadProjects() {
       chk.title = p.reopened ? 'Was marked done — new document since' : 'Marked done';
       chk.innerHTML = ICON_CHECK;
       li.appendChild(chk);
+    }
+    if (p.jira_key) {
+      const jk = document.createElement('span');
+      jk.className = 'p-jira';
+      jk.title = 'Added to Jira (' + p.jira_key + ')';
+      jk.innerHTML = ICON_JIRA;
+      li.appendChild(jk);
     }
 
     const name = document.createElement('div');
