@@ -1003,6 +1003,19 @@ def save_project_last_updated(division_id, mapping):
 
 _SCAN_RESULTS_PAGE_SIZE = 1000
 
+# get_stats() and get_results_grouped() each independently call this with
+# columns="*" to re-derive their own view of the same data, and the
+# dashboard's poll loop calls both back-to-back every few seconds — without
+# this, that's two full paginated re-fetches of the whole division's scan
+# history (thousands of rows, every column) in quick succession, repeated on
+# every poll tick. A few seconds of staleness is invisible anyway (the
+# dashboard itself only polls this often), so a short cache collapses those
+# into one real fetch per window. Per-process only (each gunicorn worker has
+# its own), which is fine — it only needs to survive back-to-back calls
+# within the same request burst, not stay consistent across workers.
+_scan_results_cache = {}
+_SCAN_RESULTS_CACHE_TTL_S = 8
+
 
 def _fetch_all_scan_results(division_id, columns="*"):
     """Every scan_results row for a division, paginated past PostgREST's
@@ -1014,6 +1027,13 @@ def _fetch_all_scan_results(division_id, columns="*"):
     entirely — they'd still exist in the table, just never get read. Paging
     with .range() instead means every row is always seen regardless of how
     lopsided one site's row count gets."""
+    import time
+    cache_key = (division_id, columns)
+    now = time.monotonic()
+    cached = _scan_results_cache.get(cache_key)
+    if cached and cached[0] > now:
+        return cached[1]
+
     client = get_client()
     rows, start = [], 0
     while True:
@@ -1024,6 +1044,7 @@ def _fetch_all_scan_results(division_id, columns="*"):
         ).data
         rows.extend(batch)
         if len(batch) < _SCAN_RESULTS_PAGE_SIZE:
+            _scan_results_cache[cache_key] = (now + _SCAN_RESULTS_CACHE_TTL_S, rows)
             return rows
         start += _SCAN_RESULTS_PAGE_SIZE
 

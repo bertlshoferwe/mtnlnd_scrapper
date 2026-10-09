@@ -3353,8 +3353,17 @@ function localizeSchedule() {
 const POLL_ACTIVE_MS = 4000;
 const POLL_IDLE_MS = 30 * 60 * 1000;
 const POLL_RETRY_MS = 5000;
+// The results list is a much heavier fetch than status (every scanned
+// project with its full file list) and doesn't change fast enough to be
+// worth re-pulling on every 4s progress tick — that was hammering the
+// backend with a full re-fetch+regroup of the whole scan history several
+// times a minute during a long scan. Refresh it on this slower cadence
+// instead, except right when a scan finishes, so the results still show up
+// promptly.
+const RESULTS_REFRESH_MS = 20000;
 let pollTimer = null;
 let needsFullReload = false;
+let lastResultsLoadAt = 0;
 
 // Loads everything needed on first paint (or to recover after a failed
 // load): adapters, divisions, then the current division's sites/keywords/
@@ -3367,6 +3376,7 @@ async function loadEverything() {
     await loadDivisions();
     await loadAllForCurrentDivision();
     needsFullReload = false;
+    lastResultsLoadAt = Date.now();
     return true;
   } catch (e) {
     console.error('Load failed, will retry:', e);
@@ -3390,7 +3400,14 @@ function schedulePoll() {
       await loadEverything();
     } else {
       try {
-        await Promise.all([loadStatus(), loadResultsInfo()]);
+        const wasRunning = scanRunning;
+        await loadStatus();
+        const now = Date.now();
+        const justFinished = wasRunning && !scanRunning;
+        if (justFinished || !scanRunning || (now - lastResultsLoadAt) >= RESULTS_REFRESH_MS) {
+          await loadResultsInfo();
+          lastResultsLoadAt = now;
+        }
       } catch (e) {
         console.error('Poll failed, will retry:', e);
         needsFullReload = true;
