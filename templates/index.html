@@ -589,7 +589,15 @@
   .project-list li:hover { background: var(--surface-2); }
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
-  .project-list .p-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  /* Fixed-width trailing columns — New/+N badge, file count, keyword pill —
+     so each lines up under the row above it instead of shifting with the
+     length of its own text. */
+  .project-list .p-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .project-list .p-badge-slot { width: 70px; display: flex; justify-content: flex-end; }
+  .project-list .p-badge-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
+  .project-list .p-count { width: 46px; font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+  .project-list .p-status-slot { width: 110px; display: flex; justify-content: flex-end; }
+  .project-list .p-status-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
   .project-list .p-badges { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 16px; }
   .project-list .p-check { color: var(--success); display: inline-flex; }
   .project-list .p-check svg { width: 16px; height: 16px; }
@@ -2634,7 +2642,8 @@ async function loadProjects() {
       pill.textContent = 'no matches';
     }
 
-    li.appendChild(name);
+    const badgeSlot = document.createElement('span');
+    badgeSlot.className = 'p-badge-slot';
     if (isFirstScan(p)) {
       const fs = document.createElement('span');
       fs.className = 'pill firstscan';
@@ -2642,7 +2651,7 @@ async function loadProjects() {
       const seenDay = p.first_seen ? new Date(p.first_seen).getDay() : -1;
       fs.title = 'First time this project has been seen — shows for '
         + (seenDay === 5 ? '120 hours (first seen on a Friday)' : '72 hours');
-      li.appendChild(fs);
+      badgeSlot.appendChild(fs);
     }
     if (p.updated) {
       const u = document.createElement('span');
@@ -2652,10 +2661,21 @@ async function loadProjects() {
       u.title = p.reopened
         ? 'New document(s) added since you marked this project done'
         : 'New document(s) added to this project';
-      li.appendChild(u);
+      badgeSlot.appendChild(u);
     }
-    li.appendChild(count);
-    li.appendChild(pill);
+
+    const statusSlot = document.createElement('span');
+    statusSlot.className = 'p-status-slot';
+    statusSlot.appendChild(pill);
+
+    const meta = document.createElement('div');
+    meta.className = 'p-meta';
+    meta.appendChild(badgeSlot);
+    meta.appendChild(count);
+    meta.appendChild(statusSlot);
+
+    li.appendChild(name);
+    li.appendChild(meta);
     list.appendChild(li);
   });
 
