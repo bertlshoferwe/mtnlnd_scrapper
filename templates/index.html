@@ -1169,8 +1169,9 @@
 
 <script>
 /* ---- Theme: light / dark / auto ------------------------------------------
-   Every page load starts on "auto" (follow the OS). The toggle overrides
-   it for the current view only — it is not persisted. */
+   Remembered per browser (localStorage), so each device keeps its own
+   choice — switching it on a phone doesn't touch what a desktop shows. */
+const THEME_STORAGE_KEY = 'bidscout_theme';
 let themeChoice = 'auto';
 function applyThemeChoice(choice) {
   themeChoice = choice;
@@ -1181,12 +1182,19 @@ function applyThemeChoice(choice) {
   const labels = { auto: 'Auto', light: 'Light', dark: 'Dark' };
   document.getElementById('themeToggleIcon').textContent = icons[choice];
   document.getElementById('themeToggleLabel').textContent = labels[choice];
+  try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch (e) { /* per-viewer convenience only */ }
 }
 function cycleTheme() {
   const order = ['auto', 'light', 'dark'];
   applyThemeChoice(order[(order.indexOf(themeChoice) + 1) % order.length]);
 }
-applyThemeChoice('auto');
+function loadThemePref() {
+  try {
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
+    return (v === 'light' || v === 'dark') ? v : 'auto';
+  } catch (e) { return 'auto'; }
+}
+applyThemeChoice(loadThemePref());
 
 let currentDivision = null;
 let allDivisions = [];
@@ -1439,9 +1447,11 @@ async function loadDivisions() {
   } else if (!currentDivision || !allDivisions.some(function(d) { return d.id === currentDivision; })) {
     currentDivision = allDivisions.length ? allDivisions[0].id : null;
   }
-  // Restore the source-site tab from the URL (validated later against the
-  // division's actual sites in renderSiteTabs).
-  currentResultsSite = urlParams.get('site') || '';
+  // Restore this device's remembered filters/sort/view for the division —
+  // a `site` param in the URL (shared/bookmarked link) wins over that, same
+  // as before (validated later against the division's actual sites in
+  // renderSiteTabs).
+  applyFilterPrefs(currentDivision, urlParams.get('site'));
   renderDivisionTabs();
   updateUrl();
 }
@@ -1606,24 +1616,9 @@ function switchDivision(id) {
   resultsPage = 1;
   resultsTotal = 0;
   projectsData = [];
-  currentResultsSite = '';
-  currentResultsKeyword = '';
-  currentResultsBid = '';
-  currentResultsClosed = false;
-  currentResultsUpdated = false;
-  currentResultsNew = false;
-  currentResultsView = 'active';
-  currentResultsSort = 'bid';
-  document.getElementById('resultsSearch').value = '';
-  document.getElementById('resultsStatusFilter').value = 'Matched';
-  document.getElementById('keywordFilter').value = '';
-  updateSearchToggleState();
-  closeSearchMenu();
-  closeFilterMenu();
-  closeSortMenu();
-  syncFilterUI();
-  syncSortUI();
-  syncViewTabs();
+  // Restore this device's own remembered filters/sort/view for the division
+  // being switched to (or the defaults, if it's never been visited here).
+  applyFilterPrefs(id);
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
   document.getElementById('siteTabs').style.display = 'none';
@@ -2393,6 +2388,63 @@ function loadPageSizePref() {
   return 15;
 }
 let resultsPageSize = loadPageSizePref();
+
+// Results filters/sort/view are remembered per browser, scoped per division
+// (so a phone filtering "Matched only" on one division doesn't bleed into
+// another), and kept separate from what updateUrl() puts in the address bar
+// — a shared/bookmarked link should still win on the device that opens it,
+// but absent that, each device falls back to its own last choice instead of
+// everyone sharing one global default.
+function filterPrefsKey(divisionId) {
+  return 'bidscout_filters_' + divisionId;
+}
+function saveFilterPrefs() {
+  if (!currentDivision) return;
+  try {
+    localStorage.setItem(filterPrefsKey(currentDivision), JSON.stringify({
+      status: document.getElementById('resultsStatusFilter').value,
+      site: currentResultsSite,
+      keyword: currentResultsKeyword,
+      bid: currentResultsBid,
+      closed: currentResultsClosed,
+      updated: currentResultsUpdated,
+      newOnly: currentResultsNew,
+      view: currentResultsView,
+      sort: currentResultsSort,
+    }));
+  } catch (e) { /* per-viewer convenience only */ }
+}
+function loadFilterPrefs(divisionId) {
+  try {
+    const raw = localStorage.getItem(filterPrefsKey(divisionId));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+// Resets the results filters/sort/view to this device's remembered choice
+// for the given division (or the hard defaults if it's never set any) —
+// used both on first load and whenever the division tab is switched.
+function applyFilterPrefs(divisionId, urlSite) {
+  const saved = loadFilterPrefs(divisionId) || {};
+  currentResultsSite = urlSite || saved.site || '';
+  currentResultsKeyword = saved.keyword || '';
+  currentResultsBid = saved.bid || '';
+  currentResultsClosed = !!saved.closed;
+  currentResultsUpdated = !!saved.updated;
+  currentResultsNew = !!saved.newOnly;
+  currentResultsView = saved.view || 'active';
+  currentResultsSort = saved.sort || 'bid';
+  document.getElementById('resultsSearch').value = '';
+  document.getElementById('resultsStatusFilter').value = saved.status || 'Matched';
+  document.getElementById('keywordFilter').value = '';
+  updateSearchToggleState();
+  closeSearchMenu();
+  closeFilterMenu();
+  closeSortMenu();
+  syncFilterUI();
+  syncSortUI();
+  syncViewTabs();
+}
+
 function onPageSizeChange(select) {
   const v = parseInt(select.value, 10);
   if (!PAGE_SIZE_OPTIONS.includes(v) || v === resultsPageSize) return;
@@ -2570,6 +2622,7 @@ async function loadProjects() {
   if (currentResultsNew) params.set('new', '1');
   params.set('view', currentResultsView);
   if (currentResultsSort && currentResultsSort !== 'bid') params.set('sort', currentResultsSort);
+  saveFilterPrefs();
 
   const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
   projectsData = data.projects || [];
@@ -2654,17 +2707,12 @@ async function loadProjects() {
       pill.textContent = 'no matches';
     }
 
+    // A project can be both inside its own "first seen" window and have new
+    // documents added since (e.g. discovered 2 days ago, gains a fresh match
+    // today) — the two badges say overlapping things, so show only the more
+    // specific one (how many new documents) when both would otherwise apply.
     const badgeSlot = document.createElement('span');
     badgeSlot.className = 'p-badge-slot';
-    if (isFirstScan(p)) {
-      const fs = document.createElement('span');
-      fs.className = 'pill firstscan';
-      fs.textContent = 'New';
-      const seenDay = p.first_seen ? new Date(p.first_seen).getDay() : -1;
-      fs.title = 'First time this project has been seen — shows for '
-        + (seenDay === 5 ? '120 hours (first seen on a Friday)' : '72 hours');
-      badgeSlot.appendChild(fs);
-    }
     if (p.updated) {
       const u = document.createElement('span');
       u.className = 'pill updated';
@@ -2674,6 +2722,14 @@ async function loadProjects() {
         ? 'New document(s) added since you marked this project done'
         : 'New document(s) added to this project';
       badgeSlot.appendChild(u);
+    } else if (isFirstScan(p)) {
+      const fs = document.createElement('span');
+      fs.className = 'pill firstscan';
+      fs.textContent = 'New';
+      const seenDay = p.first_seen ? new Date(p.first_seen).getDay() : -1;
+      fs.title = 'First time this project has been seen — shows for '
+        + (seenDay === 5 ? '120 hours (first seen on a Friday)' : '72 hours');
+      badgeSlot.appendChild(fs);
     }
 
     const statusSlot = document.createElement('span');
