@@ -14,7 +14,9 @@ How it works, per undecided matched project:
      the user's reasons and notes, and answer with a verdict + one plain
      sentence. With no AI configured, the similar examples just vote.
 
-Stays off until the division has FIT_MIN_DECISIONS real decisions (legacy
+Stays off until the division has enough real decisions (the "start after"
+setting in the dashboard's hidden settings window, default 50 — see
+supabase_store.DEFAULT_SETTINGS) (legacy
 "Unknown (from before)" ones and anything later moved back to review don't
 count). Runs at the end of every scan (scraper._scan_division), or by hand:
 
@@ -30,7 +32,6 @@ from datetime import datetime, timezone
 
 import supabase_store
 
-FIT_MIN_DECISIONS = int(os.environ.get("FIT_MIN_DECISIONS") or "50")
 FIT_EXAMPLES = int(os.environ.get("FIT_EXAMPLES") or "8")
 # Bounds AI cost/time on a big backlog; the rest get picked up next scan.
 FIT_MAX_PER_RUN = int(os.environ.get("FIT_MAX_PER_RUN") or "80")
@@ -246,9 +247,14 @@ def predict_division(division_id, ai_client=None, embedder=None, progress=None):
     """Suggest fit / not a fit for every matched project in To Review.
     Returns the number of projects (re)judged. Never raises for a single
     project's failure."""
+    settings = supabase_store.get_division_settings(division_id)
+    if not settings["fit_enabled"]:
+        print("  Fit suggestions: turned off for this division")
+        return 0
+    min_decisions = settings["fit_min_decisions"]
     examples = load_examples(division_id)
-    if len(examples) < FIT_MIN_DECISIONS:
-        print(f"  Fit suggestions: {len(examples)} of {FIT_MIN_DECISIONS} decisions so far — "
+    if len(examples) < min_decisions:
+        print(f"  Fit suggestions: {len(examples)} of {min_decisions} decisions so far — "
               f"not enough to suggest yet")
         return 0
 

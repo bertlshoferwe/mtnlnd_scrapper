@@ -88,6 +88,61 @@ def get_division(division_id):
     return res.data[0] if res.data else None
 
 
+# Per-division settings kept in divisions.settings (jsonb), edited from the
+# dashboard's hidden settings window. Anything unset falls back to these.
+DEFAULT_SETTINGS = {
+    "fit_enabled": True,
+    "fit_min_decisions": int(os.environ.get("FIT_MIN_DECISIONS") or "50"),
+    "fit_sure_at": 60,
+}
+_SETTING_LIMITS = {"fit_min_decisions": (5, 1000), "fit_sure_at": (0, 100)}
+
+
+def get_division_settings(division_id):
+    """DEFAULT_SETTINGS overlaid with whatever the division has saved. Just
+    the defaults if the column isn't there yet."""
+    out = dict(DEFAULT_SETTINGS)
+    try:
+        res = (
+            get_client().table("divisions").select("settings")
+            .eq("id", division_id).limit(1).execute()
+        )
+        if res.data and isinstance(res.data[0].get("settings"), dict):
+            out.update({k: v for k, v in res.data[0]["settings"].items() if k in DEFAULT_SETTINGS})
+    except Exception:
+        pass
+    return out
+
+
+def save_division_settings(division_id, patch):
+    """Validate and merge `patch` into the division's settings. Returns the
+    full settings. Raises ValueError on a bad value or a missing column."""
+    clean = {}
+    for k, v in (patch or {}).items():
+        if k not in DEFAULT_SETTINGS:
+            continue
+        if isinstance(DEFAULT_SETTINGS[k], bool):
+            clean[k] = bool(v)
+        else:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise ValueError(f"{k} must be a whole number")
+            lo, hi = _SETTING_LIMITS.get(k, (None, None))
+            if lo is not None and not lo <= v <= hi:
+                raise ValueError(f"{k} must be between {lo} and {hi}")
+            clean[k] = v
+    current = get_division_settings(division_id)
+    current.update(clean)
+    saved = {k: current[k] for k in DEFAULT_SETTINGS}
+    try:
+        get_client().table("divisions").update({"settings": saved}).eq("id", division_id).execute()
+    except Exception as e:
+        raise ValueError("couldn't save — add the settings column from schema.sql") from e
+    _fit_stats_cache.pop(division_id, None)
+    return saved
+
+
 def create_division(name):
     name = (name or "").strip()
     if not name:
@@ -1106,9 +1161,9 @@ _fit_stats_cache = {}
 _FIT_STATS_TTL_S = 60
 
 
-def fit_training_stats(division_id, min_decisions):
-    """{"decisions", "needed", "active", "agreed", "compared"} for the
-    dashboard: how many decisions the suggestions can learn from (same rules
+def fit_training_stats(division_id):
+    """{"decisions", "needed", "enabled", "sure_at", "active", "agreed",
+    "compared"} for the dashboard: how many decisions the suggestions can learn from (same rules
     as fit_predictor.load_examples) and — once suggestions exist — how often
     the user's decision matched the suggestion showing at the time. Cached
     briefly; the results list polls."""
@@ -1116,6 +1171,8 @@ def fit_training_stats(division_id, min_decisions):
     now = datetime.now(timezone.utc).timestamp()
     if hit and now - hit[0] < _FIT_STATS_TTL_S:
         return hit[1]
+    settings = get_division_settings(division_id)
+    min_decisions = settings["fit_min_decisions"]
     try:
         res = (
             get_client().table("project_decisions")
@@ -1136,7 +1193,8 @@ def fit_training_stats(division_id, min_decisions):
     agreed = sum(1 for r in compared
                  if (r["prediction"]["verdict"] == "fit") == (r["decision"] == "jira"))
     stats = {"decisions": len(usable), "needed": min_decisions,
-             "active": len(usable) >= min_decisions,
+             "enabled": settings["fit_enabled"], "sure_at": settings["fit_sure_at"],
+             "active": settings["fit_enabled"] and len(usable) >= min_decisions,
              "agreed": agreed, "compared": len(compared)}
     _fit_stats_cache[division_id] = (now, stats)
     return stats

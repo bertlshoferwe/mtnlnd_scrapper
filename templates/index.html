@@ -120,6 +120,7 @@
   .wrap { max-width: 880px; margin: 0 auto; padding: 26px 20px 80px; }
   h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 5px; text-transform: uppercase; }
   .masthead h1 { color: var(--masthead-text); }
+  #mastheadTitle { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
   .subtitle { color: var(--muted); font-size: 14px; margin: 0; max-width: 64ch; }
   .masthead .subtitle { color: var(--masthead-muted); }
   .theme-toggle {
@@ -204,6 +205,18 @@
   .done-btn:disabled { opacity: .5; cursor: default; }
   .done-btn.notfit-btn:hover { border-color: var(--danger); color: var(--danger); }
   .done-btn.notfit-btn.is-notfit { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+  /* Hidden settings window */
+  .settings-modal { max-width: 520px; }
+  .set-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 0; border-bottom: 1px solid var(--border); cursor: default;
+  }
+  .set-row b { display: block; font-size: 13.5px; }
+  .set-row .desc { display: block; margin: 2px 0 0; font-size: 12px; }
+  .set-toggle { justify-content: flex-start; cursor: pointer; }
+  .set-input { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .set-input input { width: 72px; }
+  .set-stats { margin-top: 12px; font-size: 12.5px; }
   /* AI fit suggestions */
   .p-fit {
     display: inline-block; margin-left: 8px; vertical-align: 1px;
@@ -916,7 +929,7 @@
 <header class="masthead">
   <div class="masthead-inner">
     <div>
-      <h1>Bid Scout</h1>
+      <h1 id="mastheadTitle">Bid Scout</h1>
       <p class="subtitle">Scans planning sites daily and flags the plans that match your keywords.</p>
     </div>
     <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
@@ -1174,6 +1187,39 @@
 
       <ul class="list" id="sitesList"></ul>
       <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden: opened by triple-clicking "Bid Scout" in the header. -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal settings-modal">
+    <div class="modal-header">
+      <div>
+        <h2>Suggestion settings</h2>
+        <p class="desc">How the "Likely fit / Likely not a fit" suggestions behave for this division.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label class="set-row set-toggle">
+        <input type="checkbox" id="setFitEnabled" style="width:auto;">
+        <span><b>Show suggestions</b><span class="desc">Turn off to hide them everywhere and stop making new ones.</span></span>
+      </label>
+      <label class="set-row">
+        <span><b>Start after</b><span class="desc">How many of your decisions (Add to Jira or Not a fit) before suggestions begin.</span></span>
+        <span class="set-input"><input type="number" id="setFitMin" min="5" max="1000" step="1"> decisions</span>
+      </label>
+      <label class="set-row">
+        <span><b>Only tag when at least</b><span class="desc">Below this, the list shows no tag and the project window says "Not sure".</span></span>
+        <span class="set-input"><input type="number" id="setFitSure" min="0" max="100" step="5"> % sure</span>
+      </label>
+      <p class="desc set-stats" id="setFitStats"></p>
+      <div class="row" style="gap:8px; margin-top:14px;">
+        <button class="btn-primary" id="setSaveBtn" onclick="saveSettings()">Save</button>
+        <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+        <span class="desc" id="setStatus"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -3449,10 +3495,13 @@ function buildFileRow(f, displayName) {
 
 // AI fit suggestions (fit_predictor.py) — only for projects still in To
 // Review; a low-confidence call is shown as "not sure" instead of a lean.
-const FIT_SURE_AT = 60;
+// Both come from the division's settings (hidden settings window) via each
+// results load.
+let fitSureAt = 60;
+let fitEnabled = true;
 function fitLabel(fit) {
-  if (!fit || !fit.verdict) return null;
-  if ((fit.confidence || 0) < FIT_SURE_AT) return { cls: 'unsure', text: 'Not sure' };
+  if (!fitEnabled || !fit || !fit.verdict) return null;
+  if ((fit.confidence || 0) < fitSureAt) return { cls: 'unsure', text: 'Not sure' };
   if (fit.verdict === 'fit') return { cls: 'fit', text: 'Likely fit' };
   if (fit.reason === 'Information only / nothing specified') return { cls: 'not_fit', text: 'Likely info only' };
   return { cls: 'not_fit', text: 'Likely not a fit' };
@@ -3480,7 +3529,11 @@ function renderFitSuggestion(p) {
 
 function renderFitTraining(t) {
   const el = document.getElementById('fitTrainingNote');
-  if (!t || currentResultsView !== 'review') { el.hidden = true; return; }
+  if (t) {
+    fitEnabled = t.enabled !== false;
+    if (t.sure_at != null) fitSureAt = t.sure_at;
+  }
+  if (!t || !fitEnabled || currentResultsView !== 'review') { el.hidden = true; return; }
   if (!t.active) {
     el.textContent = 'Suggestions start after ' + t.needed + ' decisions (Add to Jira or Not a fit) — '
       + t.decisions + ' so far.';
@@ -3490,6 +3543,64 @@ function renderFitTraining(t) {
     el.textContent = 'Suggestions are on — learned from ' + t.decisions + ' of your decisions.';
   }
   el.hidden = false;
+}
+
+// Hidden settings window — triple-click (or triple-tap) "Bid Scout".
+(function() {
+  let clicks = 0, timer = null;
+  document.getElementById('mastheadTitle').addEventListener('click', function() {
+    clicks++;
+    clearTimeout(timer);
+    timer = setTimeout(function() { clicks = 0; }, 600);
+    if (clicks >= 3) { clicks = 0; openSettings(); }
+  });
+})();
+
+function fitStatsText(t) {
+  if (!t) return '';
+  let txt = t.decisions + ' decision' + (t.decisions === 1 ? '' : 's') + ' to learn from so far';
+  if (t.compared) txt += ' · suggestions agreed with your call on ' + t.agreed + ' of ' + t.compared;
+  return txt + '.';
+}
+
+async function openSettings() {
+  if (!currentDivision) return;
+  document.getElementById('setStatus').textContent = '';
+  try {
+    const res = await api('/api/' + currentDivision + '/settings');
+    const st = res.settings || {};
+    document.getElementById('setFitEnabled').checked = st.fit_enabled !== false;
+    document.getElementById('setFitMin').value = st.fit_min_decisions;
+    document.getElementById('setFitSure').value = st.fit_sure_at;
+    document.getElementById('setFitStats').textContent = fitStatsText(res.fit_training);
+    openModal('settings');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('setSaveBtn');
+  const status = document.getElementById('setStatus');
+  btn.disabled = true;
+  status.textContent = '';
+  try {
+    const res = await api('/api/' + currentDivision + '/settings', {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        fit_enabled: document.getElementById('setFitEnabled').checked,
+        fit_min_decisions: document.getElementById('setFitMin').value,
+        fit_sure_at: document.getElementById('setFitSure').value,
+      }),
+    });
+    renderFitTraining(res.fit_training);
+    closeModal();
+    loadProjects();
+  } catch (e) {
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // Project decisions: Add to Jira / Not a fit / back to review. Each one is

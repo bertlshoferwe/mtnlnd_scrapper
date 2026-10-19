@@ -4,6 +4,10 @@
 create table if not exists divisions (
   id text primary key,
   name text not null,
+  -- Per-division settings from the dashboard's hidden settings window
+  -- (triple-click "Bid Scout"); see supabase_store.DEFAULT_SETTINGS.
+  -- Migration: alter table divisions add column if not exists settings jsonb;
+  settings jsonb,
   created_at timestamptz default now()
 );
 

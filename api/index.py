@@ -784,8 +784,7 @@ def api_get_results_grouped(division_id):
                     "updated_total": updated_total, "new_total": new_total,
                     "view_counts": view_counts,
                     "not_fit_reasons": list(supabase_store.NOT_FIT_REASONS),
-                    "fit_training": supabase_store.fit_training_stats(
-                        division_id, int(os.environ.get("FIT_MIN_DECISIONS") or "50")),
+                    "fit_training": supabase_store.fit_training_stats(division_id),
                     "page": page, "page_size": page_size})
 
 
@@ -818,6 +817,30 @@ def api_set_project_decision(division_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/settings", methods=["GET"])
+def api_get_settings(division_id):
+    """The division's settings (hidden settings window), with defaults filled in."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    return jsonify({"settings": supabase_store.get_division_settings(division_id),
+                    "fit_training": supabase_store.fit_training_stats(division_id)})
+
+
+@app.route("/api/<division_id>/settings", methods=["PATCH"])
+def api_save_settings(division_id):
+    """Body: any of {"fit_enabled", "fit_min_decisions", "fit_sure_at"}."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    try:
+        saved = supabase_store.save_division_settings(
+            division_id, request.get_json(force=True, silent=True) or {})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"settings": saved, "fit_training": supabase_store.fit_training_stats(division_id)})
 
 
 @app.route("/api/<division_id>/projects/plan-holders", methods=["GET"])
