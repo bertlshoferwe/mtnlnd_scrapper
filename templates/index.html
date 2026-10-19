@@ -654,13 +654,12 @@
   .project-list li:hover { background: var(--surface-2); }
   .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
   .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
-  /* Fixed-width trailing columns — New/+N badge, file count, keyword pill —
+  /* Fixed-width trailing columns — New/+N badge and keyword pill —
      so each lines up under the row above it instead of shifting with the
      length of its own text. */
   .project-list .p-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .project-list .p-badge-slot { width: 70px; display: flex; justify-content: flex-end; }
   .project-list .p-badge-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
-  .project-list .p-count { width: 46px; font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
   .project-list .p-status-slot { width: 110px; display: flex; justify-content: flex-end; }
   .project-list .p-status-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
   .project-list .p-badges { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 16px; }
@@ -673,13 +672,10 @@
   .project-list .p-badges.p-badges-two { gap: 1px; }
   .project-list .p-badges-two .p-check svg,
   .project-list .p-badges-two .p-jira svg { width: 9px; height: 9px; }
-  .project-list li.p-done .p-name,
-  .project-list li.p-done .p-count { opacity: .5; }
+  .project-list li.p-done .p-name { opacity: .5; }
   .project-list li.p-done .pill { opacity: .55; }
-  .project-list li.p-closed .p-name,
-  .project-list li.p-closed .p-count { opacity: .45; }
-  .project-list li.p-overdue .p-name,
-  .project-list li.p-overdue .p-count { opacity: .5; }
+  .project-list li.p-closed .p-name { opacity: .45; }
+  .project-list li.p-overdue .p-name { opacity: .5; }
   .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .pill.match { background: var(--accent); color: var(--accent-contrast); }
   .pill.nomatch { background: var(--surface-2); color: var(--muted); }
@@ -689,7 +685,6 @@
   .pill.firstscan { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
   .project-list li.p-updated { box-shadow: inset 3px 0 0 var(--warning); }
   .project-list li.p-updated.p-done .p-name,
-  .project-list li.p-updated.p-done .p-count,
   .project-list li.p-updated.p-done .pill { opacity: 1; }
   .project-list li.p-reopened .p-check { color: var(--warning); }
   .updates-badge {
@@ -850,6 +845,8 @@
   .kw-table .kt-page-link:hover { text-decoration: underline; }
 
   @media (max-width: 640px) {
+    /* Rows stack on phones, so an empty New slot would just leave a gap. */
+    .project-list .p-badge-slot:empty { display: none; }
     .masthead-inner { padding: 16px 14px; }
     .wrap { padding: 16px 13px 44px; }
     h1 { font-size: 19px; }
@@ -2891,10 +2888,6 @@ async function loadProjects() {
       name.appendChild(sub);
     }
 
-    const count = document.createElement('span');
-    count.className = 'p-count';
-    count.textContent = p.file_count + (p.file_count === 1 ? ' file' : ' files');
-
     const pill = document.createElement('span');
     if (p.closed) {
       pill.className = 'pill closed';
@@ -2942,7 +2935,6 @@ async function loadProjects() {
     const meta = document.createElement('div');
     meta.className = 'p-meta';
     meta.appendChild(badgeSlot);
-    meta.appendChild(count);
     meta.appendChild(statusSlot);
 
     li.appendChild(name);
