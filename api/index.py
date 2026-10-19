@@ -800,6 +800,22 @@ def api_set_project_done(division_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/<division_id>/projects/plan-holders", methods=["GET"])
+def api_project_plan_holders(division_id):
+    """The project window's Plan Holders tab. ?key=<project_key>. Returns
+    {"holders": [...] or null, "refreshed_at": iso or null} — null holders
+    means this project's site doesn't publish a list (or it hasn't been
+    fetched yet), [] means the list exists but is empty."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+    holders, refreshed_at = supabase_store.load_project_plan_holders(division_id, key)
+    return jsonify({"holders": holders, "refreshed_at": refreshed_at})
+
+
 @app.route("/api/<division_id>/projects/jira", methods=["POST"])
 def api_add_project_to_jira(division_id):
     """File a project as a Jira issue. Body: {"project_key", "summary",

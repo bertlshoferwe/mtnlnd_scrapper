@@ -532,6 +532,21 @@ def _site_login(site):
     }
 
 
+def _save_plan_holders(site, adapter):
+    """Persist whatever plan-holder lists the adapter picked up while finding
+    documents, keyed the same way as bid dates ("SiteName — label"). Every
+    run refreshes them, including projects whose documents were all already
+    scanned — companies keep joining right up to bid day."""
+    holders = getattr(adapter, "plan_holders", None) or {}
+    if not holders:
+        return
+    mapping = {f"{site['name']} — {lbl}" if lbl else site["name"]: v
+               for lbl, v in holders.items()}
+    supabase_store.save_project_plan_holders(site["division_id"], mapping)
+    print(f"  Plan holders: {sum(len(v) for v in mapping.values())} across "
+          f"{len(mapping)} project(s)")
+
+
 def scan_site(site, ai_client):
     """
     Dispatch to the right document-finding strategy for a site and return
@@ -569,10 +584,13 @@ def scan_site(site, ai_client):
                 site, _site_login(site), known_updated=known_updated)
             if current_updated:
                 supabase_store.save_project_last_updated(division_id, current_updated)
+            _save_plan_holders(site, adapter)
             return doc_links, {}, login_result
         print(f"  Adapter: {adapter.label}")
+        found = adapter.find_documents(site)
+        _save_plan_holders(site, adapter)
         return [(lbl, url, fn, None, src, bid, None)
-                for lbl, url, fn, src, bid in adapter.find_documents(site)], {}, None
+                for lbl, url, fn, src, bid in found], {}, None
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
         return [], {}, None

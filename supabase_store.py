@@ -968,6 +968,43 @@ def save_project_bid_times(division_id, mapping):
         print(f"  ! couldn't save bid times ({e})")
 
 
+def save_project_plan_holders(division_id, mapping):
+    """Upsert {project_key: [plan-holder dict, ...]} from a scan (see
+    adapters.plan_holder for the dict shape). Replaces the whole list each
+    time — a refresh, not an append, so companies that drop off the portal's
+    list drop off here too. Only touches plan_holders/plan_holders_at.
+    No-ops if the columns are missing."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [
+        {"division_id": division_id, "project_key": k, "plan_holders": v,
+         "plan_holders_at": now, "updated_at": now}
+        for k, v in mapping.items() if v is not None
+    ]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save plan holders ({e})")
+
+
+def load_project_plan_holders(division_id, project_key):
+    """(holders_list_or_None, refreshed_at_iso_or_None) for one project.
+    None = never fetched (or the site doesn't publish one / the column isn't
+    there yet), as opposed to [] = fetched and the list was empty."""
+    try:
+        res = (
+            get_client().table("project_flags").select("plan_holders,plan_holders_at")
+            .eq("division_id", division_id).eq("project_key", project_key)
+            .limit(1).execute()
+        )
+    except Exception:
+        return None, None
+    if not res.data:
+        return None, None
+    return res.data[0].get("plan_holders"), res.data[0].get("plan_holders_at")
+
+
 def load_project_last_updated(division_id):
     """{project_id: 'Oct 4, 2026'} — the ConstructConnect results grid's own
     "Last Updated" date as of the last time each project was actually

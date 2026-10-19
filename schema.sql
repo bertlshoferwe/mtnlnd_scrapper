@@ -143,6 +143,13 @@ create table if not exists project_flags (
   -- automatically, so the dashboard button can switch to "View in Jira"
   -- instead of letting a project be filed twice.
   jira_key text,
+  -- Plan holders (companies that pulled plans) for portals that publish them
+  -- — UDOT, WYDOT, ITD (via QuestCDN), ConstructConnect. A JSON array of
+  -- {company, role, contact, title, emails[], phone, address, city, state,
+  -- zip, cert}, replaced wholesale on every scan (see
+  -- scraper._save_plan_holders). NULL = never fetched for this project.
+  plan_holders jsonb,
+  plan_holders_at timestamptz,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -153,6 +160,8 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists bid_time text;
 --   alter table project_flags add column if not exists cc_last_updated text;
 --   alter table project_flags add column if not exists jira_key text;
+--   alter table project_flags add column if not exists plan_holders jsonb;
+--   alter table project_flags add column if not exists plan_holders_at timestamptz;
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (

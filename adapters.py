@@ -44,6 +44,37 @@ def parse_bid_date(text):
     return None
 
 
+_PLACEHOLDER_EMAIL = re.compile(r"@(example\.(com|org|net)|test\.com)$|^(test|none|na|n/a)@", re.I)
+
+
+def clean_emails(raw):
+    """'a@x.com; b@y.com;' / 'a@x.com, b@y.com' -> ['a@x.com', 'b@y.com'],
+    deduped, dropping placeholders like test@example.com."""
+    out = []
+    for e in re.split(r"[;,\s]+", raw or ""):
+        e = e.strip().strip(".").lower()
+        if "@" in e and not _PLACEHOLDER_EMAIL.search(e) and e not in out:
+            out.append(e)
+    return out
+
+
+def plan_holder(company, role=None, contact=None, title=None, emails=None, phone=None,
+                address=None, city=None, state=None, zipcode=None, cert=None):
+    """One plan-holder entry in the shape the dashboard's Plan Holders tab
+    reads. Every field but company is optional — the tab only shows a column
+    when at least one entry on that project has it (UDOT has no emails,
+    WYDOT has no role, and so on)."""
+    def c(v):
+        v = re.sub(r"\s+", " ", str(v or "")).strip()
+        return v if v and v.upper() not in ("N/A", "NA", "-", "NONE") else None
+    return {
+        "company": c(company) or "(unknown company)",
+        "role": c(role), "contact": c(contact), "title": c(title),
+        "emails": emails or [], "phone": c(phone), "address": c(address),
+        "city": c(city), "state": c(state), "zip": c(zipcode), "cert": c(cert),
+    }
+
+
 class SiteAdapter:
     key = ""        # stable id stored in sites.adapter
     label = ""      # shown in the dashboard dropdown
@@ -54,6 +85,14 @@ class SiteAdapter:
     # calls find_documents_with_browser() instead of find_documents() for one
     # of these, and passes it the site's saved login.
     needs_browser = False
+
+    def __init__(self):
+        # {label: [plan_holder(...), ...]} — filled in as a side effect of
+        # find_documents()/find_documents_with_browser() for portals that
+        # publish a plan-holders list, keyed by the same `label` the doc
+        # tuples use. scraper.scan_site() saves it per project after the
+        # adapter runs. Empty for an adapter that doesn't support it.
+        self.plan_holders = {}
 
     @classmethod
     def matches_url(cls, url):
@@ -128,6 +167,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
             label = p.get("project_name") or p.get("project_number") or str(uuid)
             bid_date = parse_bid_date(p.get("bid_opening_date"))
             project_url = f"{self.BASE}/project/{uuid}/project-files"
+            self._load_plan_holders(uuid, label)
 
             for section in self.FILE_SECTIONS:
                 try:
@@ -149,6 +189,29 @@ class UDOTMasterworksAdapter(SiteAdapter):
                     # same project as the plan set (rather than as a new project).
                     out.append((label, url, fn, project_url, bid_date))
         return out
+
+    def _load_plan_holders(self, uuid, label):
+        """The project page's "Plan Holders" tab — company, Prime/Sub,
+        address, phone. No contact names or emails (UDOT only shares those
+        with other plan holders who opted in). Best-effort: a failure here
+        never blocks the documents."""
+        try:
+            rows = self._get_json(f"/advertisements/plan_holders/list/{uuid}").get("result") or []
+        except (requests.RequestException, ValueError) as e:
+            print(f"  ! UDOT: couldn't load plan holders for {label}: {e}")
+            return
+        holders = []
+        for r in rows:
+            phone = re.sub(r"\D", "", str(r.get("phone") or ""))
+            if len(phone) == 10:
+                phone = f"({phone[:3]}) {phone[3:6]}-{phone[6:]}"
+            addr = ", ".join(x for x in (r.get("addr"), r.get("addr2")) if x and str(x).strip())
+            holders.append(plan_holder(
+                r.get("company_name"), role=r.get("bidding_as"), phone=phone or r.get("phone"),
+                address=addr, city=(r.get("city") or "").title(), state=r.get("state"),
+                zipcode=r.get("zipcode"),
+            ))
+        self.plan_holders[label] = holders
 
 
 class ITDAdvertisedAdapter(SiteAdapter):
@@ -215,7 +278,120 @@ class ITDAdvertisedAdapter(SiteAdapter):
                     out.append((label, href, fn, self.PAGE, bid_date))
 
         print(f"  ITD: {len(out)} document link(s) from the advertised-project tables")
+        self._load_plan_holders({lbl for lbl, *_ in out})
         return out
+
+    # ITD's plan holders live on QuestCDN (ITD moved bidding there late 2025)
+    # — public, no login, but the plan-holder data call only answers inside a
+    # cookie session that has "walked" there the way a browser does: the
+    # postings page, the postings list, the project, then its plan-holders
+    # page. Skipping a step gets a login page or a 500 instead (confirmed
+    # 2026-10-18).
+    QUEST_BASE = "https://qcpi.questcdn.com"
+    QUEST_GROUP = "1950787"
+    QUEST_PAUSE_S = 3
+    _QUEST_KEY_RE = re.compile(r"Key\s*No\.?\s*([\d\s]+)", re.I)
+
+    def _load_plan_holders(self, labels):
+        """Best-effort: fills self.plan_holders for every ITD label whose key
+        number matches a QuestCDN posting ("Key No. 22751 FY27 D2 SEAL COATS").
+        Any failure just leaves ITD without plan holders this run."""
+        by_key = {}
+        for lbl in labels:
+            m = re.match(r"Key ([\w\-]+)", lbl or "")
+            if m:
+                for k in m.group(1).split("-"):
+                    by_key.setdefault(re.sub(r"\D", "", k), []).append(lbl)
+        if not by_key:
+            return
+        try:
+            postings = self._quest_postings()
+        except Exception as e:
+            print(f"  ! ITD: couldn't list QuestCDN postings for plan holders: {e}")
+            return
+        found = 0
+        for i, post in enumerate(postings):
+            m = self._QUEST_KEY_RE.search(post["name"])
+            keys = m.group(1).split() if m else []
+            targets = {lbl for k in keys for lbl in by_key.get(k, [])}
+            if not targets:
+                continue
+            prev_id = postings[i - 1]["id"] if i > 0 else ""
+            next_id = postings[i + 1]["id"] if i + 1 < len(postings) else ""
+            # QuestCDN starts answering 403 to a quick burst of requests
+            # (seen 2026-10-18 after ~10 projects back to back) — pace them
+            # and retry once after a longer pause.
+            time.sleep(self.QUEST_PAUSE_S)
+            try:
+                try:
+                    holders = self._quest_plan_holders(post["id"], prev_id, next_id)
+                except requests.HTTPError as e:
+                    if e.response is None or e.response.status_code != 403:
+                        raise
+                    time.sleep(self.QUEST_PAUSE_S * 10)
+                    holders = self._quest_plan_holders(post["id"], prev_id, next_id)
+            except Exception as e:
+                print(f"  ! ITD: couldn't load plan holders for {post['name']}: {e}")
+                continue
+            for lbl in targets:
+                self.plan_holders[lbl] = holders
+            found += 1
+        print(f"  ITD: plan holders for {found} project(s) from QuestCDN")
+
+    def _quest_session(self):
+        if getattr(self, "_qs", None) is None:
+            self._qs = requests.Session()
+            self._qs.headers.update({"User-Agent": "Mozilla/5.0"})
+            self._qs.get(self._quest_postings_url(), timeout=REQUEST_TIMEOUT)
+        return self._qs
+
+    def _quest_postings_url(self):
+        return f"{self.QUEST_BASE}/cdn/posting/?group={self.QUEST_GROUP}&provider={self.QUEST_GROUP}"
+
+    def _quest_postings(self):
+        s = self._quest_session()
+        r = s.get(f"{self.QUEST_BASE}/cdn/browse_posting/",
+                  params={"posting_type": 1, "group": self.QUEST_GROUP,
+                          "provider": self.QUEST_GROUP, "draw": 1, "start": 0, "length": 200},
+                  headers={"X-Requested-With": "XMLHttpRequest",
+                           "Referer": self._quest_postings_url()},
+                  timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        return [{"id": str(d.get("project_id")),
+                 "name": re.sub(r"<[^>]+>", " ", d.get("render_name") or "")}
+                for d in r.json().get("data") or [] if d.get("project_id")]
+
+    def _quest_plan_holders(self, project_id, prev_id, next_id):
+        s = self._quest_session()
+        xhr = {"X-Requested-With": "XMLHttpRequest", "Referer": self._quest_postings_url()}
+        s.get(f"{self.QUEST_BASE}/cdn/util/get_posting/",
+              params={"current_project_id": project_id, "next_project_id": next_id,
+                      "prev_project_id": prev_id}, headers=xhr, timeout=REQUEST_TIMEOUT)
+        page = s.get(f"{self.QUEST_BASE}/cdn/view_plan_holders/",
+                     params={"project_id": project_id, "path": 269, "search_id": ""},
+                     timeout=REQUEST_TIMEOUT)
+        r = s.get(f"{self.QUEST_BASE}/cdn/planholder_data/",
+                  params={"project_id": project_id, "draw": 1, "start": 0, "length": -1,
+                          "search[value]": ""},
+                  headers={**xhr, "Referer": page.url,
+                           "Accept": "application/json, text/javascript, */*; q=0.01"},
+                  timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        holders = []
+        for d in r.json().get("data") or []:
+            company = re.sub(r"<[^>]+>", "", d.get("render_company") or "")
+            addr = d.get("address") or ""
+            # "1649 W Shoreline Drive, Suite 100, Boise, ID-83702"
+            m = re.match(r"(.*),\s*([^,]+),\s*([A-Z]{2})-?\s*([\d\-]*)\s*$", addr)
+            street, city, state, zipcode = (m.groups() if m else (addr, None, None, None))
+            holders.append(plan_holder(
+                company, role=d.get("business_designation"), contact=d.get("contact"),
+                emails=clean_emails(d.get("email_address")),
+                phone=re.sub(r"<[^>]+>", "", d.get("render_phone_number") or ""),
+                address=street, city=city, state=state, zipcode=zipcode,
+                cert=d.get("business_certification_list"),
+            ))
+        return holders
 
 
 class WYDOTExevisionAdapter(SiteAdapter):
@@ -285,6 +461,10 @@ class WYDOTExevisionAdapter(SiteAdapter):
             lm = self._LETTING.search(text)
             bid_date = parse_bid_date(lm.group(1)) if lm else None
 
+            ph = block.find("a", href=re.compile(r"PlanHolders\.aspx", re.I))
+            if ph:
+                self._load_plan_holders(urljoin(self.PAGE, ph["href"]), label)
+
             for a in block.find_all("a", href=True):
                 dm = self._DRIVE_ID.search(a["href"])
                 if not dm:
@@ -303,6 +483,39 @@ class WYDOTExevisionAdapter(SiteAdapter):
 
         print(f"  WYDOT: {len(out)} document(s) across the advertised projects")
         return out
+
+    def _load_plan_holders(self, url, label):
+        """The project's "View Planholder's List" page (PlanHolders.aspx) —
+        one plain HTML table: Name / Address / City / ST / Postal / Phone /
+        FAX / Email, emails ';'-separated. No Prime/Sub. Best-effort."""
+        from bs4 import BeautifulSoup
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            print(f"  ! WYDOT: couldn't load plan holders for {label}: {e}")
+            return
+        soup = BeautifulSoup(r.text, "html.parser")
+        holders = []
+        for table in soup.find_all("table"):
+            cols = None
+            for tr in table.find_all("tr"):
+                cells = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])]
+                low = [c.lower() for c in cells]
+                if "name" in low and "phone" in low:
+                    cols = {c: i for i, c in enumerate(low)}
+                    continue
+                if not cols or len(cells) < len(cols) or not cells[cols["name"]]:
+                    continue
+                get = lambda k: cells[cols[k]] if k in cols else None
+                holders.append(plan_holder(
+                    get("name"), phone=get("phone"), emails=clean_emails(get("email")),
+                    address=get("address"), city=(get("city") or "").title(),
+                    state=get("st"), zipcode=get("postal"),
+                ))
+            if holders:
+                break
+        self.plan_holders[label] = holders
 
 
 class ConstructConnectAdapter(SiteAdapter):
@@ -909,7 +1122,144 @@ class ConstructConnectAdapter(SiteAdapter):
             out = [(lbl, u, fn, data, src, bid_date, bid_time)
                    for (lbl, u, fn, data, src, _bd, _bt) in out]
 
+        # After the documents, never before — the documents are what the scan
+        # is for; plan holders are a best-effort extra on the same visit.
+        if out:
+            self._extract_contacts(page, label, project_url)
+
         return out
+
+    # The project page's "Contacts" tab (confirmed via screenshot + devtools
+    # 2026-10-18): sub-tabs All / Design Team / Bidders / Planholders /
+    # Interested Parties, each a `button[role=tab]` inside
+    # `[role=tablist][aria-label=Contacts]` with an <h2> name and a count
+    # badge. Each contact is a card; fields are matched on partial
+    # CSS-module class names (the hash suffix changes per deploy) and read
+    # from their `title` attribute, which holds the clean value. The data is
+    # server-rendered with the page — no separate XHR to listen for. Design
+    # Team (owner/architect) is deliberately left out: not sales leads.
+    CONTACT_GROUPS = (("Bidders", "Bidder"), ("Planholders", "Planholder"),
+                      ("Interested Parties", "Interested Party"))
+    CONTACT_CARD = '[class*="ProjectContactCard_card"]'
+    CONTACT_MAX_PAGES = 10
+
+    def _extract_contacts(self, page, label, project_url):
+        try:
+            tab = page.locator(
+                'button:has-text("Contacts"), a:has-text("Contacts"), [role="tab"]:has-text("Contacts")'
+            ).first
+            tab.click(timeout=8000)
+            page.wait_for_selector('[role="tablist"][aria-label="Contacts"]', timeout=10000)
+        except Exception as e:
+            print(f"  ! ConstructConnect: no Contacts tab for '{label}' ({e})")
+            self._return_to(page, project_url)
+            return
+        try:
+            # Card view (the List/Card toggle may remember List per account).
+            page.locator('button:has-text("Card")').first.click(timeout=2000)
+        except Exception:
+            pass
+
+        holders, seen = [], set()
+        try:
+            tablist = page.locator('[role="tablist"][aria-label="Contacts"]')
+            for tab_name, role in self.CONTACT_GROUPS:
+                sub = tablist.locator('button[role="tab"]').filter(
+                    has=page.locator("h2", has_text=re.compile(rf"^\s*{re.escape(tab_name)}\s*$"))
+                ).first
+                if not sub.count():
+                    continue
+                badge = (sub.locator(".badge").first.inner_text(timeout=2000) or "0").strip()
+                expected = int(re.sub(r"\D", "", badge) or 0)
+                if not expected:
+                    continue
+                sub.click(timeout=5000)
+                page.wait_for_timeout(800)
+                got = 0
+                for _ in range(self.CONTACT_MAX_PAGES):
+                    try:
+                        page.wait_for_selector(self.CONTACT_CARD, timeout=8000)
+                    except Exception:
+                        break
+                    for card in page.query_selector_all(self.CONTACT_CARD):
+                        h = self._read_contact_card(card, role)
+                        if not h:
+                            continue
+                        got += 1
+                        k = (h["company"], h["contact"], role)
+                        if k not in seen:
+                            seen.add(k)
+                            holders.append(h)
+                    if got >= expected or not self._contacts_next_page(page):
+                        break
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't read contacts for '{label}' ({e})")
+            if not getattr(self, "_saved_contacts_debug", False):
+                self._saved_contacts_debug = True
+                self._save_debug_screenshot(page, "contacts_failed")
+        self.plan_holders[label] = holders
+        self._return_to(page, project_url)
+
+    @staticmethod
+    def _read_contact_card(card, role):
+        def field(part):
+            el = card.query_selector(f'[class*="ProjectContactCard_{part}"]')
+            if not el:
+                return None
+            v = (el.get_attribute("title") or el.inner_text() or "").strip()
+            return v if v and v != "-" else None
+
+        company, name = field("company"), field("name")
+        if not company and not name:
+            return None
+        phone = None
+        for info in card.query_selector_all('[class*="ProjectContactCard_info_"]'):
+            lab = info.query_selector('[class*="ProjectContactCard_infoLabel"]')
+            val = info.query_selector('[class*="ProjectContactCard_infoValue"]')
+            if lab and val and "phone" in (lab.inner_text() or "").lower():
+                phone = (val.get_attribute("title") or val.inner_text() or "").strip()
+        city, state = None, None
+        loc = field("location")
+        if loc:
+            parts = [x.strip() for x in loc.rsplit(",", 1)]
+            city, state = (parts[0], parts[1]) if len(parts) == 2 else (loc, None)
+        return plan_holder(
+            company or name, role=role, contact=name if company else None,
+            title=field("role"), emails=clean_emails(field("email")), phone=phone,
+            city=city, state=state,
+        )
+
+    @staticmethod
+    def _contacts_next_page(page):
+        """Contacts paginate 20 per page ("1-20 of 34" + arrows in
+        #TableFooter). Clicks the next arrow; False when there isn't one or
+        it's disabled. Best-effort — the footer's markup isn't confirmed."""
+        try:
+            btns = page.locator("#TableFooter button")
+            n = btns.count()
+            if not n:
+                return False
+            nxt = btns.nth(n - 1)
+            if nxt.is_disabled() or nxt.get_attribute("aria-disabled") == "true":
+                return False
+            nxt.click(timeout=3000)
+            page.wait_for_timeout(800)
+            return True
+        except Exception:
+            return False
+
+    def _return_to(self, page, project_url):
+        """Clicking the Contacts tab may push its own history entry —
+        _download_project's page.go_back() has to land on the results list,
+        not back on the project's Overview tab."""
+        try:
+            for _ in range(4):
+                if page.url == project_url:
+                    break
+                page.go_back()
+                page.wait_for_timeout(800)
+        except Exception:
+            pass
 
     # Each event on the project page ("Bid Date", "Start Date", "End Date",
     # ...) is one of these blocks — matched on a partial class name since the

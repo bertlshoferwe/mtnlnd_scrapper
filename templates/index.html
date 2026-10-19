@@ -669,6 +669,68 @@
   .file-row.f-open .f-chevron { transform: rotate(180deg); }
   .f-body { display: none; }
   .file-row.f-open .f-body { display: block; }
+  /* Project window: Documents / Plan Holders tabs. Wider than the other
+     modals — the plan-holders table has up to six columns. */
+  #projectModal .modal { max-width: 880px; }
+  .project-tabs { align-items: center; }
+  .project-tabs .hide-nomatch-toggle { padding-bottom: 2px; }
+  /* Documents tree */
+  .tree-folder { border-bottom: 1px solid var(--border); }
+  .tree-folder:last-child { border-bottom: none; }
+  .tf-head {
+    display: flex; align-items: center; gap: 7px; padding: 10px 0;
+    cursor: pointer; user-select: none; font-size: 13px;
+  }
+  .tf-chevron { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); display: inline-flex; transform: rotate(-90deg); transition: transform .15s; }
+  .tree-folder.open > .tf-head .tf-chevron { transform: none; }
+  .tf-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); display: inline-flex; }
+  .tf-chevron svg, .tf-icon svg { width: 100%; height: 100%; }
+  .tf-name { font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
+  .tf-count { font-size: 12px; color: var(--muted); }
+  .tf-matches { margin-left: auto; padding-left: 10px; }
+  .tf-children { display: none; padding-left: 20px; border-left: 1px solid var(--border); margin-left: 6px; }
+  .tree-folder.open > .tf-children { display: block; }
+  .tf-children .tree-folder:last-child, .tf-children .file-row:last-child { border-bottom: none; }
+  /* Plan holders table */
+  .ph-table td { vertical-align: top; }
+  .ph-company { font-weight: 600; min-width: 160px; }
+  .ph-cert {
+    margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--success);
+    border: 1px solid var(--success); border-radius: 4px; padding: 0 4px;
+  }
+  .ph-role {
+    display: inline-block; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+    padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text);
+  }
+  .ph-role-prime { background: var(--accent); color: var(--accent-contrast); }
+  .ph-role-room { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .ph-sub { font-size: 11.5px; color: var(--muted); }
+  .ph-email, .ph-phone { color: var(--accent); text-decoration: none; display: block; }
+  .ph-email { overflow-wrap: break-word; }
+  .ph-phone { white-space: nowrap; }
+  .ph-email:hover, .ph-phone:hover { text-decoration: underline; }
+  .ph-more {
+    background: none; border: none; padding: 0; font-family: inherit; cursor: pointer;
+    font-size: 11.5px; color: var(--muted); text-decoration: underline;
+  }
+  .ph-updated { margin-top: 10px; font-size: 12px; }
+  @media (max-width: 640px) {
+    /* Phones: one card per company instead of a squeezed six-column table. */
+    .ph-table thead { display: none; }
+    .ph-table, .ph-table tbody, .ph-table tr { display: block; width: auto; }
+    .ph-table tr { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .ph-table tr:last-child { border-bottom: none; }
+    .kw-table.ph-table td { display: flex; gap: 8px; border: none; padding: 3px 0; width: auto; }
+    .kw-table.ph-table td:empty { display: none; }
+    .kw-table.ph-table td:not(:first-child)::before {
+      content: attr(data-label); flex: 0 0 92px; padding-top: 2px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted);
+    }
+    .ph-val { min-width: 0; flex: 1; }
+    .ph-company { min-width: 0; font-size: 14px; }
+    .project-tabs { flex-wrap: wrap; }
+    .project-tabs .hide-nomatch-toggle { padding: 6px 0; }
+  }
   .pdf-modal { max-width: 940px; position: relative; }
   .pdf-modal .modal-body { flex: 1 1 auto; }
   .pdf-actions { gap: 8px; }
@@ -1134,12 +1196,17 @@
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Project page</a>
         <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
-        <label class="hide-nomatch-toggle">
+      </div>
+      <div class="site-tabs project-tabs" role="tablist">
+        <button type="button" class="site-tab active" id="projTabDocs" role="tab" onclick="setProjectTab('docs')">Documents<span class="rtab-count" id="projTabDocsCount"></span></button>
+        <button type="button" class="site-tab" id="projTabHolders" role="tab" onclick="setProjectTab('holders')">Plan Holders<span class="rtab-count" id="projTabHoldersCount"></span></button>
+        <label class="hide-nomatch-toggle" id="hideNoMatchWrap">
           <input type="checkbox" id="hideNoMatchFiles" checked style="width:auto;" onchange="renderProjectFiles()">
           Hide non-matches
         </label>
       </div>
       <div id="projectModalFiles"></div>
+      <div id="projectModalHolders" hidden></div>
     </div>
   </div>
 </div>
@@ -2867,8 +2934,177 @@ function openProjectModal(i) {
   verifyProjectJira(p);
 
   renderProjectFiles();
+  document.getElementById('projTabDocsCount').textContent = p.file_count || '';
+  setProjectTab('docs');
+  loadPlanHolders(p);
 
   openModal('project');
+}
+
+function setProjectTab(which) {
+  const docs = which === 'docs';
+  document.getElementById('projTabDocs').classList.toggle('active', docs);
+  document.getElementById('projTabHolders').classList.toggle('active', !docs);
+  document.getElementById('projectModalFiles').hidden = !docs;
+  document.getElementById('projectModalHolders').hidden = docs;
+  document.getElementById('hideNoMatchWrap').style.display = docs ? '' : 'none';
+}
+
+// Plan Holders tab — fetched when the project opens (not part of the results
+// poll; it can be a long list). Columns show only when at least one company
+// on this project has that field, since each site publishes different ones.
+let planHoldersData = null;
+
+function loadPlanHolders(p) {
+  planHoldersData = null;
+  document.getElementById('projTabHoldersCount').textContent = '';
+  const el = document.getElementById('projectModalHolders');
+  el.innerHTML = '<p class="desc">Loading…</p>';
+  fetch('/api/' + currentDivision + '/projects/plan-holders?key=' + encodeURIComponent(p.key))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (currentProject !== p) return;
+      planHoldersData = data;
+      const n = (data.holders || []).length;
+      document.getElementById('projTabHoldersCount').textContent = data.holders ? n : '';
+      renderPlanHolders();
+    })
+    .catch(function() {
+      if (currentProject !== p) return;
+      el.innerHTML = '<p class="desc">Couldn\'t load the plan holders. Try opening the project again.</p>';
+    });
+}
+
+function planHolderRank(h) {
+  const r = (h.role || '').toLowerCase();
+  if (r === 'plan room') return 3;
+  if (/prime|^bidder$|general contractor/.test(r)) return 0;
+  if (/sub|supplier|planholder/.test(r)) return 1;
+  return 2;
+}
+
+function renderPlanHolders() {
+  const el = document.getElementById('projectModalHolders');
+  el.innerHTML = '';
+  const data = planHoldersData || {};
+  const holders = data.holders;
+  if (!holders || !holders.length) {
+    const msg = document.createElement('p');
+    msg.className = 'desc';
+    msg.textContent = !holders
+      ? "No plan holders list for this project yet. If the bid site publishes one, it shows up here after the next daily check."
+      : 'No companies have picked up plans for this project yet.';
+    el.appendChild(msg);
+    return;
+  }
+  const list = holders.slice().sort(function(a, b) {
+    return planHolderRank(a) - planHolderRank(b) || naturalCmp(a.company || '', b.company || '');
+  });
+  const has = function(fn) { return list.some(fn); };
+  const cols = [{ label: 'Company', cell: function(h, td) {
+    const nm = document.createElement('div');
+    nm.className = 'ph-company';
+    nm.textContent = h.company;
+    if (h.cert) {
+      const c = document.createElement('span');
+      c.className = 'ph-cert';
+      c.textContent = h.cert;
+      nm.appendChild(c);
+    }
+    td.appendChild(nm);
+  } }];
+  if (has(function(h) { return h.role; })) cols.push({ label: 'Role', cell: function(h, td) {
+    if (!h.role) return;
+    const b = document.createElement('span');
+    const rank = planHolderRank(h);
+    b.className = 'ph-role' + (rank === 0 ? ' ph-role-prime' : rank === 3 ? ' ph-role-room' : '');
+    b.textContent = h.role;
+    td.appendChild(b);
+  } });
+  if (has(function(h) { return h.contact; })) cols.push({ label: 'Contact', cell: function(h, td) {
+    if (h.contact) td.appendChild(document.createTextNode(h.contact));
+    if (h.title) {
+      const t = document.createElement('div');
+      t.className = 'ph-sub';
+      t.textContent = h.title;
+      td.appendChild(t);
+    }
+  } });
+  if (has(function(h) { return (h.emails || []).length; })) cols.push({ label: 'Email', cell: function(h, td) {
+    const emails = h.emails || [];
+    const mk = function(e) {
+      const a = document.createElement('a');
+      a.href = 'mailto:' + e;
+      // Let a long address wrap at the @ rather than mid-word.
+      const at = e.indexOf('@');
+      a.appendChild(document.createTextNode(at > 0 ? e.slice(0, at + 1) : e));
+      if (at > 0) {
+        a.appendChild(document.createElement('wbr'));
+        a.appendChild(document.createTextNode(e.slice(at + 1)));
+      }
+      a.className = 'ph-email';
+      return a;
+    };
+    if (!emails.length) return;
+    td.appendChild(mk(emails[0]));
+    if (emails.length > 1) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'ph-more';
+      more.textContent = '+' + (emails.length - 1) + ' more';
+      more.onclick = function() {
+        more.remove();
+        emails.slice(1).forEach(function(e) { td.appendChild(mk(e)); });
+      };
+      td.appendChild(more);
+    }
+  } });
+  if (has(function(h) { return h.city || h.state; })) cols.push({ label: 'City / State', cell: function(h, td) {
+    td.textContent = [h.city, h.state].filter(Boolean).join(', ');
+  } });
+  if (has(function(h) { return h.phone; })) cols.push({ label: 'Phone', cell: function(h, td) {
+    if (!h.phone) return;
+    const a = document.createElement('a');
+    a.href = 'tel:' + h.phone.replace(/[^\d+]/g, '');
+    a.textContent = h.phone;
+    a.className = 'ph-phone';
+    td.appendChild(a);
+  } });
+
+  const table = document.createElement('table');
+  table.className = 'kw-table ph-table';
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  cols.forEach(function(c) { const th = document.createElement('th'); th.textContent = c.label; hr.appendChild(th); });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  list.forEach(function(h) {
+    const tr = document.createElement('tr');
+    cols.forEach(function(c) {
+      const td = document.createElement('td');
+      td.setAttribute('data-label', c.label);
+      const val = document.createElement('div');
+      val.className = 'ph-val';
+      c.cell(h, val);
+      if (val.childNodes.length) td.appendChild(val);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  const wrap = document.createElement('div');
+  wrap.style.overflowX = 'auto';
+  wrap.appendChild(table);
+  el.appendChild(wrap);
+
+  if (data.refreshed_at) {
+    const note = document.createElement('p');
+    note.className = 'desc ph-updated';
+    note.textContent = list.length + ' compan' + (list.length === 1 ? 'y' : 'ies') + ' · checked '
+      + new Date(data.refreshed_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    el.appendChild(note);
+  }
 }
 
 function renderProjectFiles() {
@@ -2878,152 +3114,247 @@ function renderProjectFiles() {
 
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
-  let orderedFiles = p.files.slice().sort(function(a, b) {
-    return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0);
-  });
+  let files = p.files.slice();
   if (hideNoMatch) {
-    orderedFiles = orderedFiles.filter(function(f) { return f.keywords.length > 0; });
+    files = files.filter(function(f) { return f.keywords.length > 0; });
   }
-  if (!orderedFiles.length) {
+  if (!files.length) {
     const empty = document.createElement('p');
     empty.className = 'desc';
-    empty.textContent = 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matching files" to see the rest.' : '.');
+    empty.textContent = 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matches" to see the rest.' : '.');
     filesEl.appendChild(empty);
     return;
   }
-  orderedFiles.forEach(function(f) {
-    const row = document.createElement('div');
-    row.className = 'file-row' + (f.is_new ? ' f-new' : '');
+  renderDocTree(buildDocTree(p, files), filesEl, 0);
+}
 
-    const top = document.createElement('div');
-    top.className = 'f-top';
+// Documents tab as a folder tree. Folders come from what each site gives us:
+// ConstructConnect files keep their path inside the downloaded zip
+// ("Project - specifications/26 - Electrical/.../file.pdf"); UDOT download
+// links say which tab a file came from (project-files vs addendum); anything
+// else named "Addendum" goes in an Addenda folder. Everything else sits at
+// the top level, so a small project still reads as a plain list.
+const DOC_FOLDER_NAMES = { 'project-files': 'Project Files', 'addendum': 'Addenda' };
 
-    const left = document.createElement('div');
-    left.className = 'f-top-left';
+function docTreePath(p, f) {
+  let name = f.filename || '(document)';
+  const prefix = (p.project || '') + ' - ';
+  if (p.project && name.indexOf(prefix) === 0 && name.indexOf('/', prefix.length) > 0) {
+    const parts = name.slice(prefix.length).split('/').filter(Boolean);
+    const leaf = parts.pop();
+    return { folders: parts.map(function(x, i) { return i === 0 ? x.charAt(0).toUpperCase() + x.slice(1) : x; }), name: leaf };
+  }
+  const m = /\/project-files\/download\/[^/]+\/([a-z-]+)/.exec(f.url || '');
+  if (m && DOC_FOLDER_NAMES[m[1]]) return { folders: [DOC_FOLDER_NAMES[m[1]]], name: name };
+  if (/addend/i.test(name)) return { folders: ['Addenda'], name: name };
+  return { folders: [], name: name };
+}
+
+function buildDocTree(p, files) {
+  const root = { name: '', folders: {}, files: [], total: 0, matched: 0, fresh: 0 };
+  files.forEach(function(f) {
+    const path = docTreePath(p, f);
+    let node = root;
+    const chain = [root];
+    path.folders.forEach(function(seg) {
+      if (!node.folders[seg]) node.folders[seg] = { name: seg, folders: {}, files: [], total: 0, matched: 0, fresh: 0 };
+      node = node.folders[seg];
+      chain.push(node);
+    });
+    node.files.push({ f: f, name: path.name });
+    chain.forEach(function(n) {
+      n.total++;
+      if (f.keywords.length) n.matched++;
+      if (f.is_new) n.fresh++;
+    });
+  });
+  return root;
+}
+
+const naturalCmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
+const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+function renderDocTree(node, el, depth) {
+  Object.keys(node.folders).sort(naturalCmp).forEach(function(k) {
+    const sub = node.folders[k];
+    const wrap = document.createElement('div');
+    // Opens on its own only when something inside matched a keyword.
+    wrap.className = 'tree-folder' + (sub.matched ? ' open' : '');
+
+    const head = document.createElement('div');
+    head.className = 'tf-head';
+    const chev = document.createElement('span');
+    chev.className = 'tf-chevron';
+    chev.innerHTML = ICON_CHEVRON;
+    const icon = document.createElement('span');
+    icon.className = 'tf-icon';
+    icon.innerHTML = ICON_FOLDER;
     const nm = document.createElement('span');
-    nm.className = 'f-name';
-    nm.textContent = f.filename || '(document)';
-    left.appendChild(nm);
-    if (f.is_new) {
+    nm.className = 'tf-name';
+    nm.textContent = sub.name;
+    const cnt = document.createElement('span');
+    cnt.className = 'tf-count';
+    cnt.textContent = sub.total;
+    head.appendChild(chev); head.appendChild(icon); head.appendChild(nm); head.appendChild(cnt);
+    if (sub.fresh) {
       const tag = document.createElement('span');
       tag.className = 'f-new-tag';
       tag.textContent = 'New';
-      left.appendChild(tag);
+      head.appendChild(tag);
     }
-    top.appendChild(left);
+    const right = document.createElement('span');
+    right.className = 'f-kw-count tf-matches';
+    right.textContent = sub.matched ? (sub.matched + ' matching file' + (sub.matched === 1 ? '' : 's')) : '';
+    head.appendChild(right);
+    head.onclick = function() { wrap.classList.toggle('open'); };
+    wrap.appendChild(head);
 
-    const right = document.createElement('div');
-    right.className = 'f-top-right';
-
-    const count = document.createElement('span');
-    count.className = 'f-kw-count';
-    count.textContent = f.keywords.length
-      ? (f.keywords.length + ' keyword' + (f.keywords.length === 1 ? '' : 's'))
-      : 'No matches';
-    right.appendChild(count);
-
-    const canPreviewPdf = !!(f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url));
-    if (canPreviewPdf) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'f-dl';
-      btn.textContent = 'View PDF';
-      btn.onclick = function(e) { e.stopPropagation(); openPdfPreview(f.url, f.filename); };
-      right.appendChild(btn);
-
-      const dlSrc = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(f.url) + '&download=1';
-      const dl = document.createElement('a');
-      dl.className = 'icon-btn f-dl-icon';
-      dl.href = dlSrc;
-      dl.title = 'Download';
-      dl.setAttribute('aria-label', 'Download ' + (f.filename || 'this file'));
-      if (f.filename) dl.setAttribute('download', f.filename);
-      dl.innerHTML = ICON_DOWNLOAD;
-      dl.onclick = function(e) { e.stopPropagation(); };
-      right.appendChild(dl);
-    } else if (f.url && /^https?:/.test(f.url)) {
-      const a = document.createElement('a');
-      a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = 'Open ↗';
-      a.onclick = function(e) { e.stopPropagation(); };
-      right.appendChild(a);
-    }
-    const chevron = document.createElement('span');
-    chevron.className = 'f-chevron';
-    chevron.innerHTML = ICON_CHEVRON;
-    right.appendChild(chevron);
-    top.appendChild(right);
-
-    top.onclick = function() { row.classList.toggle('f-open'); };
-    row.appendChild(top);
-
-    const body = document.createElement('div');
-    body.className = 'f-body';
-
-    if (f.keywords.length) {
-      let hits = parseLocations(f.locations);
-      if (!hits.length) hits = f.keywords.map(function(k) { return { keyword: k, pages: '' }; });
-      hits.forEach(function(h) {
-        h.count = h.pages ? h.pages.split(',').filter(function(x) { return x.trim(); }).length : 0;
-      });
-      hits.sort(function(a, b) { return b.count - a.count || a.keyword.localeCompare(b.keyword); });
-
-      const table = document.createElement('table');
-      table.className = 'kw-table';
-      table.innerHTML = '<thead><tr><th>Keyword</th><th>Pages</th></tr></thead>';
-      const tbody = document.createElement('tbody');
-      hits.forEach(function(h) {
-        const tr = document.createElement('tr');
-        const td1 = document.createElement('td'); td1.className = 'kt-term'; td1.textContent = h.keyword;
-        const td3 = document.createElement('td'); td3.className = 'kt-pages';
-        const pageToks = h.pages ? h.pages.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
-        if (!pageToks.length) {
-          td3.textContent = '—';
-        } else if (!canPreviewPdf) {
-          td3.textContent = pageToks.join(', ');
-        } else {
-          pageToks.forEach(function(tok, idx) {
-            const m = /(\d+)/.exec(tok);
-            if (m) {
-              const a = document.createElement('a');
-              a.href = '#';
-              a.className = 'kt-page-link';
-              a.textContent = tok;
-              a.onclick = function(e) { e.preventDefault(); openPdfPreview(f.url, f.filename, parseInt(m[1], 10)); };
-              td3.appendChild(a);
-            } else {
-              td3.appendChild(document.createTextNode(tok));
-            }
-            if (idx < pageToks.length - 1) td3.appendChild(document.createTextNode(', '));
-          });
-        }
-        tr.appendChild(td1); tr.appendChild(td3);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      const wrap = document.createElement('div');
-      wrap.style.overflowX = 'auto';
-      wrap.appendChild(table);
-      body.appendChild(wrap);
-    } else {
-      const m = document.createElement('div');
-      m.className = 'f-meta';
-      m.textContent = f.status === 'Download failed'
-        ? "Couldn't download this file."
-        : (f.status === 'No text extracted' ? 'No readable text in this file.' : 'No keywords matched.');
-      body.appendChild(m);
-    }
-
-    const note = (f.ai_notes || '').replace(/\s*\[AI scan truncated[^\]]*\]\s*/g, '').trim();
-    if (note) {
-      const n = document.createElement('div');
-      n.className = 'f-meta';
-      n.textContent = note;
-      body.appendChild(n);
-    }
-    row.appendChild(body);
-    filesEl.appendChild(row);
+    const kids = document.createElement('div');
+    kids.className = 'tf-children';
+    renderDocTree(sub, kids, depth + 1);
+    wrap.appendChild(kids);
+    el.appendChild(wrap);
   });
+
+  node.files.slice().sort(function(a, b) {
+    return (b.f.is_new ? 1 : 0) - (a.f.is_new ? 1 : 0) || naturalCmp(a.name, b.name);
+  }).forEach(function(item) {
+    el.appendChild(buildFileRow(item.f, item.name));
+  });
+}
+
+function buildFileRow(f, displayName) {
+  const row = document.createElement('div');
+  row.className = 'file-row' + (f.is_new ? ' f-new' : '');
+
+  const top = document.createElement('div');
+  top.className = 'f-top';
+
+  const left = document.createElement('div');
+  left.className = 'f-top-left';
+  const nm = document.createElement('span');
+  nm.className = 'f-name';
+  nm.textContent = displayName || f.filename || '(document)';
+  left.appendChild(nm);
+  if (f.is_new) {
+    const tag = document.createElement('span');
+    tag.className = 'f-new-tag';
+    tag.textContent = 'New';
+    left.appendChild(tag);
+  }
+  top.appendChild(left);
+
+  const right = document.createElement('div');
+  right.className = 'f-top-right';
+
+  const count = document.createElement('span');
+  count.className = 'f-kw-count';
+  count.textContent = f.keywords.length
+    ? (f.keywords.length + ' keyword' + (f.keywords.length === 1 ? '' : 's'))
+    : 'No matches';
+  right.appendChild(count);
+
+  const canPreviewPdf = !!(f.url && /^https?:/.test(f.url) && /\.pdf\b/i.test((f.filename || '') + ' ' + f.url));
+  if (canPreviewPdf) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'f-dl';
+    btn.textContent = 'View PDF';
+    btn.onclick = function(e) { e.stopPropagation(); openPdfPreview(f.url, f.filename); };
+    right.appendChild(btn);
+
+    const dlSrc = '/api/' + currentDivision + '/pdf?url=' + encodeURIComponent(f.url) + '&download=1';
+    const dl = document.createElement('a');
+    dl.className = 'icon-btn f-dl-icon';
+    dl.href = dlSrc;
+    dl.title = 'Download';
+    dl.setAttribute('aria-label', 'Download ' + (f.filename || 'this file'));
+    if (f.filename) dl.setAttribute('download', f.filename);
+    dl.innerHTML = ICON_DOWNLOAD;
+    dl.onclick = function(e) { e.stopPropagation(); };
+    right.appendChild(dl);
+  } else if (f.url && /^https?:/.test(f.url)) {
+    const a = document.createElement('a');
+    a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'Open ↗';
+    a.onclick = function(e) { e.stopPropagation(); };
+    right.appendChild(a);
+  }
+  const chevron = document.createElement('span');
+  chevron.className = 'f-chevron';
+  chevron.innerHTML = ICON_CHEVRON;
+  right.appendChild(chevron);
+  top.appendChild(right);
+
+  top.onclick = function() { row.classList.toggle('f-open'); };
+  row.appendChild(top);
+
+  const body = document.createElement('div');
+  body.className = 'f-body';
+
+  if (f.keywords.length) {
+    let hits = parseLocations(f.locations);
+    if (!hits.length) hits = f.keywords.map(function(k) { return { keyword: k, pages: '' }; });
+    hits.forEach(function(h) {
+      h.count = h.pages ? h.pages.split(',').filter(function(x) { return x.trim(); }).length : 0;
+    });
+    hits.sort(function(a, b) { return b.count - a.count || a.keyword.localeCompare(b.keyword); });
+
+    const table = document.createElement('table');
+    table.className = 'kw-table';
+    table.innerHTML = '<thead><tr><th>Keyword</th><th>Pages</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    hits.forEach(function(h) {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.className = 'kt-term'; td1.textContent = h.keyword;
+      const td3 = document.createElement('td'); td3.className = 'kt-pages';
+      const pageToks = h.pages ? h.pages.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      if (!pageToks.length) {
+        td3.textContent = '—';
+      } else if (!canPreviewPdf) {
+        td3.textContent = pageToks.join(', ');
+      } else {
+        pageToks.forEach(function(tok, idx) {
+          const m = /(\d+)/.exec(tok);
+          if (m) {
+            const a = document.createElement('a');
+            a.href = '#';
+            a.className = 'kt-page-link';
+            a.textContent = tok;
+            a.onclick = function(e) { e.preventDefault(); openPdfPreview(f.url, f.filename, parseInt(m[1], 10)); };
+            td3.appendChild(a);
+          } else {
+            td3.appendChild(document.createTextNode(tok));
+          }
+          if (idx < pageToks.length - 1) td3.appendChild(document.createTextNode(', '));
+        });
+      }
+      tr.appendChild(td1); tr.appendChild(td3);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    const wrap = document.createElement('div');
+    wrap.style.overflowX = 'auto';
+    wrap.appendChild(table);
+    body.appendChild(wrap);
+  } else {
+    const m = document.createElement('div');
+    m.className = 'f-meta';
+    m.textContent = f.status === 'Download failed'
+      ? "Couldn't download this file."
+      : (f.status === 'No text extracted' ? 'No readable text in this file.' : 'No keywords matched.');
+    body.appendChild(m);
+  }
+
+  const note = (f.ai_notes || '').replace(/\s*\[AI scan truncated[^\]]*\]\s*/g, '').trim();
+  if (note) {
+    const n = document.createElement('div');
+    n.className = 'f-meta';
+    n.textContent = note;
+    body.appendChild(n);
+  }
+  row.appendChild(body);
+  return row;
 }
 
 function renderProjectDoneBtn(p) {
