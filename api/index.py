@@ -30,8 +30,8 @@ Routes:
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            tell the local scan worker to start now
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
-  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=active|done)
-  POST /api/<division_id>/projects/done      mark a project done / not done
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=review|jira|not_fit)
+  POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
   POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars)
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
@@ -761,40 +761,58 @@ def api_get_results_grouped(division_id):
     include_closed = request.args.get("include_closed") in ("1", "true")
     updated_only = request.args.get("updated") in ("1", "true")
     new_only = request.args.get("new") in ("1", "true")
-    # The dashboard's folder tabs — "active" excludes done projects entirely
-    # (not just dims them), "done" shows only done ones. Anything else (or
-    # omitted, for any other caller) applies no done/not-done split.
+    # The dashboard's folder tabs: "review" (no decision yet, or "Not a fit"
+    # with a newer matching document), "jira", "not_fit". Omitted = all.
+    # The old "active"/"done" values still map across for a stale page.
     view = (request.args.get("view") or "").strip()
-    done_filter = True if view == "done" else (False if view == "active" else None)
+    view = {"active": "review", "done": "not_fit"}.get(view, view)
+    if view not in ("review", "jira", "not_fit"):
+        view = None
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(100, int(request.args.get("page_size", 15))))
     except ValueError:
         return jsonify({"error": "page and page_size must be integers"}), 400
 
-    projects, total, sites, updated_total, new_total = supabase_store.get_results_grouped(
+    projects, total, sites, updated_total, new_total, view_counts = supabase_store.get_results_grouped(
         division_id, search=search or None, status=status or None, site=site or None,
         keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
         include_closed=include_closed, updated_only=updated_only, new_only=new_only,
-        done_filter=done_filter, page=page, page_size=page_size,
+        view=view, page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "updated_total": updated_total, "new_total": new_total,
+                    "view_counts": view_counts,
+                    "not_fit_reasons": list(supabase_store.NOT_FIT_REASONS),
                     "page": page, "page_size": page_size})
 
 
-@app.route("/api/<division_id>/projects/done", methods=["POST"])
-def api_set_project_done(division_id):
-    """Mark a project done / not done. Body: {"project_key": "...", "done": bool}."""
+@app.route("/api/<division_id>/projects/decision", methods=["POST"])
+def api_set_project_decision(division_id):
+    """Move a project between tabs. Body: {"project_key", "decision":
+    "not_fit" | "review" | "jira", "reason", "note"}. "not_fit" needs one of
+    the one-click reasons; "jira" is only for a project that already has a
+    Jira issue (filing a new one goes through /projects/jira, which sets
+    this itself); "review" clears the decision."""
     _, err = _require_division(division_id)
     if err:
         return err
     data = request.get_json(force=True, silent=True) or {}
     key = (data.get("project_key") or "").strip()
+    decision = (data.get("decision") or "").strip()
+    reason = (data.get("reason") or "").strip() or None
+    note = (data.get("note") or "").strip()[:1000] or None
     if not key:
         return jsonify({"error": "project_key is required"}), 400
+    if decision not in ("not_fit", "review", "jira"):
+        return jsonify({"error": "decision must be not_fit, review or jira"}), 400
+    if decision == "not_fit" and reason not in supabase_store.NOT_FIT_REASONS:
+        return jsonify({"error": "pick a reason"}), 400
+    if decision == "jira" and not supabase_store.load_project_jira_keys(division_id).get(key):
+        return jsonify({"error": "this project hasn't been added to Jira"}), 400
     try:
-        supabase_store.set_project_done(division_id, key, bool(data.get("done")))
+        supabase_store.set_project_decision(
+            division_id, key, None if decision == "review" else decision, reason, note)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
@@ -863,6 +881,11 @@ def api_add_project_to_jira(division_id):
         supabase_store.set_project_jira_key(division_id, key, issue_key)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    # Filing it is the decision — moves it to the Jira tab.
+    try:
+        supabase_store.set_project_decision(division_id, key, "jira")
+    except ValueError as e:
+        print(f"  ! couldn't record the Jira decision for {key} ({e})")
     return jsonify({"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"})
 
 
@@ -896,6 +919,13 @@ def api_verify_project_jira(division_id):
             supabase_store.set_project_jira_key(division_id, key, None)
         except ValueError:
             pass
+        # The issue is gone, so it's no longer "in Jira" — back to review.
+        decision = (supabase_store.load_project_decisions(division_id).get(key) or {}).get("decision")
+        if decision == "jira":
+            try:
+                supabase_store.set_project_decision(division_id, key, None, source="jira_deleted")
+            except ValueError:
+                pass
         return jsonify({"exists": False})
     return jsonify({"exists": True})
 

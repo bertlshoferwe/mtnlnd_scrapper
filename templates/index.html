@@ -202,6 +202,37 @@
     background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text);
   }
   .done-btn:disabled { opacity: .5; cursor: default; }
+  .done-btn.notfit-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .done-btn.notfit-btn.is-notfit { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+  .decision-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
+    margin: -6px 0 14px; font-size: 13px; color: var(--muted);
+  }
+  .decision-bar[hidden], .not-fit-panel[hidden] { display: none; }
+  .link-btn {
+    background: none; border: none; padding: 0; font-family: inherit; font-size: 13px;
+    font-weight: 600; color: var(--accent); cursor: pointer;
+  }
+  .link-btn:hover { text-decoration: underline; }
+  .not-fit-panel {
+    margin: -4px 0 16px; padding: 14px; border: 1px solid var(--border-strong);
+    border-radius: 10px; background: var(--surface-2);
+  }
+  .nf-title { font-weight: 650; font-size: 13.5px; margin-bottom: 10px; }
+  .nf-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .nf-reason {
+    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 6px 11px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+  }
+  .nf-reason:hover { border-color: var(--accent); }
+  .nf-reason.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+  .not-fit-panel textarea {
+    width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; resize: vertical;
+    padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text);
+  }
+  .nf-actions { display: flex; gap: 8px; margin-top: 10px; }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
@@ -482,6 +513,7 @@
     transition: color .12s, background .12s;
   }
   .view-tab:hover { color: var(--text); }
+  .view-tab .vt-count { margin-left: 6px; font-weight: 500; opacity: .6; font-size: 12px; }
   .view-tab.active {
     color: var(--text); background: var(--card);
     border-color: var(--border); border-bottom-color: var(--card);
@@ -997,9 +1029,10 @@
       </div>
     </div>
 
-    <div class="view-tabs" role="tablist" aria-label="Active vs. done projects">
-      <button type="button" class="view-tab" id="viewTabActive" role="tab" onclick="switchResultsView('active')">Active</button>
-      <button type="button" class="view-tab" id="viewTabDone" role="tab" onclick="switchResultsView('done')">Done</button>
+    <div class="view-tabs" role="tablist" aria-label="To review, Jira, or not a fit">
+      <button type="button" class="view-tab" id="viewTabReview" role="tab" onclick="switchResultsView('review')">To Review<span class="vt-count" id="viewCountReview"></span></button>
+      <button type="button" class="view-tab" id="viewTabJira" role="tab" onclick="switchResultsView('jira')">Jira<span class="vt-count" id="viewCountJira"></span></button>
+      <button type="button" class="view-tab" id="viewTabNotFit" role="tab" onclick="switchResultsView('not_fit')">Not a Fit<span class="vt-count" id="viewCountNotFit"></span></button>
       <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
     </div>
 
@@ -1194,8 +1227,21 @@
     <div class="modal-body">
       <div class="row project-actions-row" style="margin-bottom:16px;">
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Project page</a>
-        <button type="button" id="projectDoneBtn" class="done-btn" onclick="toggleProjectDone()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span id="projectDoneLabel">Mark done</span></button>
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
+        <button type="button" id="projectNotFitBtn" class="done-btn notfit-btn" onclick="openNotFitPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg><span>Not a fit</span></button>
+      </div>
+      <div class="decision-bar" id="decisionBar" hidden>
+        <span id="decisionText"></span>
+        <button type="button" class="link-btn" id="decisionUndoBtn" onclick="moveProjectToReview()">Move back to review</button>
+      </div>
+      <div class="not-fit-panel" id="notFitPanel" hidden>
+        <div class="nf-title">Why isn't this a fit?</div>
+        <div class="nf-reasons" id="notFitReasons"></div>
+        <textarea id="notFitNote" rows="2" maxlength="1000" placeholder="Anything else worth remembering? (optional)"></textarea>
+        <div class="nf-actions">
+          <button type="button" class="btn-primary" id="notFitSaveBtn" onclick="saveNotFit()" disabled>Save</button>
+          <button type="button" class="btn-ghost" onclick="closeNotFitPanel()">Cancel</button>
+        </div>
       </div>
       <div class="site-tabs project-tabs" role="tablist">
         <button type="button" class="site-tab active" id="projTabDocs" role="tab" onclick="setProjectTab('docs')">Documents<span class="rtab-count" id="projTabDocsCount"></span></button>
@@ -1724,7 +1770,7 @@ let editingSiteId = null;
 
 const ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
-const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const ICON_NOT_FIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg>';
 const ICON_JIRA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg>';
 const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>';
@@ -2498,7 +2544,9 @@ function applyFilterPrefs(divisionId, urlSite) {
   currentResultsClosed = !!saved.closed;
   currentResultsUpdated = !!saved.updated;
   currentResultsNew = !!saved.newOnly;
-  currentResultsView = saved.view || 'active';
+  // Remembered from before the tabs were renamed: Active -> To Review, Done -> Not a Fit.
+  currentResultsView = ({ active: 'review', done: 'not_fit' })[saved.view] || saved.view;
+  if (RESULT_VIEWS.indexOf(currentResultsView) < 0) currentResultsView = 'review';
   currentResultsSort = saved.sort || 'bid';
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = saved.status || 'Matched';
@@ -2554,7 +2602,9 @@ function toggleStatsPeek() {
   document.getElementById('statsPeekBtn').classList.toggle('active', on);
   loadResultsInfo();
 }
-let currentResultsView = 'active';  // "active" | "done" — the folder tabs
+let currentResultsView = 'review';  // "review" | "jira" | "not_fit" — the folder tabs
+const RESULT_VIEWS = ['review', 'jira', 'not_fit'];
+let notFitReasons = [];
 let currentResultsSort = 'bid';     // flagged | bid | keywords | recent | name
 
 async function loadResultsInfo() {
@@ -2697,13 +2747,20 @@ async function loadProjects() {
   renderUpdatesBadge(data.updated_total || 0);
   renderNewBadge(data.new_total || 0);
   renderSiteTabs(data.sites);
+  const vc = data.view_counts || {};
+  document.getElementById('viewCountReview').textContent = vc.review != null ? vc.review : '';
+  document.getElementById('viewCountJira').textContent = vc.jira != null ? vc.jira : '';
+  document.getElementById('viewCountNotFit').textContent = vc.not_fit != null ? vc.not_fit : '';
+  if (data.not_fit_reasons) notFitReasons = data.not_fit_reasons;
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
-  if (currentResultsView === 'done') {
-    empty.textContent = 'No done projects yet.';
+  if (currentResultsView === 'jira' && !search) {
+    empty.textContent = 'Nothing added to Jira yet.';
+  } else if (currentResultsView === 'not_fit' && !search) {
+    empty.textContent = 'Nothing marked "not a fit" yet.';
   } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || (status && status !== 'Matched')) {
     empty.textContent = 'No projects match that filter.';
   } else if (status === 'Matched') {
@@ -2714,21 +2771,21 @@ async function loadProjects() {
 
   projectsData.forEach(function(p, i) {
     const li = document.createElement('li');
-    if (p.done) li.classList.add('p-done');
+    if (p.bucket === 'not_fit') li.classList.add('p-done');
     if (p.closed) li.classList.add('p-closed');
     if (p.updated) li.classList.add('p-updated');
     if (p.reopened) li.classList.add('p-reopened');
     if (p.overdue) li.classList.add('p-overdue');
     li.onclick = function() { openProjectModal(i); };
 
-    if ((p.done || p.reopened) || p.jira_key) {
+    if (p.reopened || p.jira_key) {
       const badges = document.createElement('div');
-      badges.className = 'p-badges' + ((p.done || p.reopened) && p.jira_key ? ' p-badges-two' : '');
-      if (p.done || p.reopened) {
+      badges.className = 'p-badges' + (p.reopened && p.jira_key ? ' p-badges-two' : '');
+      if (p.reopened) {
         const chk = document.createElement('span');
         chk.className = 'p-check';
-        chk.title = p.reopened ? 'Was marked done — new document since' : 'Marked done';
-        chk.innerHTML = ICON_CHECK;
+        chk.title = 'Was marked not a fit (' + (p.decision_reason || 'no reason') + ') — new matching document since';
+        chk.innerHTML = ICON_NOT_FIT;
         badges.appendChild(chk);
       }
       if (p.jira_key) {
@@ -2747,6 +2804,7 @@ async function loadProjects() {
     const subParts = [];
     if (p.source_prefix) subParts.push(p.source_prefix);
     if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
+    if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
     if (subParts.length) {
       const sub = document.createElement('span');
       sub.className = 'p-sub';
@@ -2786,7 +2844,7 @@ async function loadProjects() {
       const n = p.new_file_count || 0;
       u.textContent = n ? '+' + n + ' new' : 'new document';
       u.title = p.reopened
-        ? 'New document(s) added since you marked this project done'
+        ? 'New document(s) added since you marked this project not a fit'
         : 'New document(s) added to this project';
       badgeSlot.appendChild(u);
     } else if (isFirstScan(p)) {
@@ -2913,9 +2971,7 @@ function openProjectModal(i) {
     meta.push(m);
   }
   if (p.updated) {
-    meta.push((p.reopened ? 'reopened — ' : '')
-      + (p.new_file_count || 0) + ' new document' + ((p.new_file_count === 1) ? '' : 's')
-      + ' (mark done to clear)');
+    meta.push((p.new_file_count || 0) + ' new document' + ((p.new_file_count === 1) ? '' : 's'));
   }
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
 
@@ -2929,7 +2985,8 @@ function openProjectModal(i) {
   if (p.source_url) { link.href = p.source_url; link.style.display = 'inline-flex'; }
   else { link.style.display = 'none'; }
 
-  renderProjectDoneBtn(p);
+  closeNotFitPanel();
+  renderDecision(p);
   renderProjectJiraBtn(p);
   verifyProjectJira(p);
 
@@ -3357,32 +3414,104 @@ function buildFileRow(f, displayName) {
   return row;
 }
 
-function renderProjectDoneBtn(p) {
-  const btn = document.getElementById('projectDoneBtn');
-  btn.classList.toggle('is-done', !!p.done);
-  document.getElementById('projectDoneLabel').textContent = p.done ? 'Done' : 'Mark done';
+// Project decisions: Add to Jira / Not a fit / back to review. Each one is
+// recorded with a snapshot of the project (server side) — the history the AI
+// will learn "worth bidding vs. just information" from.
+function renderDecision(p) {
+  const nf = document.getElementById('projectNotFitBtn');
+  nf.classList.toggle('is-notfit', p.bucket === 'not_fit');
+  const bar = document.getElementById('decisionBar');
+  const text = document.getElementById('decisionText');
+  const undo = document.getElementById('decisionUndoBtn');
+  const when = p.decided_at ? ' on ' + new Date(p.decided_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+  let msg = '';
+  if (p.bucket === 'not_fit') {
+    msg = 'Marked not a fit' + when + (p.decision_reason ? ' — ' + p.decision_reason : '')
+      + (p.decision_note ? ': "' + p.decision_note + '"' : '');
+  } else if (p.bucket === 'jira') {
+    msg = 'In Jira' + when + '.';
+  } else if (p.reopened) {
+    msg = 'Marked not a fit' + when + (p.decision_reason ? ' (' + p.decision_reason + ')' : '')
+      + ', but a new matching document has come in since.';
+  }
+  text.textContent = msg;
+  undo.hidden = p.bucket === 'review';
+  bar.hidden = !msg;
 }
 
-async function toggleProjectDone() {
+function openNotFitPanel() {
   const p = currentProject;
   if (!p) return;
-  const next = !p.done;
-  const btn = document.getElementById('projectDoneBtn');
+  const panel = document.getElementById('notFitPanel');
+  if (!panel.hidden) { closeNotFitPanel(); return; }
+  const box = document.getElementById('notFitReasons');
+  box.innerHTML = '';
+  const current = p.bucket === 'not_fit' ? p.decision_reason : null;
+  notFitReasons.forEach(function(r) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'nf-reason' + (r === current ? ' selected' : '');
+    b.textContent = r;
+    b.onclick = function() {
+      box.querySelectorAll('.nf-reason').forEach(function(x) { x.classList.remove('selected'); });
+      b.classList.add('selected');
+      document.getElementById('notFitSaveBtn').disabled = false;
+    };
+    box.appendChild(b);
+  });
+  document.getElementById('notFitNote').value = p.bucket === 'not_fit' ? (p.decision_note || '') : '';
+  document.getElementById('notFitSaveBtn').disabled = !current;
+  panel.hidden = false;
+}
+
+function closeNotFitPanel() {
+  document.getElementById('notFitPanel').hidden = true;
+}
+
+async function sendDecision(p, decision, reason, note) {
+  await api('/api/' + currentDivision + '/projects/decision', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ project_key: p.key, decision: decision, reason: reason || null, note: note || null }),
+  });
+  p.decision = decision === 'review' ? null : decision;
+  p.bucket = decision;
+  p.decision_reason = decision === 'not_fit' ? reason : null;
+  p.decision_note = decision === 'review' ? null : (note || null);
+  p.decided_at = decision === 'review' ? null : new Date().toISOString();
+  p.reopened = false;
+  if (decision !== 'review') {
+    // Deciding acknowledges any "new document" notification.
+    p.updated = false;
+    p.new_file_count = 0;
+  }
+  if (currentProject === p) renderDecision(p);
+  loadProjects();  // it moves to another tab — refresh the list behind the window
+}
+
+async function saveNotFit() {
+  const p = currentProject;
+  if (!p) return;
+  const sel = document.querySelector('#notFitReasons .nf-reason.selected');
+  if (!sel) return;
+  const btn = document.getElementById('notFitSaveBtn');
   btn.disabled = true;
   try {
-    await api('/api/' + currentDivision + '/projects/done', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ project_key: p.key, done: next }),
-    });
-    p.done = next;
-    if (next) {
-      // Marking done acknowledges any "new document" notification.
-      p.updated = false;
-      p.reopened = false;
-      p.new_file_count = 0;
-    }
-    renderProjectDoneBtn(p);
-    loadProjects();  // reflect the check + re-sort in the list behind the modal
+    await sendDecision(p, 'not_fit', sel.textContent, document.getElementById('notFitNote').value.trim());
+    closeNotFitPanel();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function moveProjectToReview() {
+  const p = currentProject;
+  if (!p) return;
+  const btn = document.getElementById('decisionUndoBtn');
+  btn.disabled = true;
+  try {
+    await sendDecision(p, 'review');
   } catch (e) {
     alert(e.message);
   } finally {
@@ -3412,6 +3541,13 @@ async function verifyProjectJira(p) {
       p.jira_key = null;
       p.jira_url = null;
       renderProjectJiraBtn(p);
+      if (p.bucket === 'jira') {
+        // The issue was deleted in Jira — the server moved it back to review.
+        p.bucket = 'review';
+        p.decision = null;
+        renderDecision(p);
+        loadProjects();
+      }
     }
   } catch (e) { /* ignore — leave the button as-is */ }
 }
@@ -3429,7 +3565,16 @@ async function addProjectToJira() {
     });
     p.jira_key = res.jira_key;
     p.jira_url = res.jira_url;
+    p.bucket = 'jira';
+    p.decision = 'jira';
+    p.decided_at = new Date().toISOString();
+    p.reopened = false;
+    p.updated = false;
+    p.new_file_count = 0;
+    closeNotFitPanel();
     renderProjectJiraBtn(p);
+    renderDecision(p);
+    loadProjects();  // moves to the Jira tab
   } catch (e) {
     alert(e.message);
   } finally {
@@ -3609,18 +3754,18 @@ function toggleClosedFilter() {
 function switchResultsView(view) {
   if (view === currentResultsView) return;
   currentResultsView = view;
-  // A done project can have any match status, not just "Matched" — switch
-  // to "All projects" so the Done tab actually shows every done project,
-  // not just the ones still flagged.
-  if (view === 'done') document.getElementById('resultsStatusFilter').value = '';
+  // A decided project can have any match status, not just "Matched" — switch
+  // to "All projects" so the Jira / Not a Fit tabs show every project in them.
+  if (view !== 'review') document.getElementById('resultsStatusFilter').value = '';
   resultsPage = 1;
   syncViewTabs();
   syncFilterUI();
   loadProjects();
 }
 function syncViewTabs() {
-  document.getElementById('viewTabActive').classList.toggle('active', currentResultsView === 'active');
-  document.getElementById('viewTabDone').classList.toggle('active', currentResultsView === 'done');
+  document.getElementById('viewTabReview').classList.toggle('active', currentResultsView === 'review');
+  document.getElementById('viewTabJira').classList.toggle('active', currentResultsView === 'jira');
+  document.getElementById('viewTabNotFit').classList.toggle('active', currentResultsView === 'not_fit');
 }
 function toggleUpdatedFilter() {
   currentResultsUpdated = !currentResultsUpdated;

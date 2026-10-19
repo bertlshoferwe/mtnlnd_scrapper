@@ -598,20 +598,33 @@ def list_expired_cached_documents(cutoff_iso):
 def list_cached_documents_for_overdue_projects():
     """[{"division_id", "document_url", "storage_path"}, ...] for every
     stored document belonging to a project whose bid_date has passed
-    without being marked done — feeds the retention job, same as
+    without being sent to Jira — feeds the retention job, same as
     list_expired_cached_documents, just a different trigger (the project
     itself is moot, not just old) than a fixed day count. A later view
     still works via the normal live re-fetch path (see api_proxy_pdf) since
     is_cached_document stays True."""
     today = date.today().isoformat()
-    res = (
-        get_client().table("project_flags")
-        .select("division_id,project_key")
-        .eq("done", False)
-        .not_.is_("bid_date", "null")
-        .lt("bid_date", today)
-        .execute()
-    )
+    # Anything not sent to Jira — undecided or "Not a fit" — has no use for
+    # its cached files once the bid has opened.
+    try:
+        res = (
+            get_client().table("project_flags")
+            .select("division_id,project_key")
+            .or_("decision.is.null,decision.neq.jira")
+            .not_.is_("bid_date", "null")
+            .lt("bid_date", today)
+            .execute()
+        )
+    except Exception:
+        # Decision columns not added yet — the old "not done" rule.
+        res = (
+            get_client().table("project_flags")
+            .select("division_id,project_key")
+            .eq("done", False)
+            .not_.is_("bid_date", "null")
+            .lt("bid_date", today)
+            .execute()
+        )
     out = []
     for row in res.data:
         docs = (
@@ -816,50 +829,177 @@ def closed_project_keys(division_id):
 
 
 # ---------------------------------------------------------------------------
-# Project "done" flags (user-set)
+# Project decisions (user-set): Jira / Not a fit / back to review
 # ---------------------------------------------------------------------------
 
-def load_done_projects(division_id):
-    """Set of project keys (scan_results.site values) the user marked done.
-    Returns an empty set if the project_flags table isn't there yet."""
+# One-click reasons for "Not a fit" — what the AI will eventually learn from,
+# so keep them stable (rename the label, not the meaning). "Unknown (from
+# before)" is only ever set by the migration for projects that were "done"
+# before decisions existed; it's excluded from anything the AI learns from.
+NOT_FIT_REASONS = (
+    "Not our products",
+    "Information only / nothing specified",
+    "Too small",
+    "Outside our area",
+    "Bid date too soon",
+    "Other",
+)
+LEGACY_REASON = "Unknown (from before)"
+DECISIONS = ("jira", "not_fit")
+
+
+def load_project_decisions(division_id):
+    """{project_key: {"decision", "reason", "note", "decided_at"}} for every
+    project with a decision ("jira" / "not_fit"). Before the decision columns
+    exist, falls back to the old flags: a Jira key -> "jira", done -> "not_fit"
+    (the same mapping the migration applies), so nothing jumps tabs in
+    between deploying and running the SQL."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key")
-            .eq("division_id", division_id).eq("done", True).execute()
+            get_client().table("project_flags")
+            .select("project_key,decision,decision_reason,decision_note,decided_at")
+            .eq("division_id", division_id).not_.is_("decision", "null").execute()
+        )
+        return {r["project_key"]: {"decision": r["decision"], "reason": r.get("decision_reason"),
+                                   "note": r.get("decision_note"), "decided_at": r.get("decided_at")}
+                for r in res.data}
+    except Exception:
+        pass
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,done,jira_key")
+            .eq("division_id", division_id).execute()
         )
     except Exception:
-        return set()
-    return {r["project_key"] for r in res.data}
+        return {}
+    out = {}
+    for r in res.data:
+        if r.get("jira_key"):
+            out[r["project_key"]] = {"decision": "jira", "reason": None, "note": None, "decided_at": None}
+        elif r.get("done"):
+            out[r["project_key"]] = {"decision": "not_fit", "reason": LEGACY_REASON,
+                                     "note": None, "decided_at": None}
+    return out
 
 
-def set_project_done(division_id, project_key, done):
-    """Upsert a project's done flag. Marking a project done also acknowledges
-    every document seen on it so far (docs_ack_through = now), clearing any
-    "new document" flag until the next addendum. Raises ValueError with a
-    migration hint if the table is missing."""
+def set_project_decision(division_id, project_key, decision, reason=None, note=None,
+                         source="user"):
+    """Record a decision on a project: "jira", "not_fit", or None (back to
+    review). Deciding also acknowledges every document seen so far
+    (docs_ack_through = now) — a "Not a fit" project only comes back to
+    review when a newer matching document turns up after this moment.
+
+    Also appends to project_decisions with a snapshot of what the project
+    looked like right now (see build_project_snapshot) — the history the AI
+    will learn from, kept even after scan data and cached files age out.
+    That log is best-effort; the decision itself raises ValueError with a
+    migration hint if the columns are missing."""
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "division_id": division_id,
         "project_key": project_key,
-        "done": bool(done),
+        "decision": decision,
+        "decision_reason": reason if decision == "not_fit" else None,
+        "decision_note": (note or None) if decision else None,
+        "decided_at": now if decision else None,
+        # Kept in step for anything still reading the old flag.
+        "done": decision is not None,
         "updated_at": now,
     }
-    if done:
+    if decision:
         payload["docs_ack_through"] = now
     try:
         get_client().table("project_flags").upsert(payload).execute()
     except Exception as e:
-        # The docs_ack_through column may not exist yet — retry without it.
-        if "docs_ack_through" in payload:
-            payload.pop("docs_ack_through", None)
-            try:
-                get_client().table("project_flags").upsert(payload).execute()
-                return
-            except Exception:
-                pass
         raise ValueError(
-            "couldn't save — create the project_flags table from schema.sql"
+            "couldn't save — add the decision columns from schema.sql"
         ) from e
+    try:
+        get_client().table("project_decisions").insert({
+            "division_id": division_id,
+            "project_key": project_key,
+            "decision": decision or "review",
+            "reason": payload["decision_reason"],
+            "note": payload["decision_note"],
+            "source": source,
+            "snapshot": build_project_snapshot(division_id, project_key),
+            "decided_at": now,
+        }).execute()
+    except Exception as e:
+        print(f"  ! couldn't log decision for {project_key} ({e})")
+
+
+def build_project_snapshot(division_id, project_key):
+    """What the project looked like at the moment of a decision: site, bid
+    timing, which keywords matched in which files (and on what pages), the
+    AI's notes on matched files, and who's holding plans. Compact on
+    purpose — a ConstructConnect project can have 900+ files, so unmatched
+    files are only counted (by top-level folder), not listed."""
+    res = (
+        get_client().table("scan_results")
+        .select("filename,status,matched_keywords,match_count,keyword_locations,ai_notes,run_date")
+        .eq("division_id", division_id).eq("site", project_key)
+        .order("run_date", desc=True).execute()
+    )
+    seen, files = set(), []
+    for r in res.data:
+        fn = r.get("filename") or ""
+        if not fn or fn in seen:
+            continue
+        seen.add(fn)
+        files.append(r)
+
+    prefix, project = _split_site(project_key)
+    matched, unmatched_by_folder, kw_files = [], {}, {}
+    for r in files:
+        kws = [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()]
+        if kws and (r.get("status") or "").startswith("Matched"):
+            for k in kws:
+                kw_files[k] = kw_files.get(k, 0) + 1
+            matched.append({
+                "file": r["filename"], "keywords": kws, "match_count": r.get("match_count") or 0,
+                "pages": (r.get("keyword_locations") or "")[:400],
+                "ai_notes": (r.get("ai_notes") or "")[:400],
+            })
+        else:
+            rel = r["filename"].split(" - ", 1)[-1]
+            folder = rel.split("/", 1)[0] if "/" in rel else "(top level)"
+            unmatched_by_folder[folder] = unmatched_by_folder.get(folder, 0) + 1
+
+    flags = {}
+    try:
+        fr = (
+            get_client().table("project_flags").select("bid_date,bid_time,plan_holders")
+            .eq("division_id", division_id).eq("project_key", project_key).limit(1).execute()
+        )
+        flags = fr.data[0] if fr.data else {}
+    except Exception:
+        pass
+    bid_date = flags.get("bid_date")
+    days_to_bid = None
+    if bid_date:
+        try:
+            days_to_bid = (date.fromisoformat(bid_date) - date.today()).days
+        except ValueError:
+            pass
+    holders = flags.get("plan_holders") or []
+    roles = {}
+    for h in holders:
+        r = h.get("role") or "Unknown"
+        roles[r] = roles.get(r, 0) + 1
+
+    return {
+        "site": prefix, "project": project,
+        "bid_date": bid_date, "bid_time": flags.get("bid_time"), "days_to_bid": days_to_bid,
+        "file_count": len(files), "matched_file_count": len(matched),
+        "keywords": kw_files,
+        "matched_files": matched[:200],
+        "unmatched_by_folder": unmatched_by_folder,
+        "plan_holders": {
+            "count": len(holders), "roles": roles,
+            "companies": [{"company": h.get("company"), "role": h.get("role")} for h in holders][:60],
+        } if holders else None,
+    }
 
 
 def load_docs_ack(division_id):
@@ -1088,15 +1228,15 @@ def _fetch_all_scan_results(division_id, columns="*"):
 
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
-                        updated_only=False, new_only=False, done_filter=None,
+                        updated_only=False, new_only=False, view=None,
                         page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
     site_tabs, updated_total, new_total) where site_tabs is
     [{"name", "count", "flagged"}] reflecting every other active filter
-    (status, search, keyword, bid window, done/active view, updated/new
-    toggles) but not the `site` filter itself — so each tab's count matches
+    (status, search, keyword, bid window, review/jira/not-fit view,
+    updated/new toggles) but not the `site` filter itself — so each tab's count matches
     what selecting it actually shows. updated_total is the count of projects
     with an unacknowledged "new document" notification, and new_total is the
     count of matched projects still inside their "New" window (see
@@ -1141,7 +1281,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "last_seen_at": r.get("last_seen_at"),
         })
 
-    done_keys = load_done_projects(division_id)
+    decisions = load_project_decisions(division_id)
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
     jira_keys = load_project_jira_keys(division_id)
@@ -1194,7 +1334,21 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             if f["is_new"]:
                 new_file_count += 1
         is_updated = new_file_count > 0
-        is_done = (site_key in done_keys) and not is_updated
+        # Which tab it lives in. "Not a fit" comes back to review when a
+        # newer matching document has arrived since the decision — checked
+        # without the "New" badge's time window, so it stays in review
+        # until someone decides again rather than drifting back by itself.
+        d = decisions.get(site_key) or {}
+        decision = d.get("decision")
+        bucket = decision if decision in DECISIONS else "review"
+        reopened = False
+        if decision == "not_fit" and any(
+            f["filename"] and f["run_date"] and f["status"].startswith("Matched")
+            and f["run_date"] > first_run and f["run_date"] > ack
+            for f in g["files"]
+        ):
+            bucket, reopened = "review", True
+        is_done = bucket != "review"
         bid_date = bid_dates.get(site_key)
         # Bid already opened and nobody acted on it — faded in the list (not
         # hidden; still here to act on) and, separately, the scanner's daily
@@ -1209,8 +1363,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "file_count": len(real_files), "matched_file_count": matched,
             "keywords": kws, "status": proj_status,
             "done": is_done,
+            "bucket": bucket, "decision": decision,
+            "decision_reason": d.get("reason"), "decision_note": d.get("note"),
+            "decided_at": d.get("decided_at"),
             "updated": is_updated, "new_file_count": new_file_count,
-            "reopened": is_updated and (site_key in done_keys),
+            "reopened": reopened,
             "closed": closed, "overdue": overdue, "last_seen_at": last_seen,
             "bid_date": bid_date,
             "bid_time": bid_times.get(site_key),
@@ -1237,14 +1394,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects = [p for p in projects if p["updated"]]
     if new_only:
         projects = [p for p in projects if p["is_new"]]
-    if done_filter is True:
-        projects = [p for p in projects if p["done"]]
-    elif done_filter is False:
-        projects = [p for p in projects if not p["done"]]
     if keyword:
         projects = [p for p in projects if keyword in p["keywords"]]
-    if status:
-        projects = [p for p in projects if p["status"].startswith(status)]
     if search:
         s = search.lower()
         projects = [
@@ -1268,8 +1419,21 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             except ValueError:
                 pass
 
+    # Per-tab counts (To Review / Jira / Not a Fit) over every other filter
+    # except match status — the dashboard defaults To Review to matched-only
+    # but shows everything on the other two, so a status-filtered count would
+    # undercount those.
+    view_counts = {"review": 0, "jira": 0, "not_fit": 0}
+    for p in projects:
+        if not site or (p["source_prefix"] or "Other") == site:
+            view_counts[p["bucket"]] += 1
+    if view:
+        projects = [p for p in projects if p["bucket"] == view]
+    if status:
+        projects = [p for p in projects if p["status"].startswith(status)]
+
     # Per-site tab list, computed AFTER every other active filter (status,
-    # search, keyword, bid window, done/active view, updated/new toggles) so
+    # search, keyword, bid window, review/jira/not-fit view, updated/new toggles) so
     # each tab's count matches what actually appears when it's selected —
     # just not filtered by the site itself, since that's the choice being
     # offered. Every project has a source_prefix in practice (every adapter
@@ -1314,7 +1478,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     page = max(1, page)
     page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
-    return projects[start:start + page_size], total, site_tabs, updated_total, new_total
+    return (projects[start:start + page_size], total, site_tabs, updated_total, new_total,
+            view_counts)
 
 
 def get_stats(division_id):

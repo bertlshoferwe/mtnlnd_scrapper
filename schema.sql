@@ -150,6 +150,16 @@ create table if not exists project_flags (
   -- scraper._save_plan_holders). NULL = never fetched for this project.
   plan_holders jsonb,
   plan_holders_at timestamptz,
+  -- Which results tab the project is in: 'jira' (added to Jira), 'not_fit'
+  -- (passed on, with one of the one-click reasons in
+  -- supabase_store.NOT_FIT_REASONS + an optional note), or NULL (To Review).
+  -- A 'not_fit' project shows in To Review again when a newer matching
+  -- document arrives after decided_at. `done` above is kept in step
+  -- (decision is not null) but nothing reads it any more.
+  decision text,
+  decision_reason text,
+  decision_note text,
+  decided_at timestamptz,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -162,6 +172,37 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists jira_key text;
 --   alter table project_flags add column if not exists plan_holders jsonb;
 --   alter table project_flags add column if not exists plan_holders_at timestamptz;
+--   alter table project_flags add column if not exists decision text;
+--   alter table project_flags add column if not exists decision_reason text;
+--   alter table project_flags add column if not exists decision_note text;
+--   alter table project_flags add column if not exists decided_at timestamptz;
+--   -- one-time: carry the old Done / Jira flags over to the new tabs
+--   update project_flags set decision = 'jira', decided_at = updated_at
+--     where jira_key is not null and decision is null;
+--   update project_flags set decision = 'not_fit', decision_reason = 'Unknown (from before)',
+--     decided_at = updated_at where done and decision is null;
+
+-- Every Jira / Not a fit / back-to-review decision, append-only, with a
+-- snapshot of the project at that moment (keywords and pages per matched
+-- file, AI notes, bid timing, plan holders — see
+-- supabase_store.build_project_snapshot). This is the history the AI will
+-- learn "worth bidding vs. just information" from, so rows are never
+-- updated or deleted, and the snapshot survives scan data and cached files
+-- aging out. source = 'user', or 'jira_deleted' when a Jira issue vanished
+-- and the project went back to review on its own.
+create table if not exists project_decisions (
+  id bigint generated always as identity primary key,
+  division_id text not null references divisions(id) on delete cascade,
+  project_key text not null,
+  decision text not null,   -- 'jira' | 'not_fit' | 'review'
+  reason text,
+  note text,
+  source text not null default 'user',
+  snapshot jsonb,
+  decided_at timestamptz not null default now()
+);
+create index if not exists project_decisions_division_idx
+  on project_decisions(division_id, decided_at desc);
 
 -- One row per run, whether or not anything matched. Powers the Daily Summary sheet equivalent.
 create table if not exists daily_summaries (
@@ -208,3 +249,4 @@ alter table scan_results enable row level security;
 alter table daily_summaries enable row level security;
 alter table scan_runs enable row level security;
 alter table project_flags enable row level security;
+alter table project_decisions enable row level security;
