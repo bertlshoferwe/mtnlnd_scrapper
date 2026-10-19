@@ -1547,6 +1547,16 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             for f in g["files"]
         ):
             bucket, reopened = "review", True
+        # Undecided and nothing matched a keyword -> straight to Not a Fit,
+        # worked out fresh on every load rather than saved, so it moves to
+        # To Review by itself the moment a matching document turns up — and
+        # it never lands in project_decisions, so the fit suggestions only
+        # learn from calls the user actually made.
+        auto_reason = None
+        if not decision and proj_status != "Matched":
+            bucket = "not_fit"
+            auto_reason = ("Couldn't download the documents" if proj_status == "Download failed"
+                           else "No keyword matches")
         is_done = bucket != "review"
         bid_date = bid_dates.get(site_key)
         # Bid already opened and nobody acted on it — faded in the list (not
@@ -1563,7 +1573,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "keywords": kws, "status": proj_status,
             "done": is_done,
             "bucket": bucket, "decision": decision,
-            "decision_reason": d.get("reason"), "decision_note": d.get("note"),
+            "decision_reason": auto_reason or d.get("reason"), "decision_note": d.get("note"),
+            "auto_not_fit": bool(auto_reason),
             "decided_at": d.get("decided_at"),
             "fit": fits.get(site_key),
             "updated": is_updated, "new_file_count": new_file_count,

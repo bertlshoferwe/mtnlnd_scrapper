@@ -1003,9 +1003,6 @@
                 <span class="fm-head-label">Show</span><span class="fm-head-val" id="fmShowVal"></span><span class="fm-chev">&#9656;</span>
               </button>
               <div class="fm-body">
-                <button type="button" data-val="Matched" onclick="pickFilter(this)">Flagged only</button>
-                <button type="button" data-val="" onclick="pickFilter(this)">All projects</button>
-                <button type="button" data-val="No match" onclick="pickFilter(this)">No matches</button>
                 <button type="button" class="fm-toggle" id="fmNewToggle" onclick="toggleNewFilter()">
                   <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   New projects only
@@ -1084,11 +1081,10 @@
     <div class="site-tabs" id="siteTabs" style="display:none;" role="tablist" aria-label="Filter by source site"></div>
 
     <div class="row results-toolbar" style="margin-bottom: 6px;">
-      <select id="resultsStatusFilter" onchange="syncFilterUI()">
-        <option value="Matched" selected>Flagged only</option>
-        <option value="">All projects</option>
-        <option value="No match">No matches</option>
-      </select>
+      <!-- Retired match-status filter: To Review only ever holds matched
+           projects now and unmatched ones file themselves under Not a Fit.
+           Kept (always "") so the code paths that read it stay simple. -->
+      <select id="resultsStatusFilter" hidden><option value="" selected></option></select>
     </div>
 
     <ul class="project-list" id="projectList"></ul>
@@ -2615,7 +2611,7 @@ function applyFilterPrefs(divisionId, urlSite) {
   if (RESULT_VIEWS.indexOf(currentResultsView) < 0) currentResultsView = 'review';
   currentResultsSort = saved.sort || 'bid';
   document.getElementById('resultsSearch').value = '';
-  document.getElementById('resultsStatusFilter').value = saved.status || 'Matched';
+  document.getElementById('resultsStatusFilter').value = '';
   document.getElementById('keywordFilter').value = '';
   updateSearchToggleState();
   closeSearchMenu();
@@ -2722,9 +2718,7 @@ function renderSiteTabs(sites) {
     return;
   }
 
-  // Default view is flagged-only, so counts show flagged projects.
-  const flaggedOnly = document.getElementById('resultsStatusFilter').value === 'Matched';
-  const val = function(s) { return flaggedOnly ? s.flagged : s.count; };
+  const val = function(s) { return s.count; };
   const total = sites.reduce(function(a, s) { return a + val(s); }, 0);
 
   if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
@@ -2828,10 +2822,10 @@ async function loadProjects() {
     empty.textContent = 'Nothing added to Jira yet.';
   } else if (currentResultsView === 'not_fit' && !search) {
     empty.textContent = 'Nothing marked "not a fit" yet.';
-  } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew || (status && status !== 'Matched')) {
+  } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew) {
     empty.textContent = 'No projects match that filter.';
-  } else if (status === 'Matched') {
-    empty.textContent = 'No projects have matched your keywords yet. Switch the filter to "All projects" to see everything that was scanned.';
+  } else if (currentResultsView === 'review') {
+    empty.textContent = 'Nothing to review — no new projects have matched your keywords. Projects without matches are under Not a Fit.';
   } else {
     empty.textContent = 'No results yet — run a scan to see projects here.';
   }
@@ -3600,13 +3594,15 @@ async function saveSettings() {
 // will learn "worth bidding vs. just information" from.
 function renderDecision(p) {
   const nf = document.getElementById('projectNotFitBtn');
-  nf.classList.toggle('is-notfit', p.bucket === 'not_fit');
+  nf.classList.toggle('is-notfit', p.bucket === 'not_fit' && !p.auto_not_fit);
   const bar = document.getElementById('decisionBar');
   const text = document.getElementById('decisionText');
   const undo = document.getElementById('decisionUndoBtn');
   const when = p.decided_at ? ' on ' + new Date(p.decided_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
   let msg = '';
-  if (p.bucket === 'not_fit') {
+  if (p.auto_not_fit) {
+    msg = p.decision_reason + ' — filed under Not a Fit automatically. It moves to To Review on its own if a matching document turns up.';
+  } else if (p.bucket === 'not_fit') {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' — ' + p.decision_reason : '')
       + (p.decision_note ? ': "' + p.decision_note + '"' : '');
   } else if (p.bucket === 'jira') {
@@ -3616,7 +3612,8 @@ function renderDecision(p) {
       + ', but a new matching document has come in since.';
   }
   text.textContent = msg;
-  undo.hidden = p.bucket === 'review';
+  // Nothing to undo on an automatic one — it's not a saved decision.
+  undo.hidden = p.bucket === 'review' || p.auto_not_fit;
   bar.hidden = !msg;
 }
 
@@ -3835,7 +3832,7 @@ function toggleFilterMenu(e) {
   // Each section starts collapsed unless it holds a non-default choice.
   document.getElementById('filterShowGroup').classList.toggle(
     'open',
-    document.getElementById('resultsStatusFilter').value !== 'Matched' || currentResultsClosed);
+    currentResultsClosed || currentResultsNew || currentResultsUpdated);
   document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
   document.getElementById('filterBidGroup').classList.toggle('open', !!currentResultsBid);
   menu.classList.add('open');
@@ -3903,16 +3900,6 @@ function syncSortUI() {
   });
   document.getElementById('sortToggleBtn').classList.toggle('active', currentResultsSort !== 'bid');
 }
-function pickFilter(el) {
-  const sel = document.getElementById('resultsStatusFilter');
-  if (sel.value !== el.dataset.val) {
-    sel.value = el.dataset.val;
-    resultsPage = 1;
-    loadProjects();
-  }
-  syncFilterUI();
-  closeFilterMenu();
-}
 function pickSite(key) {
   if (currentResultsSite === key) return;
   currentResultsSite = key;
@@ -3936,9 +3923,6 @@ function toggleClosedFilter() {
 function switchResultsView(view) {
   if (view === currentResultsView) return;
   currentResultsView = view;
-  // A decided project can have any match status, not just "Matched" — switch
-  // to "All projects" so the Jira / Not a Fit tabs show every project in them.
-  if (view !== 'review') document.getElementById('resultsStatusFilter').value = '';
   resultsPage = 1;
   syncViewTabs();
   syncFilterUI();
@@ -4002,7 +3986,7 @@ function pickBid(el) {
 function syncFilterUI() {
   const status = document.getElementById('resultsStatusFilter').value;
   const btn = document.getElementById('filterToggleBtn');
-  const anyFilter = status !== 'Matched' || !!currentResultsKeyword
+  const anyFilter = !!status || !!currentResultsKeyword
     || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew;
   if (btn) btn.classList.toggle('active', anyFilter);
   document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
