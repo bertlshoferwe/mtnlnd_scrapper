@@ -160,6 +160,16 @@ create table if not exists project_flags (
   decision_reason text,
   decision_note text,
   decided_at timestamptz,
+  -- AI suggestion for a project still in To Review (see fit_predictor.py):
+  -- verdict 'fit' / 'not_fit', the likely Not-a-fit reason, 0-100
+  -- confidence, one plain sentence, when it was made and how many past
+  -- decisions it was based on (re-judged once that pool grows enough).
+  fit_verdict text,
+  fit_reason text,
+  fit_confidence int,
+  fit_explanation text,
+  fit_predicted_at timestamptz,
+  fit_basis_count int,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -176,6 +186,13 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists decision_reason text;
 --   alter table project_flags add column if not exists decision_note text;
 --   alter table project_flags add column if not exists decided_at timestamptz;
+--   alter table project_flags add column if not exists fit_verdict text;
+--   alter table project_flags add column if not exists fit_reason text;
+--   alter table project_flags add column if not exists fit_confidence int;
+--   alter table project_flags add column if not exists fit_explanation text;
+--   alter table project_flags add column if not exists fit_predicted_at timestamptz;
+--   alter table project_flags add column if not exists fit_basis_count int;
+--   alter table project_decisions add column if not exists embedding jsonb;
 --   -- one-time: carry the old Done / Jira flags over to the new tabs
 --   update project_flags set decision = 'jira', decided_at = updated_at
 --     where jira_key is not null and decision is null;
@@ -199,6 +216,9 @@ create table if not exists project_decisions (
   note text,
   source text not null default 'user',
   snapshot jsonb,
+  -- Cached embedding of the snapshot, filled in lazily by fit_predictor.py
+  -- (Gemini only) so each decision is embedded once.
+  embedding jsonb,
   decided_at timestamptz not null default now()
 );
 create index if not exists project_decisions_division_idx

@@ -975,6 +975,21 @@ def build_project_snapshot(division_id, project_key):
         flags = fr.data[0] if fr.data else {}
     except Exception:
         pass
+    # The fit suggestion showing when the decision was made (if any) — lets
+    # the dashboard report how often the suggestions agreed with the user.
+    prediction = None
+    try:
+        pr = (
+            get_client().table("project_flags")
+            .select("fit_verdict,fit_reason,fit_confidence,fit_predicted_at")
+            .eq("division_id", division_id).eq("project_key", project_key).limit(1).execute()
+        )
+        if pr.data and pr.data[0].get("fit_verdict"):
+            prediction = {"verdict": pr.data[0]["fit_verdict"], "reason": pr.data[0].get("fit_reason"),
+                          "confidence": pr.data[0].get("fit_confidence"),
+                          "predicted_at": pr.data[0].get("fit_predicted_at")}
+    except Exception:
+        pass
     bid_date = flags.get("bid_date")
     days_to_bid = None
     if bid_date:
@@ -999,7 +1014,132 @@ def build_project_snapshot(division_id, project_key):
             "count": len(holders), "roles": roles,
             "companies": [{"company": h.get("company"), "role": h.get("role")} for h in holders][:60],
         } if holders else None,
+        "prediction": prediction,
     }
+
+
+# ---------------------------------------------------------------------------
+# Fit suggestions (see fit_predictor.py)
+# ---------------------------------------------------------------------------
+
+def load_decision_log(division_id):
+    """Every project_decisions row for the division, newest first (includes
+    the snapshot and any cached embedding). Empty if the table isn't there."""
+    out, start = [], 0
+    while True:
+        try:
+            res = (
+                get_client().table("project_decisions")
+                .select("id,project_key,decision,reason,note,source,snapshot,embedding,decided_at")
+                .eq("division_id", division_id).order("decided_at", desc=True)
+                .range(start, start + 499).execute()
+            )
+        except Exception:
+            return out
+        out.extend(res.data)
+        if len(res.data) < 500:
+            return out
+        start += 500
+
+
+def save_decision_embeddings(mapping):
+    """{project_decisions.id: vector} — cache so each past decision is only
+    embedded once."""
+    for row_id, vec in mapping.items():
+        try:
+            get_client().table("project_decisions").update({"embedding": vec}).eq("id", row_id).execute()
+        except Exception as e:
+            print(f"  ! couldn't cache a decision embedding ({e})")
+            return
+
+
+def list_review_projects(division_id):
+    """Every matched project currently in To Review, as get_results_grouped
+    returns them (newest documents first)."""
+    out, page = [], 1
+    while True:
+        projects, total, *_ = get_results_grouped(
+            division_id, status="Matched", view="review", sort="recent",
+            page=page, page_size=50)
+        out.extend(projects)
+        if page * 50 >= total or not projects:
+            return out
+        page += 1
+
+
+def load_project_fit(division_id):
+    """{project_key: {"verdict", "reason", "confidence", "explanation",
+    "predicted_at", "basis_count"}} — the latest suggestion per project.
+    Empty if the columns aren't there yet."""
+    try:
+        res = (
+            get_client().table("project_flags")
+            .select("project_key,fit_verdict,fit_reason,fit_confidence,fit_explanation,"
+                    "fit_predicted_at,fit_basis_count")
+            .eq("division_id", division_id).not_.is_("fit_verdict", "null").execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: {
+        "verdict": r["fit_verdict"], "reason": r.get("fit_reason"),
+        "confidence": r.get("fit_confidence"), "explanation": r.get("fit_explanation"),
+        "predicted_at": r.get("fit_predicted_at"), "basis_count": r.get("fit_basis_count"),
+    } for r in res.data}
+
+
+def save_project_fit(division_id, project_key, result):
+    try:
+        get_client().table("project_flags").upsert({
+            "division_id": division_id, "project_key": project_key,
+            "fit_verdict": result["verdict"], "fit_reason": result.get("reason"),
+            "fit_confidence": result.get("confidence"),
+            "fit_explanation": result.get("explanation"),
+            "fit_predicted_at": result.get("predicted_at"),
+            "fit_basis_count": result.get("basis_count"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"  ! couldn't save fit suggestion for {project_key} ({e})")
+
+
+_fit_stats_cache = {}
+_FIT_STATS_TTL_S = 60
+
+
+def fit_training_stats(division_id, min_decisions):
+    """{"decisions", "needed", "active", "agreed", "compared"} for the
+    dashboard: how many decisions the suggestions can learn from (same rules
+    as fit_predictor.load_examples) and — once suggestions exist — how often
+    the user's decision matched the suggestion showing at the time. Cached
+    briefly; the results list polls."""
+    hit = _fit_stats_cache.get(division_id)
+    now = datetime.now(timezone.utc).timestamp()
+    if hit and now - hit[0] < _FIT_STATS_TTL_S:
+        return hit[1]
+    try:
+        res = (
+            get_client().table("project_decisions")
+            .select("project_key,decision,reason,source,prediction:snapshot->prediction")
+            .eq("division_id", division_id).order("decided_at", desc=True).execute()
+        )
+        rows = res.data
+    except Exception:
+        rows = []
+    latest = {}
+    for r in rows:
+        latest.setdefault(r["project_key"], r)
+    usable = [r for r in latest.values()
+              if r.get("source") == "user" and r["decision"] in ("jira", "not_fit")
+              and r.get("reason") != LEGACY_REASON]
+    compared = [r for r in usable if isinstance(r.get("prediction"), dict)
+                and r["prediction"].get("verdict")]
+    agreed = sum(1 for r in compared
+                 if (r["prediction"]["verdict"] == "fit") == (r["decision"] == "jira"))
+    stats = {"decisions": len(usable), "needed": min_decisions,
+             "active": len(usable) >= min_decisions,
+             "agreed": agreed, "compared": len(compared)}
+    _fit_stats_cache[division_id] = (now, stats)
+    return stats
 
 
 def load_docs_ack(division_id):
@@ -1282,6 +1422,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         })
 
     decisions = load_project_decisions(division_id)
+    fits = load_project_fit(division_id)
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
     jira_keys = load_project_jira_keys(division_id)
@@ -1366,6 +1507,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "bucket": bucket, "decision": decision,
             "decision_reason": d.get("reason"), "decision_note": d.get("note"),
             "decided_at": d.get("decided_at"),
+            "fit": fits.get(site_key),
             "updated": is_updated, "new_file_count": new_file_count,
             "reopened": reopened,
             "closed": closed, "overdue": overdue, "last_seen_at": last_seen,

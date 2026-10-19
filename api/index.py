@@ -784,6 +784,8 @@ def api_get_results_grouped(division_id):
                     "updated_total": updated_total, "new_total": new_total,
                     "view_counts": view_counts,
                     "not_fit_reasons": list(supabase_store.NOT_FIT_REASONS),
+                    "fit_training": supabase_store.fit_training_stats(
+                        division_id, int(os.environ.get("FIT_MIN_DECISIONS") or "50")),
                     "page": page, "page_size": page_size})
 
 

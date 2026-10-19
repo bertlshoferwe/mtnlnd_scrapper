@@ -204,6 +204,26 @@
   .done-btn:disabled { opacity: .5; cursor: default; }
   .done-btn.notfit-btn:hover { border-color: var(--danger); color: var(--danger); }
   .done-btn.notfit-btn.is-notfit { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+  /* AI fit suggestions */
+  .p-fit {
+    display: inline-block; margin-left: 8px; vertical-align: 1px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: none;
+    padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  }
+  .p-fit.fit { background: var(--success-soft); color: var(--success); }
+  .p-fit.not_fit { background: var(--danger-soft); color: var(--danger); }
+  .p-fit.unsure { background: var(--surface-2); color: var(--muted); }
+  .fit-suggestion {
+    margin: -6px 0 14px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
+    background: var(--surface-2); border-left: 3px solid var(--muted);
+  }
+  .fit-suggestion[hidden] { display: none; }
+  .fit-suggestion.fit { border-left-color: var(--success); }
+  .fit-suggestion.not_fit { border-left-color: var(--danger); }
+  .fit-suggestion b { font-weight: 700; }
+  .fit-suggestion .fs-why { color: var(--muted); }
+  .fit-training { margin: -8px 0 12px; font-size: 12px; color: var(--muted); }
+  .fit-training[hidden] { display: none; }
   .decision-bar {
     display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
     margin: -6px 0 14px; font-size: 13px; color: var(--muted);
@@ -1036,6 +1056,8 @@
       <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
     </div>
 
+    <p class="fit-training" id="fitTrainingNote" hidden></p>
+
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
       <div class="stat-tile stat-tile-primary">
         <div class="stat-label">Projects flagged</div>
@@ -1230,6 +1252,7 @@
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
         <button type="button" id="projectNotFitBtn" class="done-btn notfit-btn" onclick="openNotFitPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg><span>Not a fit</span></button>
       </div>
+      <div class="fit-suggestion" id="fitSuggestion" hidden></div>
       <div class="decision-bar" id="decisionBar" hidden>
         <span id="decisionText"></span>
         <button type="button" class="link-btn" id="decisionUndoBtn" onclick="moveProjectToReview()">Move back to review</button>
@@ -2752,6 +2775,7 @@ async function loadProjects() {
   document.getElementById('viewCountJira').textContent = vc.jira != null ? vc.jira : '';
   document.getElementById('viewCountNotFit').textContent = vc.not_fit != null ? vc.not_fit : '';
   if (data.not_fit_reasons) notFitReasons = data.not_fit_reasons;
+  renderFitTraining(data.fit_training);
 
   const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
@@ -2805,6 +2829,14 @@ async function loadProjects() {
     if (p.source_prefix) subParts.push(p.source_prefix);
     if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
     if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
+    const fitLab = p.bucket === 'review' ? fitLabel(p.fit) : null;
+    if (fitLab && fitLab.cls !== 'unsure') {
+      const ft = document.createElement('span');
+      ft.className = 'p-fit ' + fitLab.cls;
+      ft.textContent = fitLab.text;
+      if (p.fit.explanation) ft.title = p.fit.explanation;
+      name.appendChild(ft);
+    }
     if (subParts.length) {
       const sub = document.createElement('span');
       sub.className = 'p-sub';
@@ -2987,6 +3019,7 @@ function openProjectModal(i) {
 
   closeNotFitPanel();
   renderDecision(p);
+  renderFitSuggestion(p);
   renderProjectJiraBtn(p);
   verifyProjectJira(p);
 
@@ -3414,6 +3447,51 @@ function buildFileRow(f, displayName) {
   return row;
 }
 
+// AI fit suggestions (fit_predictor.py) — only for projects still in To
+// Review; a low-confidence call is shown as "not sure" instead of a lean.
+const FIT_SURE_AT = 60;
+function fitLabel(fit) {
+  if (!fit || !fit.verdict) return null;
+  if ((fit.confidence || 0) < FIT_SURE_AT) return { cls: 'unsure', text: 'Not sure' };
+  if (fit.verdict === 'fit') return { cls: 'fit', text: 'Likely fit' };
+  if (fit.reason === 'Information only / nothing specified') return { cls: 'not_fit', text: 'Likely info only' };
+  return { cls: 'not_fit', text: 'Likely not a fit' };
+}
+
+function renderFitSuggestion(p) {
+  const el = document.getElementById('fitSuggestion');
+  const lab = p.bucket === 'review' ? fitLabel(p.fit) : null;
+  el.hidden = !lab;
+  if (!lab) return;
+  el.className = 'fit-suggestion ' + lab.cls;
+  el.innerHTML = '';
+  const head = document.createElement('b');
+  let text = 'Suggestion: ' + lab.text;
+  if (p.fit.verdict === 'not_fit' && p.fit.reason && lab.cls !== 'unsure') text += ' (' + p.fit.reason + ')';
+  head.textContent = text;
+  el.appendChild(head);
+  if (p.fit.explanation) {
+    const why = document.createElement('span');
+    why.className = 'fs-why';
+    why.textContent = ' — ' + p.fit.explanation;
+    el.appendChild(why);
+  }
+}
+
+function renderFitTraining(t) {
+  const el = document.getElementById('fitTrainingNote');
+  if (!t || currentResultsView !== 'review') { el.hidden = true; return; }
+  if (!t.active) {
+    el.textContent = 'Suggestions start after ' + t.needed + ' decisions (Add to Jira or Not a fit) — '
+      + t.decisions + ' so far.';
+  } else if (t.compared) {
+    el.textContent = 'Suggestions agreed with your call on ' + t.agreed + ' of ' + t.compared + ' projects so far.';
+  } else {
+    el.textContent = 'Suggestions are on — learned from ' + t.decisions + ' of your decisions.';
+  }
+  el.hidden = false;
+}
+
 // Project decisions: Add to Jira / Not a fit / back to review. Each one is
 // recorded with a snapshot of the project (server side) — the history the AI
 // will learn "worth bidding vs. just information" from.
@@ -3484,7 +3562,7 @@ async function sendDecision(p, decision, reason, note) {
     p.updated = false;
     p.new_file_count = 0;
   }
-  if (currentProject === p) renderDecision(p);
+  if (currentProject === p) { renderDecision(p); renderFitSuggestion(p); }
   loadProjects();  // it moves to another tab — refresh the list behind the window
 }
 
@@ -3574,6 +3652,7 @@ async function addProjectToJira() {
     closeNotFitPanel();
     renderProjectJiraBtn(p);
     renderDecision(p);
+    renderFitSuggestion(p);
     loadProjects();  // moves to the Jira tab
   } catch (e) {
     alert(e.message);

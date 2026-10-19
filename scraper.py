@@ -160,6 +160,7 @@ import supabase_store
 import adapters
 import browser_crawl
 import credentials
+import fit_predictor
 
 
 def load_config(division_id):
@@ -1164,6 +1165,15 @@ def _scan_division(division):
         if SEEN_TRACKING and advertised_by_site:
             supabase_store.update_run_progress(run_id, label="Checking listings")
             supabase_store.reconcile_seen(division_id, advertised_by_site, run_date)
+
+        # "Likely fit / not a fit" suggestions for whatever's in To Review,
+        # learned from past decisions — off until there are enough of them
+        # (see fit_predictor.py). Never fails the scan.
+        try:
+            supabase_store.update_run_progress(run_id, label="Suggesting fits")
+            fit_predictor.predict_division(division_id, ai_client, embedder)
+        except Exception as e:
+            print(f"  ! Fit suggestions failed: {e}")
 
         supabase_store.update_run_progress(
             run_id, label="Wrapping up", site_i=n_sites, site_n=n_sites,
