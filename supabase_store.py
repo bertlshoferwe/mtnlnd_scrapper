@@ -1590,6 +1590,13 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         p["is_new"] = p["status"] == "Matched" and _is_new_project(p["first_seen"], now)
     new_total = sum(1 for p in projects if p["is_new"])
 
+    # Per-tab totals (To Review / Jira / Not a Fit) — every project in each
+    # tab, before any filter (site, search, keyword, status, …), so the tab
+    # counts stay put while filtering.
+    view_counts = {"review": 0, "jira": 0, "not_fit": 0}
+    for p in projects:
+        view_counts[p["bucket"]] += 1
+
     if updated_only:
         projects = [p for p in projects if p["updated"]]
     if new_only:
@@ -1619,14 +1626,6 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             except ValueError:
                 pass
 
-    # Per-tab counts (To Review / Jira / Not a Fit) over every other filter
-    # except match status — the dashboard defaults To Review to matched-only
-    # but shows everything on the other two, so a status-filtered count would
-    # undercount those.
-    view_counts = {"review": 0, "jira": 0, "not_fit": 0}
-    for p in projects:
-        if not site or (p["source_prefix"] or "Other") == site:
-            view_counts[p["bucket"]] += 1
     if view:
         projects = [p for p in projects if p["bucket"] == view]
     if status:
