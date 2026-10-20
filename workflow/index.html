@@ -315,7 +315,11 @@ td.over{color:var(--high);font-weight:600}
 .jnav b{padding:0 6px;font-size:14px;white-space:nowrap}
 .jnav button{background:none;border:0;padding:4px 10px;font-size:18px;line-height:1;color:var(--muted)}
 .jnav button:hover{color:var(--ink)}
-.jcal{margin:12px 16px 28px;display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px}
+/* lines are borders on each box (not grid gaps), so none vanish at the 80% page scale */
+.jcal{margin:12px 16px 28px;display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.jdow,.jday{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.jdow.lc,.jday.lc{border-right:0}
+.jday.lr{border-bottom:0}
 .jdow{background:var(--surface);text-align:center;font-size:12px;font-weight:700;padding:9px 0}
 .jday{background:var(--surface);min-height:150px;padding:6px 6px 8px;min-width:0}
 .jcal.week .jday{min-height:320px}
@@ -1469,12 +1473,14 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<p class="fine">Drag a bid onto a day to give it that due date.</p></div>';
     }
     h+='<div class="jcal'+(mode==="week"?' week':'')+'" style="grid-template-columns:repeat('+cols+',minmax(0,1fr))">';
-    HDR.forEach(function(d){h+='<div class="jdow">'+d+'</div>'});
-    cells.forEach(function(d){
+    HDR.forEach(function(d,i){h+='<div class="jdow'+(i===cols-1?' lc':'')+'">'+d+'</div>'});
+    var nrows=Math.ceil(cells.length/cols);
+    cells.forEach(function(d,ci){
+      var edge=(ci%cols===cols-1?' lc':'')+(Math.floor(ci/cols)===nrows-1?' lr':'');
       var s=ymd(d),list=by[s]||[],out=mode==="month"&&d.getMonth()!==m;
       var label=(mode==="week"?DOWN[d.getDay()]+' ':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
       var shown=mode==="week"?list:list.slice(0,4);
-      h+='<div class="jday'+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
+      h+='<div class="jday'+edge+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
         '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-qcday="'+s+'" data-qcopen title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">'+ic("plus",14)+'</button>':'')+'</div>'+
         shown.map(calChip).join("")+
         (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+
