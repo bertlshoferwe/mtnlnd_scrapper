@@ -325,6 +325,28 @@ td.over{color:var(--high);font-weight:600}
 .jc .jt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jc .who{width:18px;height:18px;font-size:8px;color:#fff;flex:0 0 auto}
 .jday .more{padding:4px 2px 0}
+/* quick create */
+.qc{background:var(--surface);border:2px solid var(--c1);border-radius:8px}
+.qccard{margin-top:8px;padding:8px 8px 6px}
+.qcpop{padding:6px}
+.qcpop .qccard{margin:0;border:0}
+.qc textarea[data-qct]{width:100%;border:0;background:none;resize:none;font-size:14px;padding:2px 2px 8px;outline:none;color:var(--ink)}
+.qcb{display:flex;align-items:center;gap:6px}
+.qcb .sp{flex:1}
+.qctype,.qcwho,.qcdue{position:relative;display:inline-flex;align-items:center;gap:2px;height:26px;padding:0 4px;border-radius:6px;color:var(--muted)}
+.qctype:hover,.qcwho:hover,.qcdue:hover{background:var(--chip)}
+.qctype select,.qcwho select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.qctype::after{content:"\25BE";font-size:11px;margin-left:2px}
+.qcdue input{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0}
+.qci{display:grid;place-items:center;background:none;border:0;padding:0;color:var(--muted);width:22px;height:22px}
+.qcdue .qci{width:auto}
+.qcd{font-size:12px;font-weight:600;color:var(--ink);padding:0 2px}
+.qcwho .who{width:22px;height:22px;font-size:9px;color:#fff}
+.qcgo{border:1px solid var(--line2);background:var(--chip);color:var(--ink);border-radius:6px;padding:3px 10px;font-weight:600;font-size:13px}
+.qcgo.ic{padding:2px 8px;font-size:15px}
+.qcgo:hover{border-color:var(--c1)}
+.qcrow{display:flex;align-items:center;gap:8px;margin:0;border-radius:0 0 8px 8px;padding:6px 10px}
+.qcrow input[data-qct]{flex:1;min-width:0;border:0;background:none;outline:none;font-size:14px;padding:6px 4px;color:var(--ink)}
 .jday{position:relative}
 .jpop{position:fixed;z-index:50;width:280px;max-height:calc(70vh / var(--z));overflow:auto;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 10px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
 .jph{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px}
@@ -1180,7 +1202,7 @@ img.who{object-fit:cover;background:var(--chip)}
           '<div class="meta">'+dueChip(is)+avHTML(is.assignee)+'</div>'+'</article>';
       });
       if(!shown.length&&items.length)h+='<div class="empty">No bids match your filters.</div>';
-      h+='</div>'+(canAct()?'<button class="add" data-add="'+s.id+'" title="Create bid" aria-label="Create bid in '+esc(s.name)+'">+</button>':'')+'</section>';
+      h+='</div>'+(!canAct()?'':ui.qc&&ui.qc.where==="col"&&ui.qc.key===s.id?qcHTML("card"):'<button class="add" data-add="'+s.id+'" data-qcopen title="Create bid" aria-label="Create bid in '+esc(s.name)+'">+</button>')+'</section>';
     });
     return h+'</div>';
   }
@@ -1303,7 +1325,8 @@ img.who{object-fit:cover;background:var(--chip)}
       });
     }
     if(!rows.length)h+='<tr><td colspan="'+(order.length+2)+'" class="empty">No bids match your filters.</td></tr>';
-    h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-create>+ Create</button>':'<span></span>')+
+    if(canAct()&&ui.qc&&ui.qc.where==="list")h+='</tbody></table></div>'+qcHTML("row")+'<div class="lfoot"><span></span><span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
+    else h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-qclist data-qcopen>+ Create</button>':'<span></span>')+
       '<span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
     return h;
   }
@@ -1335,6 +1358,32 @@ img.who{object-fit:cover;background:var(--chip)}
     var x=Math.min(Math.max(8,r.left-6),window.innerWidth-w-8),y=Math.max(8,r.top-6);
     y=Math.min(y,window.innerHeight-pe.offsetHeight*Z-8);
     pe.style.left=(x/Z)+"px";pe.style.top=(Math.max(8,y)/Z)+"px";
+  }
+  /* ---------- quick create (Jira-style): a small box in a board column, at the foot of the List, or over a calendar day ---------- */
+  function qcHTML(kind){
+    var q=ui.qc,pp=proj(),who=q.assignee;
+    var type='<span class="qctype">'+tiHTML(q.type)+'<select data-qctype aria-label="Type">'+TYPES.filter(function(x){return x!=="Subtask"}).map(function(x){return opt(x,x,q.type)}).join("")+'</select></span>';
+    var due=q.where==="day"?'':'<span class="qcdue"><button class="qci" data-qcduebtn type="button" title="Due date" aria-label="Due date">'+(q.due?'<span class="qcd">'+shortDate(q.due)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button><input type="date" data-qcdue value="'+esc(q.due)+'" tabindex="-1" aria-hidden="true"></span>';
+    var person='<span class="qcwho" title="Assignee">'+(who?nameAv(nameOf(who)):'<span class="qci"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'+'</span>')+'<select data-qcwho aria-label="Assignee">'+teamOptions(who)+'</select></span>';
+    var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?'&#8629;':'Create &#8629;')+'</button>';
+    if(kind==="row")return '<div class="qc qcrow">'+type+'<input data-qct placeholder="What needs to be done?" maxlength="140" value="'+esc(q.title)+'" aria-label="Summary">'+due+person+go+'</div>';
+    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="What needs to be done?" maxlength="140" aria-label="Summary">'+esc(q.title)+'</textarea><div class="qcb">'+type+due+person+'<span class="sp"></span>'+go+'</div></div>';
+  }
+  function openQC(where,key,extra){
+    ui.calPop=null;
+    ui.qc=Object.assign({where:where,key:key,type:"Task",title:"",due:"",assignee:"",status:""},extra||{});
+    render();
+  }
+  function closeQC(){if(ui.qc){ui.qc=null;render()}}
+  function focusQC(){
+    var t=document.querySelector(".qc [data-qct]");
+    if(t&&document.activeElement!==t&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".qc"))){t.focus();var n=t.value.length;try{t.setSelectionRange(n,n)}catch(x){}}
+  }
+  function submitQC(){
+    var q=ui.qc,pp=proj();if(!q||!pp)return;
+    var title=(q.title||"").trim();if(!title){focusQC();return}
+    var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due});
+    q.title="";render();focusQC();toast(ikey(is)+" created");
   }
   function setCalMode(cmode){
     state.calMode=cmode;
@@ -1381,10 +1430,11 @@ img.who{object-fit:cover;background:var(--chip)}
       var label=(mode==="week"?DOWN[d.getDay()]+' ':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
       var shown=mode==="week"?list:list.slice(0,4);
       h+='<div class="jday'+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
-        '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-add-due="'+s+'" title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">+</button>':'')+'</div>'+
+        '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-qcday="'+s+'" data-qcopen title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">+</button>':'')+'</div>'+
         shown.map(calChip).join("")+
         (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+
         // "N more" opens this: every bid due that day, floating over the day
+        (ui.qc&&ui.qc.where==="day"&&ui.qc.key===s?'<div class="jpop qcpop" role="dialog" aria-label="Create bid due '+d.toDateString()+'">'+qcHTML("card")+'</div>':'')+
         (ui.calPop===s?'<div class="jpop" role="dialog" aria-label="Bids due '+d.toDateString()+'"><div class="jph"><b>'+MONTHNAMES[d.getMonth()]+' '+d.getDate()+'</b><button data-calpopclose aria-label="Close">&times;</button></div>'+list.map(calChip).join("")+'</div>':'')+'</div>';
     });
     return h+'</div>';
@@ -1812,6 +1862,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
     placeCalPop();
+    if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
   // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
@@ -2232,7 +2283,11 @@ img.who{object-fit:cover;background:var(--chip)}
       if(lj>=0&&lj<lo.length){var lt=lo[li];lo[li]=lo[lj];lo[lj]=lt;state.listCols=lo;save();render()}
       return;
     }
-    if((el=t.closest("[data-add]"))){openCreate({status:el.getAttribute("data-add")});return}
+    if((el=t.closest("[data-add]"))){var qs=el.getAttribute("data-add");openQC("col",qs,{status:qs});return}
+    if(t.closest("[data-qclist]")){openQC("list","list");return}
+    if((el=t.closest("[data-qcday]"))){var qd=el.getAttribute("data-qcday");openQC("day",qd,{due:qd});return}
+    if(t.closest("[data-qcgo]")){submitQC();return}
+    if(t.closest("[data-qcduebtn]")){var qdi=document.querySelector("[data-qcdue]");if(qdi){try{qdi.showPicker()}catch(x){qdi.focus();qdi.click()}}return}
     
     if((el=t.closest("[data-add-due]"))){closeOv("ov-day");openCreate({due:el.getAttribute("data-add-due")});return}
     if((el=t.closest("[data-mv]"))){
@@ -2371,6 +2426,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
+    if(ui.qc&&el.hasAttribute("data-qctype")){ui.qc.type=el.value;render();return}
+    if(ui.qc&&el.hasAttribute("data-qcwho")){ui.qc.assignee=el.value;render();return}
+    if(ui.qc&&el.hasAttribute("data-qcdue")){ui.qc.due=el.value;render();return}
     if(el.hasAttribute("data-spacetpl")){
       var stp=D.config.templates.filter(function(x){return x.id===el.value})[0];
       if(stp){applyTemplate(proj(),stp);save();render();toast("Workflow changed to "+stp.name)}
@@ -2428,6 +2486,7 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   document.addEventListener("input",function(e){
     var el=e.target;
+    if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="rname"){state.rcfg.name=el.value;el.style.borderColor="";save();return}
     if(el.id==="c-new"){ui.draft=el.value;return}
@@ -2435,6 +2494,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
   });
   document.addEventListener("keydown",function(e){
+    if(ui.qc&&e.target.closest&&e.target.closest(".qc")){
+      if(e.key==="Enter"&&!e.shiftKey&&e.target.hasAttribute("data-qct")){e.preventDefault();submitQC();return}
+      if(e.key==="Escape"){e.preventDefault();closeQC();return}
+    }
     if(e.key==="Escape"&&ui.addSub&&e.target.getAttribute&&e.target.getAttribute("data-quick")){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
     if(e.key==="Escape"){closeTop();return}
     var t=e.target;
@@ -2447,7 +2510,14 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   /* drag and drop on the board */
   var view=$("view");
-  window.addEventListener("scroll",function(e){if(ui.calPop&&!(e.target.nodeType===1&&e.target.closest(".jpop")))closeCalPop()},true);
+  document.addEventListener("click",function(e){
+    if(ui.qc&&!(e.target.closest&&(e.target.closest(".qc")||e.target.closest("[data-qcopen]"))))closeQC();
+  });
+  window.addEventListener("scroll",function(e){
+    var inPop=e.target.nodeType===1&&e.target.closest(".jpop");
+    if(ui.calPop&&!inPop)closeCalPop();
+    if(ui.qc&&ui.qc.where==="day"&&!inPop)closeQC();
+  },true);
   window.addEventListener("resize",placeCalPop);
   document.addEventListener("mousedown",function(e){
     if(ui.gOpen&&!e.target.closest(".gwrap")){ui.gOpen=false;var gp=document.querySelector(".gpop");if(gp)gp.remove()}
