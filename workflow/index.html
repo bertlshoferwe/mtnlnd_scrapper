@@ -53,7 +53,7 @@ button{cursor:pointer}
 .proj{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-radius:8px;padding:8px 10px;color:inherit;text-align:left}
 .proj:hover{background:var(--side-hi)}
 .proj.on{background:var(--side-hi);box-shadow:inset 3px 0 0 #9DB0FF}
-.proj.add{color:var(--side-mute);margin-top:4px}
+.proj.add{color:var(--side-mute);margin-top:4px;gap:8px}
 .pi{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--surface);flex:0 0 auto}
 .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sfoot{margin-top:auto;padding-top:12px}
@@ -71,8 +71,7 @@ button{cursor:pointer}
   .app.side-hidden .side{width:64px;flex-basis:64px;padding-left:10px;padding-right:10px;overflow-x:hidden}
   .app.side-hidden .side .brand,.app.side-hidden .side .sl,.app.side-hidden .side .pn,.app.side-hidden .side .me{display:none}
   .app.side-hidden .side .proj{justify-content:center;padding:8px 0!important}
-  .app.side-hidden .side .proj.add{font-size:0;padding:6px 0!important}
-  .app.side-hidden .side .proj.add::before{content:"+";font-size:18px;line-height:1}
+  .app.side-hidden .side .proj.add{padding:6px 0!important}
   .app.side-hidden .side #plist{display:flex;flex-direction:column;gap:4px}
 }
 @media (min-width:900px) and (prefers-reduced-motion:no-preference){.side{transition:width .18s,flex-basis .18s}}
@@ -127,7 +126,8 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 
 /* issue chips and icons */
 .ti{width:18px;height:18px;border-radius:5px;display:inline-grid;place-items:center;font-size:11px;font-weight:700;color:var(--surface);flex:0 0 auto}
-.pr{font-weight:700;font-size:13px;letter-spacing:-1px}
+.pr{display:inline-grid;place-items:center}
+.ic{display:block;flex:0 0 auto}
 .key{font-size:12px;color:var(--muted);font-weight:600}
 .chip{font-size:12px;background:var(--chip);border-radius:6px;padding:1px 7px;color:var(--muted)}
 .chip.over{background:var(--high);color:var(--surface)}
@@ -350,7 +350,7 @@ td.over{color:var(--high);font-weight:600}
 .qctype,.qcwho,.qcdue{position:relative;display:inline-flex;align-items:center;gap:2px;height:26px;padding:0 4px;border-radius:6px;color:var(--muted)}
 .qctype:hover,.qcwho:hover,.qcdue:hover{background:var(--chip)}
 .qctype select,.qcwho select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.qctype::after{content:"\25BE";font-size:11px;margin-left:2px}
+.qctype .ic:last-of-type{margin-left:1px}
 .qcdue input{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0}
 .qci{display:grid;place-items:center;background:none;border:0;padding:0;color:var(--muted);width:22px;height:22px}
 .qcdue .qci{width:auto}
@@ -571,6 +571,8 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 .linkbtn{color:var(--ink);font-weight:600}
 .proj.on{box-shadow:inset 3px 0 0 #9AA7E8}
 @media (max-width:640px){#theme .tl{display:none}}
+#theme{display:inline-flex;align-items:center;gap:4px}
+#theme>span{display:inline-flex}
 
 /* ---- divisions, overview, team ---- */
 .dtabs{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;align-items:flex-end}
@@ -619,7 +621,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <!-- day -->
 <div class="overlay" id="ov-settings" role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <div class="sheet wide">
-    <div class="sethead"><h3 id="setTitle">Settings</h3><button class="icon" id="setNewTpl" data-newtpl title="New workflow template" aria-label="New workflow template">+</button></div>
+    <div class="sethead"><h3 id="setTitle">Settings</h3><button class="icon" id="setNewTpl" data-newtpl title="New workflow template" aria-label="New workflow template"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
     <div id="orgSetBody"></div>
     <div class="actions"><span class="spacer"></span><button class="btn" data-close="ov-settings">Close</button></div>
   </div>
@@ -699,10 +701,28 @@ img.who{object-fit:cover;background:var(--chip)}
 (function(){
   var PKEY="site-board-v4-prefs";
   var TYPES=["Story","Task","Bug","Subtask"];
-  var TGLYPH={Story:"S",Task:"T",Bug:"B",Subtask:"↳"};
+  // line icons (24px grid, drawn in the current text color); ic("plus") etc.
+  var ICONS={
+    plus:'<path d="M12 5v14M5 12h14"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
+    chevD:'<path d="m6 9 6 6 6-6"/>',chevR:'<path d="m9 6 6 6-6 6"/>',chevL:'<path d="m15 6-6 6 6 6"/>',
+    arrowL:'<path d="M19 12H5M11 6l-6 6 6 6"/>',arrowR:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+    arrowU:'<path d="M12 19V5M6 11l6-6 6 6"/>',arrowD:'<path d="M12 5v14M6 13l6 6 6-6"/>',
+    enter:'<path d="M20 5v6a4 4 0 0 1-4 4H5"/><path d="m9 11-4 4 4 4"/>',
+    more:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+    grip:'<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></g>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    auto:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+    task:'<path d="m6 12.5 4 4 8-9"/>',story:'<path d="M7 4h10v16l-5-4-5 4z"/>',bug:'<circle cx="12" cy="12" r="5" fill="currentColor"/>',
+    subtask:'<path d="M5 5h9v9H5zM10 10h9v9h-9z"/>',
+    pHighest:'<path d="m6 12 6-6 6 6M6 19l6-6 6 6"/>',pHigh:'<path d="m6 15 6-6 6 6"/>',pMedium:'<path d="M5 9h14M5 15h14"/>',pLow:'<path d="m6 9 6 6 6-6"/>'
+  };
+  function ic(n,sz,sw){return '<svg class="ic" width="'+(sz||16)+'" height="'+(sz||16)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICONS[n]+'</svg>'}
+  var TICON={Story:"story",Task:"task",Bug:"bug",Subtask:"subtask"};
   var TCOLOR={Story:"var(--c2)",Task:"var(--c1)",Bug:"var(--high)",Subtask:"var(--c5)"};
   var PRI=["Highest","High","Medium","Low"];
-  var PGLYPH={Highest:"↑↑",High:"↑",Medium:"=",Low:"↓"};
+  var PICON={Highest:"pHighest",High:"pHigh",Medium:"pMedium",Low:"pLow"};
   var PCOLOR={Highest:"var(--high)",High:"var(--high)",Medium:"var(--med)",Low:"var(--low)"};
   var CATS=[["todo","To do"],["doing","In progress"],["done","Done"]];
   var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -747,7 +767,8 @@ img.who{object-fit:cover;background:var(--chip)}
   function byId(id){var p=proj();return p?p.issues.filter(function(i){return i.id===id})[0]:undefined}
   function stat(p,id){return p.statuses.filter(function(s){return s.id===id})[0]||p.statuses[0]}
   function isDone(is){return stat(proj(),is.status).cat==="done"}
-  function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&is.due<=addDays(today(),3)}
+  function dueAt(is){var d=parse(is.due),t=(is.dueTime||"23:59").split(":");d.setHours(+t[0],+t[1],59,999);return d.getTime()}
+  function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&dueAt(is)-Date.now()<=86400000}
   function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
   function overdue(is){return !!is.due&&!isDone(is)&&(is.due<today()||(is.due===today()&&!!is.dueTime&&is.dueTime<nowHM()))}
   function fmtTime(hm){if(!hm)return "";var p2=hm.split(":");return new Date(2000,0,1,+p2[0],+p2[1]).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}
@@ -1093,7 +1114,7 @@ img.who{object-fit:cover;background:var(--chip)}
     return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id)?"Someone":id;
   }
   function avHTML(id){
-    if(!id)return '<span class="who none" title="Unassigned">?</span>';
+    if(!id)return '<span class="who none" title="Unassigned">'+ic("user",14)+'</span>';
     return '<span class="who" title="'+esc(nameOf(id))+'">'+esc(initials(nameOf(id)))+'</span>';
   }
   function loadProfiles(){}
@@ -1175,8 +1196,8 @@ img.who{object-fit:cover;background:var(--chip)}
   }
 
   /* ---------- shared html ---------- */
-  function tiHTML(t){return '<span class="ti" style="background:'+TCOLOR[t]+'" title="'+t+'">'+TGLYPH[t]+'</span>'}
-  function prHTML(p){return '<span class="pr" style="color:'+PCOLOR[p]+'" title="'+p+' priority">'+PGLYPH[p]+'</span>'}
+  function tiHTML(t){return '<span class="ti" style="background:'+TCOLOR[t]+'" title="'+t+'">'+ic(TICON[t],12,3)+'</span>'}
+  function prHTML(p){return '<span class="pr" style="color:'+PCOLOR[p]+'" title="'+p+' priority">'+ic(PICON[p],16,2.6)+'</span>'}
   function echipHTML(is){
     var par=is.parent?byId(is.parent):null,out='';
     if(par)out+='<span class="echip" style="--ec:var(--c5)" title="'+esc(par.title)+'">'+ikey(par)+' '+esc(par.title)+'</span>';
@@ -1220,11 +1241,11 @@ img.who{object-fit:cover;background:var(--chip)}
           echipHTML(is)+
           '<div class="cfoot"><span class="kc">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span></span><span class="sp"></span>'+
           '<span class="cpick" title="Priority: '+is.priority+'">'+prHTML(is.priority)+'<select data-cardpri="'+is.id+'" aria-label="Priority for '+ikey(is)+'">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>'+
-          '<span class="cpick" title="'+esc(is.assignee?nameOf(is.assignee):"Unassigned")+'">'+(is.assignee?nameAv(nameOf(is.assignee)):'<span class="who none">?</span>')+'<select data-cardwho="'+is.id+'" aria-label="Assignee for '+ikey(is)+'">'+teamOptions(is.assignee)+'</select></span>'+
+          '<span class="cpick" title="'+esc(is.assignee?nameOf(is.assignee):"Unassigned")+'">'+(is.assignee?nameAv(nameOf(is.assignee)):'<span class="who none">'+ic("user",14)+'</span>')+'<select data-cardwho="'+is.id+'" aria-label="Assignee for '+ikey(is)+'">'+teamOptions(is.assignee)+'</select></span>'+
           '</div></article>';
       });
       if(!shown.length&&items.length)h+='<div class="empty">No bids match your filters.</div>';
-      h+='</div>'+(!canAct()?'':ui.qc&&ui.qc.where==="col"&&ui.qc.key===s.id?qcHTML("card"):'<button class="add" data-add="'+s.id+'" data-qcopen title="Create bid" aria-label="Create bid in '+esc(s.name)+'">+</button>')+'</section>';
+      h+='</div>'+(!canAct()?'':ui.qc&&ui.qc.where==="col"&&ui.qc.key===s.id?qcHTML("card"):'<button class="add" data-add="'+s.id+'" data-qcopen title="Create bid" aria-label="Create bid in '+esc(s.name)+'">'+ic("plus",16)+'</button>')+'</section>';
     });
     return h+'</div>';
   }
@@ -1260,7 +1281,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // a person's initials in a colored circle; the color is fixed per name
   function nameAv(n){
-    if(!n)return '<span class="who none" title="Unassigned">?</span>';
+    if(!n)return '<span class="who none" title="Unassigned">'+ic("user",14)+'</span>';
     var h=0;for(var i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))|0;
     return '<span class="who" style="background:var(--c'+(Math.abs(h)%6+1)+')" title="'+esc(n)+'">'+esc(initials(n))+'</span>';
   }
@@ -1324,16 +1345,16 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=proj(),order=listOrder(),all=p.issues.filter(function(i){return i.type!=="Subtask"||visible(i)}),rows=p.issues.filter(visible).sort(cmp),h='';
     if(ui.colsOpen){
       h+='<div class="lbar"><span class="fine" style="margin:0">Column order:</span>'+order.map(function(k,i){
-        return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+LCOLS[k]+' left"'+(i===0?' disabled':'')+'>&larr;</button><span style="padding:5px 4px;font-size:14px">'+LCOLS[k]+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+LCOLS[k]+' right"'+(i===order.length-1?' disabled':'')+'>&rarr;</button></span>';
+        return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+LCOLS[k]+' left"'+(i===0?' disabled':'')+'>'+ic("arrowL",14)+'</button><span style="padding:5px 4px;font-size:14px">'+LCOLS[k]+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+LCOLS[k]+' right"'+(i===order.length-1?' disabled':'')+'>'+ic("arrowR",14)+'</button></span>';
       }).join("")+'<button class="btn small" data-colreset>Reset order</button></div>';
     }
     var grp=curGroup(p);GROUPBAR=groupBarHTML(p);
     var canDrag=ui.sort==="rank"&&canAct()&&!grp;
     h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
       var on=ui.sort===k;
-      return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">⋮⋮</span><button data-sort="'+k+'">'+LCOLS[k]+(on?(ui.dir>0?' ↑':' ↓'):'')+'</button></div></th>';
+      return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">'+ic("grip",14)+'</span><button data-sort="'+k+'">'+LCOLS[k]+(on?(ui.dir>0?ic("arrowU",12):ic("arrowD",12)):'')+'</button></div></th>';
     }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Column order" aria-label="Column order"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
-    var emit=function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">&middot;&middot;&middot;</button></td></tr>'};
+    var emit=function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">'+ic("more",18)+'</button></td></tr>'};
     if(!grp)rows.forEach(emit);
     else{
       var gs={},gk=[];
@@ -1342,13 +1363,13 @@ img.who{object-fit:cover;background:var(--chip)}
       var closed=ui.gClosed||{};
       gk.forEach(function(key){
         var G=gs[key],shut=!!closed[grp+"|"+key];
-        h+='<tr class="grp"><td colspan="'+(order.length+2)+'"><button data-gtoggle="'+esc(grp+"|"+key)+'" aria-expanded="'+(!shut)+'"><span class="chev">'+(shut?'&#9656;':'&#9662;')+'</span>'+esc(G.label)+' <span class="count">'+G.items.length+'</span></button></td></tr>';
+        h+='<tr class="grp"><td colspan="'+(order.length+2)+'"><button data-gtoggle="'+esc(grp+"|"+key)+'" aria-expanded="'+(!shut)+'"><span class="chev">'+(shut?ic("chevR",14):ic("chevD",14))+'</span>'+esc(G.label)+' <span class="count">'+G.items.length+'</span></button></td></tr>';
         if(!shut)G.items.forEach(emit);
       });
     }
     if(!rows.length)h+='<tr><td colspan="'+(order.length+2)+'" class="empty">No bids match your filters.</td></tr>';
     if(canAct()&&ui.qc&&ui.qc.where==="list")h+='</tbody></table></div>'+qcHTML("row")+'<div class="lfoot"><span></span><span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
-    else h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-qclist data-qcopen>+ Create</button>':'<span></span>')+
+    else h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-qclist data-qcopen>'+ic("plus",15)+'Create</button>':'<span></span>')+
       '<span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
     return h;
   }
@@ -1384,10 +1405,10 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- quick create (Jira-style): a small box in a board column, at the foot of the List, or over a calendar day ---------- */
   function qcHTML(kind){
     var q=ui.qc,pp=proj(),who=q.assignee;
-    var type='<span class="qctype">'+tiHTML(q.type)+'<select data-qctype aria-label="Type">'+TYPES.filter(function(x){return x!=="Subtask"}).map(function(x){return opt(x,x,q.type)}).join("")+'</select></span>';
+    var type='<span class="qctype">'+tiHTML(q.type)+ic("chevD",12)+'<select data-qctype aria-label="Type">'+TYPES.filter(function(x){return x!=="Subtask"}).map(function(x){return opt(x,x,q.type)}).join("")+'</select></span>';
     var due=q.where==="day"?'':'<span class="qcdue"><button class="qci" data-qcduebtn type="button" title="Due date" aria-label="Due date">'+(q.due?'<span class="qcd">'+shortDate(q.due)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button><input type="date" data-qcdue value="'+esc(q.due)+'" tabindex="-1" aria-hidden="true"></span>';
     var person='<span class="qcwho" title="Assignee">'+(who?nameAv(nameOf(who)):'<span class="qci"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'+'</span>')+'<select data-qcwho aria-label="Assignee">'+teamOptions(who)+'</select></span>';
-    var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?'&#8629;':'Create &#8629;')+'</button>';
+    var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?ic("enter",15):'Create '+ic("enter",14))+'</button>';
     if(kind==="row")return '<div class="qc qcrow">'+type+'<input data-qct placeholder="What needs to be done?" maxlength="140" value="'+esc(q.title)+'" aria-label="Summary">'+due+person+go+'</div>';
     return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="What needs to be done?" maxlength="140" aria-label="Summary">'+esc(q.title)+'</textarea><div class="qcb">'+type+due+person+'<span class="sp"></span>'+go+'</div></div>';
   }
@@ -1436,7 +1457,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var cols=showWE?7:5,HDR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,cols);
     CALBAR='<button class="btn small'+(ui.unsch?' on':'')+'" data-unsch aria-pressed="'+(!!ui.unsch)+'">Unscheduled <span class="count">'+undated.length+'</span></button>'+
       '<button class="btn small" data-cal="today">Today</button>'+
-      '<span class="jnav"><button data-cal="-1" aria-label="Previous '+mode+'">&lsaquo;</button><b>'+title+'</b><button data-cal="1" aria-label="Next '+mode+'">&rsaquo;</button></span>'+
+      '<span class="jnav"><button data-cal="-1" aria-label="Previous '+mode+'">'+ic("chevL",16)+'</button><b>'+title+'</b><button data-cal="1" aria-label="Next '+mode+'">'+ic("chevR",16)+'</button></span>'+
       '<select data-calmodesel aria-label="Calendar range">'+opt("month","Month",mode)+opt("week","Week",mode)+'</select>';
     var h='';
     if(ui.unsch){
@@ -1452,12 +1473,12 @@ img.who{object-fit:cover;background:var(--chip)}
       var label=(mode==="week"?DOWN[d.getDay()]+' ':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
       var shown=mode==="week"?list:list.slice(0,4);
       h+='<div class="jday'+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
-        '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-qcday="'+s+'" data-qcopen title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">+</button>':'')+'</div>'+
+        '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-qcday="'+s+'" data-qcopen title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">'+ic("plus",14)+'</button>':'')+'</div>'+
         shown.map(calChip).join("")+
         (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+
         // "N more" opens this: every bid due that day, floating over the day
         (ui.qc&&ui.qc.where==="day"&&ui.qc.key===s?'<div class="jpop qcpop" role="dialog" aria-label="Create bid due '+d.toDateString()+'">'+qcHTML("card")+'</div>':'')+
-        (ui.calPop===s?'<div class="jpop" role="dialog" aria-label="Bids due '+d.toDateString()+'"><div class="jph"><b>'+MONTHNAMES[d.getMonth()]+' '+d.getDate()+'</b><button data-calpopclose aria-label="Close">&times;</button></div>'+list.map(calChip).join("")+'</div>':'')+'</div>';
+        (ui.calPop===s?'<div class="jpop" role="dialog" aria-label="Bids due '+d.toDateString()+'"><div class="jph"><b>'+MONTHNAMES[d.getMonth()]+' '+d.getDate()+'</b><button data-calpopclose aria-label="Close">'+ic("x",18)+'</button></div>'+list.map(calChip).join("")+'</div>':'')+'</div>';
     });
     return h+'</div>';
   }
@@ -1568,7 +1589,7 @@ img.who{object-fit:cover;background:var(--chip)}
     whos.sort();labels.sort();
     var h='<div class="rep">';
     h+='<div class="saved-row"><span class="fine" style="margin:0">Saved reports</span>'+
-      (state.reports.length?state.reports.map(function(r,i){return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">&times;</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
+      (state.reports.length?state.reports.map(function(r,i){return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">'+ic("x",18)+'</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
     h+='<section class="panel"><div class="ctrl">'+
       '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+GROUPS.map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
       '<div><label for="rc-c">Chart</label><select id="rc-c" data-rc="chart">'+opt("bar","Bars",c.chart)+opt("donut","Donut",c.chart)+opt("table","Table",c.chart)+'</select></div>'+
@@ -1718,7 +1739,7 @@ img.who{object-fit:cover;background:var(--chip)}
         var s=n.sp;
         h+='<button class="proj'+(s.id===state.cur&&state.view!=="division"?' on':'')+'" style="padding-left:'+(10+n.depth*16)+'px" data-space="'+s.id+'" title="'+esc(s.name)+'"><span class="pi" style="background:var(--c'+(s.ci%6+1)+')">'+esc(s.key.slice(0,2))+'</span><span class="pn">'+esc(s.name)+'</span></button>';
       });
-      if(isDivAdmin(d))h+='<button class="proj add" data-newspace title="Create space">+ Create space</button>';
+      if(isDivAdmin(d))h+='<button class="proj add" data-newspace title="Create space">'+ic("plus",15)+'<span class="pn">Create space</span></button>';
     }
     $("plist").innerHTML=h;
     $("sfoot").innerHTML=ORG?'<button class="proj'+($("ov-settings").classList.contains("open")?' on':'')+'" data-orgsettings title="Settings"><span class="pi" style="background:var(--c6)">'+'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+'</span><span class="pn">Settings</span></button>':"";
@@ -1771,7 +1792,7 @@ img.who{object-fit:cover;background:var(--chip)}
       t.statuses.forEach(function(s,i){
         var k=t.id+":"+i;
         h+='<div class="srow"><input data-tcname="'+k+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30"><select data-tccat="'+k+'" aria-label="Category">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
-          '<button class="btn small" data-tup="'+k+'" aria-label="Move up"'+(i===0?' disabled':'')+'>&uarr;</button><button class="btn small" data-tdown="'+k+'" aria-label="Move down"'+(i===t.statuses.length-1?' disabled':'')+'>&darr;</button>'+
+          '<button class="btn small" data-tup="'+k+'" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tdown="'+k+'" aria-label="Move down"'+(i===t.statuses.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
           '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div>';
       });
       h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div>';
@@ -1781,7 +1802,7 @@ img.who{object-fit:cover;background:var(--chip)}
         F.forEach(function(fd,i){
           var k=t.id+":"+i;
           h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
-            '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>&uarr;</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>&darr;</button>'+
+            '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
             '<button class="btn small danger" data-tfdel="'+k+'">Remove</button></div>';
         });
         h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
@@ -1944,7 +1965,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function renderIssueHead(is){
     var par=is.parent?byId(is.parent):null;
     $("i-head").innerHTML=(par?'<button class="crumb-btn" data-goto="'+par.id+'">'+tiHTML(par.type)+ikey(par)+'</button><span class="key">/</span>':'')+
-      tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">&times;</button>';
+      tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">'+ic("x",18)+'</button>';
   }
   function issueTopHTML(is){
     var kids=children(is);
@@ -2038,7 +2059,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueSideHTML(is){
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
     var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
-      (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">+</button>')+'</div>';
+      (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">'+ic("plus",18)+'</button>')+'</div>';
     var rowsF={
       due:frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
         (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',"due"),
@@ -2048,7 +2069,7 @@ img.who{object-fit:cover;background:var(--chip)}
     spaceFields(p).forEach(function(fd){rowsF["cf:"+fd.id]=frow(esc(fd.name),cfInput(fd,is),"cf:"+fd.id)});
     h+='<div class="ipanel" id="i-fields"><div class="iph">Fields</div>'+fieldOrder(p).map(function(k){return rowsF[k]}).join("")+'</div>';
     var open=!!ui.detOpen;
-    h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?'&#9662;':'&#9656;')+'</span>Details <span class="fine" style="margin:0;font-weight:400">Priority, Type, Labels'+(isSub?', Parent':'')+'</span></button>';
+    h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?ic("chevD",14):ic("chevR",14))+'</span>Details <span class="fine" style="margin:0;font-weight:400">Priority, Type, Labels'+(isSub?', Parent':'')+'</span></button>';
     if(open){
       h+=frow("Priority",'<span class="pv">'+prHTML(is.priority)+'<select id="i-pri" class="bare" data-f="priority" aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>')+
         frow("Type",'<select id="i-type" class="bare" data-f="type" aria-label="Type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>')+
@@ -2632,7 +2653,7 @@ img.who{object-fit:cover;background:var(--chip)}
     moveTo(id,col.getAttribute("data-col"),before);
   });
 
-  var THEMES=["auto","light","dark"],TGL={auto:"◐",light:"☀",dark:"☾"},TLBL={auto:"Auto",light:"Light",dark:"Dark"};
+  var THEMES=["auto","light","dark"],TGL={auto:ic("auto",14),light:ic("sun",14),dark:ic("moon",14)},TLBL={auto:"Auto",light:"Light",dark:"Dark"};
   function applyTheme(){
     var t=state.theme||"auto",r=document.documentElement;
     if(t==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",t);

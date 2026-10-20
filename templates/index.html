@@ -931,7 +931,7 @@
          onclick="this.href = '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : '')"
          title="Track the projects this division is bidding on">Bid board</a>
       <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
-        <span id="themeToggleIcon">◐</span><span id="themeToggleLabel">Auto</span>
+        <span id="themeToggleIcon" style="display:inline-flex"></span><span id="themeToggleLabel">Auto</span>
       </button>
     </div>
   </div>
@@ -1355,9 +1355,16 @@ function applyThemeChoice(choice) {
   const root = document.documentElement;
   if (choice === 'light' || choice === 'dark') root.setAttribute('data-theme', choice);
   else root.removeAttribute('data-theme');
-  const icons = { auto: '◐', light: '☀', dark: '☾' };
+  // drawn icons (same as the bid board), not text symbols
+  const ip = {
+    auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+    light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    dark: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  };
+  const icons = {};
+  Object.keys(ip).forEach(function(k) { icons[k] = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ip[k] + '</svg>'; });
   const labels = { auto: 'Auto', light: 'Light', dark: 'Dark' };
-  document.getElementById('themeToggleIcon').textContent = icons[choice];
+  document.getElementById('themeToggleIcon').innerHTML = icons[choice];
   document.getElementById('themeToggleLabel').textContent = labels[choice];
   try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch (e) { /* per-viewer convenience only */ }
 }
@@ -1988,11 +1995,11 @@ function loginStatusTag(site) {
     ? new Date(site.login_last_checked_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : null;
   if (site.login_last_ok === true) {
-    return '<span class="tag tag-ok" title="' + escapeHtml('Login OK as of ' + checked) + '">login ✓</span>';
+    return '<span class="tag tag-ok" title="' + escapeHtml('Login OK as of ' + checked) + '">login <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="m5 12.5 4.5 4.5L19 7"/></svg></span>';
   }
   if (site.login_last_ok === false) {
     const why = site.login_last_error ? ': ' + site.login_last_error : '';
-    return '<span class="tag tag-danger" title="' + escapeHtml('Login failed' + why + ' (checked ' + checked + ')') + '">login ✗</span>';
+    return '<span class="tag tag-danger" title="' + escapeHtml('Login failed' + why + ' (checked ' + checked + ')') + '">login <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M18 6 6 18M6 6l12 12"/></svg></span>';
   }
   return '<span class="tag tag-tabs" title="Not checked yet — runs on the next scan">login</span>';
 }
@@ -3400,7 +3407,7 @@ function buildFileRow(f, displayName) {
   } else if (f.url && /^https?:/.test(f.url)) {
     const a = document.createElement('a');
     a.className = 'f-dl'; a.href = f.url; a.target = '_blank'; a.rel = 'noopener';
-    a.textContent = 'Open ↗';
+    a.innerHTML = 'Open <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M7 17 17 7M8 7h9v9"/></svg>';
     a.onclick = function(e) { e.stopPropagation(); };
     right.appendChild(a);
   }
