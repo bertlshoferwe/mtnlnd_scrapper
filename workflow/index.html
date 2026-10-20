@@ -2424,7 +2424,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
   });
   document.addEventListener("keydown",function(e){
-    if(e.key==="Escape"&&t.getAttribute&&t.getAttribute("data-quick")&&ui.addSub){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
+    if(e.key==="Escape"&&ui.addSub&&e.target.getAttribute&&e.target.getAttribute("data-quick")){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
     if(e.key==="Escape"){closeTop();return}
     var t=e.target;
     var day=t.closest&&t.closest("[data-day]");
