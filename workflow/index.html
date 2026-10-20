@@ -1298,31 +1298,26 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
       '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
     if(curDiv())h+=membersHTML(curDiv());
-    h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">Columns appear on the board in this order. The category decides which bids count as done in reports.</p>';
-    var ft=followedTpl(p);
-    if(ft)h+='<p class="fine" style="margin:0 0 8px">These columns come from the <b>'+esc(ft.name)+'</b> template, so changes to that template show up here. Changing them here stops that.</p>';
-    p.statuses.forEach(function(s,i){
+    // Columns are read-only here: they're managed as org templates in Settings (gear, bottom of the sidebar).
+    var ft=followedTpl(p),CATN={todo:"To do",doing:"In progress",done:"Done"};
+    h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">'+
+      (ft?'This space uses the <b>'+esc(ft.name)+'</b> workflow.':'This space’s columns aren’t from a workflow template.')+
+      ' Workflows are changed in <b>Settings</b> at the bottom of the sidebar.</p>';
+    p.statuses.forEach(function(s){
       var n=p.issues.filter(function(x){return x.status===s.id}).length;
-      h+='<div class="srow"><input data-sname="'+s.id+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30">'+
-        '<select data-scat="'+s.id+'" aria-label="Category for '+esc(s.name)+'">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
-        '<button class="btn small" data-sup="'+s.id+'" aria-label="Move column left"'+(i===0?' disabled':'')+'>&uarr;</button>'+
-        '<button class="btn small" data-sdown="'+s.id+'" aria-label="Move column right"'+(i===p.statuses.length-1?' disabled':'')+'>&darr;</button>'+
-        '<button class="btn small danger" data-sdel="'+s.id+'"'+(p.statuses.length<2?' disabled':'')+'>'+(ui.armS===s.id?'Tap to confirm':'Remove')+'</button>'+
-        '<span class="cnt">'+n+' bid'+(n===1?'':'s')+'</span></div>';
+      h+='<div class="srow"><span style="flex:1 1 160px;min-width:0;font-weight:600">'+esc(s.name)+'</span>'+
+        '<span class="sbadge cat-'+s.cat+'">'+CATN[s.cat]+'</span><span class="cnt">'+n+' bid'+(n===1?'':'s')+'</span></div>';
     });
-    h+='<div class="srow"><input id="ns" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="nsc" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-addstatus>Add column</button></div>';
-    if(!p.statuses.some(function(s){return s.cat==="done"}))h+='<p class="fine" style="color:var(--high)">No column is in the Done category, so reports will show nothing as done.</p>';
-    h+='<p class="fine">Removing a column moves its bids to a neighboring column.</p></section>';
-    h+=automationsHTML(p);
-    h+='<section class="panel"><h3>Organization workflows</h3><p class="fine" style="margin:0 0 8px">Pick a workflow made by your organization. Applying one replaces this space’s columns.</p>';
-    tpls.forEach(function(t){
-      h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(t.name)+'</b><div class="fine" style="margin:2px 0 0">'+t.statuses.map(function(x){return esc(x.name)}).join(" → ")+'</div></div>'+
-        '<button class="btn small" data-applytpl="'+t.id+'">'+(ui.armT===t.id?'Tap to confirm':'Apply to this space')+'</button></div>';
-    });
-    if(!tpls.length)h+='<p class="fine">Your organization hasn’t created any workflow templates yet.</p>';
-    if(ui.armT)h+='<p class="fine">Bids move to the column with the same name, or the same category.</p>';
-    if(ORG)h+='<div class="srow"><input id="tname" placeholder="Save this workflow as an org template" maxlength="40" aria-label="Template name"><button class="btn small primary" data-savetpl>Save as org template</button></div>';
+    if(!ft&&tpls.length){
+      h+='<p class="fine" style="margin:12px 0 4px">Use a workflow template, so this space follows it:</p>';
+      tpls.forEach(function(t){
+        h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(t.name)+'</b><div class="fine" style="margin:2px 0 0">'+t.statuses.map(function(x){return esc(x.name)}).join(" → ")+'</div></div>'+
+          '<button class="btn small" data-applytpl="'+t.id+'">'+(ui.armT===t.id?'Tap to confirm':'Use this workflow')+'</button></div>';
+      });
+      if(ui.armT)h+='<p class="fine">Bids move to the column with the same name, or the same category.</p>';
+    }
     h+='</section>';
+    h+=automationsHTML(p);
     h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section></div>';
     return h;
   }
@@ -1618,7 +1613,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var d=curDiv();if(!d||!isDivAdmin(d)){toast("Only division admins can create spaces.");return}
     ui.keyTouched=false;$("p-name").value="";$("p-key").value="";$("p-err").textContent="";
     $("p-parent").innerHTML=opt("","None (top level)","")+spaceTree(d.id).map(function(n){return opt(n.sp.id,"\u00a0\u00a0".repeat(n.depth)+n.sp.name,parentId||"")}).join("");
-    $("p-tpl").innerHTML=opt("","Default (To do, In progress, Done)","")+D.config.templates.map(function(t){return opt(t.id,t.name,"")}).join("");
+    $("p-tpl").innerHTML=(D.config.templates.length?"":opt("","Default (To do, In progress, Done)",""))+D.config.templates.map(function(t){return opt(t.id,t.name,"")}).join("");
     openOv("ov-space");setTimeout(function(){$("p-name").focus()},30);
   }
   function submitSpace(){
