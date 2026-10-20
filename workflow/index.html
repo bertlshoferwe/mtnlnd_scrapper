@@ -424,6 +424,14 @@ textarea{min-height:90px;resize:vertical}
 .isec{margin-top:18px}
 .isec h4{font:700 15px var(--head);margin:0 0 6px;display:flex;align-items:center;gap:8px}
 .isec h4 .pt{font-size:12px;font-weight:500;color:var(--muted)}
+.att{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;color:var(--muted)}
+.attn{flex:1;min-width:0;background:none;border:0;padding:0;text-align:left;color:var(--ink);font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attn:hover{text-decoration:underline}
+.atm{font-size:12px;flex:0 0 auto}
+.att .danger{color:var(--high);font-size:12px}
+.dropz{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px;border:1.5px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:14px;cursor:pointer;padding:10px}
+.dropz:hover,.dropz.over{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 6%,transparent)}
+.dropz.busy{cursor:progress}
 textarea.bare{width:100%;min-height:44px;border:1px solid transparent!important;background:transparent!important;border-radius:6px;padding:6px 8px;margin-left:-8px;resize:vertical;font-size:14px}
 textarea.bare:hover,textarea.bare:focus{border-color:var(--line)!important;background:var(--bg)!important}
 .istat{margin-bottom:12px}
@@ -657,7 +665,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false;
+  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,FILE_BUCKET="bid-files";
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -761,7 +769,7 @@ img.who{object-fit:cover;background:var(--chip)}
     p.next=num+1;
     var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
       priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",dueTime:data.due&&data.dueTime||"",
-      created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{}};
+      created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{},attachments:[]};
     applyStatus(p,is,is.status);
     p.issues.push(is);save();return is;
   }
@@ -833,8 +841,8 @@ img.who{object-fit:cover;background:var(--chip)}
   /* rows <-> documents */
   function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],created:(r.created_at||"").slice(0,10)}}
   function spaceToRow(id,d){return {id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]}}
-  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):""}}
-  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined}}
+  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):"",attachments:r.attachments||[]}}
+  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined,attachments:HAS_FILES?(d.attachments||[]):undefined}}
 
   function allDocs(){
     var m={};
@@ -925,11 +933,13 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from(dt).select("*"),sb.from("wf_people").select("*"),sb.from("wf_templates").select("*").order("created_at"),
       sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
       sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1),
-      sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*")]);
+      sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*"),
+      sb.from("wf_bids").select("attachments").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
-    HAS_TEAMS=!rs[9].error;   // teams need workflow/sql/005_teams.sql
+    HAS_TEAMS=!rs[9].error;
+    HAS_FILES=!rs[10].error;   // attachments need workflow/sql/006_attachments.sql   // teams need workflow/sql/005_teams.sql
     raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[]}});
     // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
     HAS_FIELDS=!rs[6].error&&!rs[7].error;
@@ -1804,7 +1814,8 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueTopHTML(is){
     var kids=children(is);
     var h='<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
-      '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>';
+      '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>'+
+      (HAS_FILES?'<div class="isec" id="i-att">'+attachHTML(is)+'</div>':'');
     if(is.type!=="Subtask"){
       var done=kids.filter(isDone).length;
       h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
@@ -1812,6 +1823,51 @@ img.who{object-fit:cover;background:var(--chip)}
         quickAddHTML(is.id,"subtask")+'</div>';
     }
     return h;
+  }
+  /* ---------- attachments: files in the private "bid-files" storage bucket, listed on the bid ---------- */
+  function fsize(n){return n<1024?n+" B":n<1048576?Math.round(n/1024)+" KB":(n/1048576).toFixed(1)+" MB"}
+  function attachHTML(is){
+    var A=is.attachments||[];
+    var h='<h4>Attachments'+(A.length?' <span class="pt">'+A.length+'</span>':'')+'</h4>';
+    A.forEach(function(f){
+      h+='<div class="att"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(f.name)+'</button>'+
+        '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
+        '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
+    });
+    h+='<label class="dropz'+(ui.uploading?' busy':'')+'" data-dropz>'+
+      (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files here or <u>add attachment</u></span>')+
+      '<input type="file" multiple data-attinput hidden></label>';
+    return h;
+  }
+  function renderAttach(){var is=byId(ui.issueId),el=$("i-att");if(is&&el)el.innerHTML=attachHTML(is)}
+  async function uploadFiles(files){
+    var is=byId(ui.issueId);if(!is||!sb||!files||!files.length)return;
+    files=Array.prototype.slice.call(files);
+    ui.uploading=(ui.uploading||0)+files.length;renderAttach();
+    for(var i=0;i<files.length;i++){
+      var f=files[i],id=uuid(),path=is.id+"/"+id+"-"+f.name.replace(/[^\w.\-]+/g,"_");
+      try{
+        var r=await sb.storage.from(FILE_BUCKET).upload(path,f,{contentType:f.type||undefined});
+        if(r.error)throw r.error;
+        var cur=byId(is.id);if(!cur)continue;
+        cur.attachments=(cur.attachments||[]).concat([{id:id,name:f.name,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME}]);
+        logH(cur,"Attachment","",f.name);cur.updated=Date.now();save();
+      }catch(err){toast("Couldn’t upload "+f.name+": "+((err&&err.message)||"unknown error"))}
+      ui.uploading--;renderAttach();renderIssueAct();
+    }
+  }
+  async function openAttachment(is,aid){
+    var f=(is.attachments||[]).filter(function(x){return x.id===aid})[0];if(!f)return;
+    var w=window.open("","_blank");   // opened now so the browser doesn't block it
+    var r=await sb.storage.from(FILE_BUCKET).createSignedUrl(f.path,3600);
+    if(r.error||!r.data){if(w)w.close();toast("Couldn’t open "+f.name+": "+((r.error&&r.error.message)||"unknown error"));return}
+    if(w)w.location=r.data.signedUrl;else window.location=r.data.signedUrl;
+  }
+  function removeAttachment(is,aid){
+    var f=(is.attachments||[]).filter(function(x){return x.id===aid})[0];if(!f)return;
+    is.attachments=is.attachments.filter(function(x){return x.id!==aid});
+    logH(is,"Attachment",f.name,"");is.updated=Date.now();save();
+    sb.storage.from(FILE_BUCKET).remove([f.path]).then(function(r){if(r&&r.error)console.warn("file not removed from storage",r.error)});
   }
   // a label / value row in the side panels; inputs look like plain text until hovered
   function frow(label,ctl,key){
@@ -2136,9 +2192,18 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-quickadd]"))){quickAdd(el.getAttribute("data-quickadd"));return}
     if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
+    if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
+    if((el=t.closest("[data-attdel]"))){
+      var adi=byId(ui.issueId),aid=el.getAttribute("data-attdel");if(!adi)return;
+      if(ui.armAtt!==aid){ui.armAtt=aid;renderAttach();return}
+      ui.armAtt=null;removeAttachment(adi,aid);renderAttach();renderIssueAct();return;
+    }
     if(t.closest("[data-delissue]")){
       if(!ui.armI){ui.armI=true;var ai2=byId(ui.issueId);$("i-side").innerHTML=issueSideHTML(ai2);return}
-      var did=ui.issueId;closeOv("ov-issue");deleteIssue(did);render();toast("Bid deleted");return;
+      var did=ui.issueId,dfi=byId(did),dpaths=((dfi&&dfi.attachments)||[]).map(function(x){return x.path});
+      closeOv("ov-issue");deleteIssue(did);render();toast("Bid deleted");
+      if(dpaths.length&&sb)sb.storage.from(FILE_BUCKET).remove(dpaths).then(function(){},function(){});
+      return;
     }
     if((el=t.closest("[data-ec]"))){ui.editC=el.getAttribute("data-ec");renderIssueAct();return}
     if(t.closest("[data-cc]")){ui.editC=null;renderIssueAct();return}
@@ -2313,6 +2378,21 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
+  document.addEventListener("change",function(e){
+    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=e.target.files;uploadFiles(fl);e.target.value=""}
+  });
+  (function(){
+    var box=$("ov-issue");
+    box.addEventListener("dragover",function(e){
+      var z=e.target.closest&&e.target.closest("[data-dropz]");
+      if(z&&e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1){e.preventDefault();z.classList.add("over")}
+    });
+    box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz]");if(z)z.classList.remove("over")});
+    box.addEventListener("drop",function(e){
+      var z=e.target.closest&&e.target.closest("[data-dropz]");
+      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");uploadFiles(e.dataTransfer.files)}
+    });
+  })();
   (function(){
     var box=$("ov-issue"),dragF=null;
     function clearF(){Array.prototype.forEach.call(box.querySelectorAll(".frow.fb,.frow.fa"),function(x){x.classList.remove("fb","fa")})}
