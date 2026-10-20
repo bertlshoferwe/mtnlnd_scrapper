@@ -1298,25 +1298,13 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
       '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
     if(curDiv())h+=membersHTML(curDiv());
-    // Columns are read-only here: they're managed as org templates in Settings (gear, bottom of the sidebar).
-    var ft=followedTpl(p),CATN={todo:"To do",doing:"In progress",done:"Done"};
-    h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">'+
-      (ft?'This space uses the <b>'+esc(ft.name)+'</b> workflow.':'This space’s columns aren’t from a workflow template.')+
-      ' Workflows are changed in <b>Settings</b> at the bottom of the sidebar.</p>';
-    p.statuses.forEach(function(s){
-      var n=p.issues.filter(function(x){return x.status===s.id}).length;
-      h+='<div class="srow"><span style="flex:1 1 160px;min-width:0;font-weight:600">'+esc(s.name)+'</span>'+
-        '<span class="sbadge cat-'+s.cat+'">'+CATN[s.cat]+'</span><span class="cnt">'+n+' bid'+(n===1?'':'s')+'</span></div>';
-    });
-    if(!ft&&tpls.length){
-      h+='<p class="fine" style="margin:12px 0 4px">Use a workflow template, so this space follows it:</p>';
-      tpls.forEach(function(t){
-        h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(t.name)+'</b><div class="fine" style="margin:2px 0 0">'+t.statuses.map(function(x){return esc(x.name)}).join(" → ")+'</div></div>'+
-          '<button class="btn small" data-applytpl="'+t.id+'">'+(ui.armT===t.id?'Tap to confirm':'Use this workflow')+'</button></div>';
-      });
-      if(ui.armT)h+='<p class="fine">Bids move to the column with the same name, or the same category.</p>';
-    }
-    h+='</section>';
+    // Columns are managed as org templates in Settings (gear, bottom of the sidebar); a space just picks one.
+    var ft=followedTpl(p);
+    h+='<section class="panel"><h3>Workflow</h3>'+
+      '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
+        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select>'+
+      '<p class="fine" style="margin:8px 0 0">'+p.statuses.map(function(s){return esc(s.name)}).join(" → ")+'</p>'+
+      '<p class="fine" style="margin:6px 0 0">Workflows are created and edited in <b>Settings</b> at the bottom of the sidebar.</p></section>';
     h+=automationsHTML(p);
     h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section></div>';
     return h;
@@ -1844,6 +1832,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
+    if(el.hasAttribute("data-spacetpl")){
+      var stp=D.config.templates.filter(function(x){return x.id===el.value})[0];
+      if(stp){applyTemplate(proj(),stp);save();render();toast("Workflow changed to "+stp.name)}
+      return;
+    }
     if((v=el.getAttribute("data-scat"))){unfollow(proj());var s=proj().statuses.filter(function(x){return x.id===v})[0];s.cat=el.value;save();render();return}
     if((v=el.getAttribute("data-sname"))){
       var s2=proj().statuses.filter(function(x){return x.id===v})[0],nm=el.value.trim();
