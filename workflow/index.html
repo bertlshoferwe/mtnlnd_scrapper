@@ -86,10 +86,30 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto}
 .tab{background:none;border:0;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
-.filters{padding:12px 16px 0;display:grid;gap:8px}
+.filters{padding:12px 16px 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .filters input,.fsel select,.ctrl select,.ctrl input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:0}
-.fsel{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.fsel{display:flex;gap:8px;align-items:center}
 .fsel select{flex:0 0 auto;max-width:180px}
+.qbox{display:flex;align-items:center;gap:6px;width:220px;max-width:100%;border:1px solid var(--line2);border-radius:8px;background:var(--surface);padding:0 10px;color:var(--muted)}
+.qbox:focus-within{border-color:var(--accent)}
+.filters .qbox input{border:0!important;background:none;padding:7px 0;width:100%;outline:none;font-size:14px}
+.fav{display:flex;align-items:center}
+.favb{border:2px solid var(--bg);border-radius:50%;padding:0;background:none;margin-left:-6px;display:grid;place-items:center;position:relative}
+.favb:first-child{margin-left:0}
+.favb .who{width:26px;height:26px;font-size:10px;color:#fff}
+.favb.none{width:30px;height:30px;background:var(--chip);color:var(--muted)}
+.favb:hover{z-index:2;transform:translateY(-2px)}
+.favb.on{border-color:var(--c1);z-index:3}
+.fwrap{position:relative}
+.fbtn{display:inline-flex;align-items:center;gap:6px}
+.fbtn.on{border-color:var(--accent)}
+.fpop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:230px;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:8px 12px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
+.fpop label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:8px 0 4px}
+.fpop select{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:6px 8px}
+.fsp{flex:1}
+.fright{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.fright select{background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font-weight:600}
+.fright .btn.on{border-color:var(--accent)}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px;font-weight:600}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.danger{color:var(--high)}
@@ -268,15 +288,11 @@ td.over{color:var(--high);font-weight:600}
 .panel{background:var(--surface);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
 .daypanel{margin:12px 16px 28px}
 /* Jira-style calendar */
-.jcal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 16px}
-.jcal-bar .spacer{flex:1}
-.jcal-bar .btn.on{border-color:var(--accent);color:var(--ink)}
-.jcal-bar select{background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font-weight:600}
 .jnav{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}
 .jnav b{padding:0 6px;font-size:14px;white-space:nowrap}
 .jnav button{background:none;border:0;padding:4px 10px;font-size:18px;line-height:1;color:var(--muted)}
 .jnav button:hover{color:var(--ink)}
-.jcal{margin:0 16px 28px;display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px}
+.jcal{margin:12px 16px 28px;display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px}
 .jdow{background:var(--surface);text-align:center;font-size:12px;font-weight:700;padding:9px 0}
 .jday{background:var(--surface);min-height:150px;padding:6px 6px 8px;min-width:0}
 .jcal.week .jday{min-height:320px}
@@ -306,7 +322,7 @@ td.over{color:var(--high);font-weight:600}
 .jph b{font-size:14px}
 .jph button{background:none;border:0;border-radius:6px;width:26px;height:26px;font-size:20px;line-height:1;color:var(--muted)}
 .jph button:hover{background:var(--chip);color:var(--ink)}
-.unsch{margin:0 16px 12px}
+.unsch{margin:12px 16px 0}
 .unsch .unrow{margin-top:4px}
 .daypanel h3,.panel h3{font:600 16px var(--head);margin:0 0 10px}
 .drow{display:flex;gap:10px;align-items:center;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:9px 0;text-align:left}
@@ -519,8 +535,10 @@ img.who{object-fit:cover;background:var(--chip)}
     <nav class="dtabs" id="dtabs" aria-label="Divisions"></nav>
     <nav class="tabs" id="tabs" role="tablist" aria-label="Views"></nav>
     <div class="filters" id="filters">
-      <input id="q" type="search" placeholder="Search bids" aria-label="Search bids">
+      <label class="qbox"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search bids" aria-label="Search bids"></label>
       <div class="fsel" id="fsel"></div>
+      <span class="fsp"></span>
+      <div class="fright" id="fright"></div>
     </div>
     <main id="view"></main>
   </div>
@@ -1232,6 +1250,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(cmode==="month")state.calMonth=state.calSel.slice(0,7);
     save();render();
   }
+  var CALBAR="";
   function calHTML(){
     var p=proj(),T=today(),mode=state.calMode==="week"?"week":"month",by={},undated=[],cells=[],title,i;
     var DOWN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -1252,12 +1271,11 @@ img.who{object-fit:cover;background:var(--chip)}
     var showWE=cells.some(function(d){return isWE(d)&&(by[ymd(d)]||[]).length});
     if(!showWE)cells=cells.filter(function(d){return !isWE(d)});
     var cols=showWE?7:5,HDR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,cols);
-    var h='<div class="jcal-bar">'+
-      '<button class="btn small'+(ui.unsch?' on':'')+'" data-unsch aria-pressed="'+(!!ui.unsch)+'">Unscheduled <span class="count">'+undated.length+'</span></button>'+
-      '<span class="spacer"></span>'+
+    CALBAR='<button class="btn small'+(ui.unsch?' on':'')+'" data-unsch aria-pressed="'+(!!ui.unsch)+'">Unscheduled <span class="count">'+undated.length+'</span></button>'+
       '<button class="btn small" data-cal="today">Today</button>'+
       '<span class="jnav"><button data-cal="-1" aria-label="Previous '+mode+'">&lsaquo;</button><b>'+title+'</b><button data-cal="1" aria-label="Next '+mode+'">&rsaquo;</button></span>'+
-      '<select data-calmodesel aria-label="Calendar range">'+opt("month","Month",mode)+opt("week","Week",mode)+'</select></div>';
+      '<select data-calmodesel aria-label="Calendar range">'+opt("month","Month",mode)+opt("week","Week",mode)+'</select>';
+    var h='';
     if(ui.unsch){
       h+='<div class="panel unsch"><h3>Unscheduled <span class="count">'+undated.length+'</span></h3>';
       if(!undated.length)h+='<div class="empty">Every open bid has a due date.</div>';
@@ -1549,14 +1567,23 @@ img.who{object-fit:cover;background:var(--chip)}
     $("dtabs").innerHTML=h;
     $("dtabs").style.display=vis.length||isArchived(state.div)?"":"none";
   }
+  // Jira-style toolbar: people circles (click to show only that person's bids) and a Filter pop-up for type and priority
   function renderFsel(){
     var p=proj(),f=ui.f,d=curDiv(),ids=d?teamIds(d):[];
     p.issues.forEach(function(i){if(i.assignee&&ids.indexOf(i.assignee)<0)ids.push(i.assignee)});
     ids.sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
-    $("fsel").innerHTML=
-      '<select data-ff="type" aria-label="Filter by type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
-      '<select data-ff="who" aria-label="Filter by assignee">'+opt("","Anyone",f.who)+opt("__none","Unassigned",f.who)+ids.map(function(i){return opt(i,nameOf(i),f.who)}).join("")+'</select>'+
-      '<select data-ff="pri" aria-label="Filter by priority">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>';
+    var h='<div class="fav" role="group" aria-label="Show bids assigned to">'+
+      '<button class="favb none'+(f.who==="__none"?' on':'')+'" data-fwho="__none" title="Unassigned" aria-pressed="'+(f.who==="__none")+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></button>'+
+      ids.map(function(i){var n=nameOf(i);return '<button class="favb'+(f.who===i?' on':'')+'" data-fwho="'+esc(i)+'" title="'+esc(n)+'" aria-pressed="'+(f.who===i)+'">'+nameAv(n)+'</button>'}).join("")+'</div>';
+    var nf=(f.type?1:0)+(f.pri?1:0);
+    h+='<div class="fwrap"><button class="btn small fbtn'+(nf?' on':'')+'" data-fopen aria-expanded="'+(!!ui.fOpen)+'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter'+(nf?' <span class="count">'+nf+'</span>':'')+'</button>';
+    if(ui.fOpen){
+      h+='<div class="fpop" role="dialog" aria-label="Filter">'+
+        '<label for="ff-type">Type</label><select id="ff-type" data-ff="type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
+        '<label for="ff-pri">Priority</label><select id="ff-pri" data-ff="pri">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>'+
+        (nf?'<button class="linkbtn" data-fclear style="margin-top:10px">Clear filters</button>':'')+'</div>';
+    }
+    $("fsel").innerHTML=h+'</div>';
   }
   function emptyHTML(title,body,btn){
     return '<div class="rep"><section class="panel"><h3>'+title+'</h3><p class="fine" style="margin:0 0 10px;font-size:14px">'+body+'</p>'+(btn||'')+'</section></div>';
@@ -1665,6 +1692,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
+    $("fright").innerHTML=showF&&v==="calendar"?CALBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
     placeCalPop();
   }
@@ -1947,6 +1975,9 @@ img.who{object-fit:cover;background:var(--chip)}
       if(tp2&&tp2.statuses.length>1){tp2.statuses.splice(+tk2[1],1);save();render()}
       return;
     }
+    if((el=t.closest("[data-fwho]"))){var fw=el.getAttribute("data-fwho");ui.f.who=ui.f.who===fw?"":fw;render();return}
+    if(t.closest("[data-fopen]")){ui.fOpen=!ui.fOpen;render();return}
+    if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";render();return}
     if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
       var tfid=el.getAttribute("data-taddfield"),tfp=D.config.templates.filter(function(x){return x.id===tfid})[0],tfin=$("tfn-"+tfid);
@@ -2111,7 +2142,7 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("change",function(e){
     var el=e.target,v;
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
-    if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;render();return}
+    if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
     if(el.hasAttribute("data-spacetpl")){
@@ -2188,6 +2219,7 @@ img.who{object-fit:cover;background:var(--chip)}
   window.addEventListener("scroll",function(e){if(ui.calPop&&!(e.target.nodeType===1&&e.target.closest(".jpop")))closeCalPop()},true);
   window.addEventListener("resize",placeCalPop);
   document.addEventListener("mousedown",function(e){
+    if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
   view.addEventListener("dragstart",function(e){
