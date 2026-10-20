@@ -255,6 +255,41 @@ td.over{color:var(--high);font-weight:600}
 .note{margin:10px 16px 0;font-size:13px;color:var(--muted)}
 .panel{background:var(--surface);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
 .daypanel{margin:12px 16px 28px}
+/* Jira-style calendar */
+.jcal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 16px}
+.jcal-bar .spacer{flex:1}
+.jcal-bar .btn.on{border-color:var(--accent);color:var(--ink)}
+.jcal-bar select{background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font-weight:600}
+.jnav{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}
+.jnav b{padding:0 6px;font-size:14px;white-space:nowrap}
+.jnav button{background:none;border:0;padding:4px 10px;font-size:18px;line-height:1;color:var(--muted)}
+.jnav button:hover{color:var(--ink)}
+.jcal{margin:0 16px 28px;display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px}
+.jdow{background:var(--surface);text-align:center;font-size:12px;font-weight:700;padding:9px 0}
+.jday{background:var(--surface);min-height:150px;padding:6px 6px 8px;min-width:0}
+.jcal.week .jday{min-height:320px}
+.jday.out .jdn span{opacity:.5}
+.jday:hover{background:var(--col)}
+.jday.drop{outline:2px dashed var(--accent);outline-offset:-2px}
+.jdn{display:flex;align-items:center;justify-content:space-between;height:22px;margin-bottom:4px;font-size:12px;color:var(--muted)}
+.jdn span{padding:1px 5px;border-radius:4px}
+.jday.today .jdn span{background:var(--c1);color:#fff;font-weight:600}
+.jadd{background:none;border:0;border-radius:4px;width:22px;height:22px;padding:0;font-size:16px;line-height:1;color:var(--muted);opacity:0}
+.jday:hover .jadd,.jadd:focus-visible{opacity:1}
+.jadd:hover{background:var(--chip);color:var(--ink)}
+@media (hover:none){.jadd{opacity:1}}
+.jc{display:flex;align-items:center;gap:6px;width:100%;height:24px;margin-top:3px;padding:0 4px 0 6px;border:0;border-radius:4px;background:var(--chip);box-shadow:0 1px 0 var(--line2);color:var(--ink);font-size:13px;text-align:left;min-width:0;cursor:pointer}
+.jc:hover{filter:brightness(.97)}
+.jc.fin{background:var(--lowbg)}
+.jc.over{box-shadow:inset 3px 0 0 var(--high),0 1px 0 var(--line2)}
+.jc .ti{width:16px;height:16px;font-size:10px;flex:0 0 auto}
+.jc .jk{flex:0 0 auto;font-weight:500}
+.jc.fin .jk{text-decoration:line-through}
+.jc .jt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jc .who{width:18px;height:18px;font-size:8px;color:#fff;flex:0 0 auto}
+.jday .more{padding:4px 2px 0}
+.unsch{margin:0 16px 12px}
+.unsch .unrow{margin-top:4px}
 .daypanel h3,.panel h3{font:600 16px var(--head);margin:0 0 10px}
 .drow{display:flex;gap:10px;align-items:center;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:9px 0;text-align:left}
 .drow:first-of-type{border-top:0}
@@ -1091,14 +1126,21 @@ img.who{object-fit:cover;background:var(--chip)}
   }
 
   /* ---------- calendar ---------- */
-  function chipHTML(is){
-    var od=overdue(is);
-    var clock='<svg class="od" width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Overdue"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-    return '<button class="cc'+(od?' over':'')+(isDone(is)?' fin':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" style="--tc:'+TCOLOR[is.type]+';--pc:'+PCOLOR[is.priority]+'" title="'+esc(ikey(is)+" "+is.title)+'"><span class="ci">'+TGLYPH[is.type]+'</span><span class="ct">'+esc(ikey(is)+" "+is.title)+'</span><span class="cx">'+(od?clock:'')+prHTML(is.priority)+'</span></button>';
+  // Calendar laid out like Jira's: one full-width grid, a bar per bid (type, key, title, assignee).
+  function calChip(is){
+    var done=isDone(is),an=is.assignee?nameOf(is.assignee):"";
+    return '<button class="jc'+(done?' fin':'')+(overdue(is)?' over':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+
+      tiHTML(is.type)+'<span class="jk">'+ikey(is)+'</span><span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
+  }
+  function setCalMode(cmode){
+    state.calMode=cmode;
+    if(cmode==="week"&&state.calSel.slice(0,7)!==state.calMonth){var T0=today();state.calSel=T0.slice(0,7)===state.calMonth?T0:state.calMonth+"-01"}
+    if(cmode==="month")state.calMonth=state.calSel.slice(0,7);
+    save();render();
   }
   function calHTML(){
     var p=proj(),T=today(),mode=state.calMode==="week"?"week":"month",by={},undated=[],cells=[],title,i;
-    var DOWN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],HDR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    var DOWN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     p.issues.filter(visible).forEach(function(x){if(x.due)(by[x.due]=by[x.due]||[]).push(x);else if(!isDone(x))undated.push(x)});
     var cm=state.calMonth.split("-"),y=+cm[0],m=+cm[1]-1;
     if(mode==="week"){
@@ -1109,34 +1151,37 @@ img.who{object-fit:cover;background:var(--chip)}
     }else{
       var first=new Date(y,m,1),lead=(first.getDay()+6)%7,days=new Date(y,m+1,0).getDate(),weeks=Math.ceil((lead+days)/7);
       for(i=0;i<weeks*7;i++)cells.push(new Date(y,m,1-lead+i));
-      title=first.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+      title=MONTHS[m]+" "+y;
     }
-    var sel=state.calSel,items=by[sel]||[];
-    var h='<div class="calwrap"><div><div class="cal-head"><h2>'+title+'</h2>'+
-      '<button class="btn small" data-cal="-1" aria-label="Previous '+mode+'">&larr;</button>'+
+    // weekends are hidden unless a bid is due on one
+    var isWE=function(d){return d.getDay()===0||d.getDay()===6};
+    var showWE=cells.some(function(d){return isWE(d)&&(by[ymd(d)]||[]).length});
+    if(!showWE)cells=cells.filter(function(d){return !isWE(d)});
+    var cols=showWE?7:5,HDR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,cols);
+    var h='<div class="jcal-bar">'+
+      '<button class="btn small'+(ui.unsch?' on':'')+'" data-unsch aria-pressed="'+(!!ui.unsch)+'">Unscheduled <span class="count">'+undated.length+'</span></button>'+
+      '<span class="spacer"></span>'+
       '<button class="btn small" data-cal="today">Today</button>'+
-      '<button class="btn small" data-cal="1" aria-label="Next '+mode+'">&rarr;</button>'+
-      '<div class="seg" role="group" aria-label="Calendar range">'+[["month","Month"],["week","Week"]].map(function(x){return '<button data-calmode="'+x[0]+'" aria-pressed="'+(mode===x[0])+'">'+x[1]+'</button>'}).join("")+'</div></div>'+
-      '<div class="calscroll"><div class="cal'+(mode==="week"?' week':'')+'">';
-    HDR.forEach(function(d){h+='<div class="dow">'+d+'</div>'});
+      '<span class="jnav"><button data-cal="-1" aria-label="Previous '+mode+'">&lsaquo;</button><b>'+title+'</b><button data-cal="1" aria-label="Next '+mode+'">&rsaquo;</button></span>'+
+      '<select data-calmodesel aria-label="Calendar range">'+opt("month","Month",mode)+opt("week","Week",mode)+'</select></div>';
+    if(ui.unsch){
+      h+='<div class="panel unsch"><h3>Unscheduled <span class="count">'+undated.length+'</span></h3>';
+      if(!undated.length)h+='<div class="empty">Every open bid has a due date.</div>';
+      undated.slice(0,40).forEach(function(x){h+='<div class="unrow" draggable="true" data-iid="'+x.id+'">'+calChip(x)+'</div>'});
+      h+='<p class="fine">Drag a bid onto a day to give it that due date.</p></div>';
+    }
+    h+='<div class="jcal'+(mode==="week"?' week':'')+'" style="grid-template-columns:repeat('+cols+',minmax(0,1fr))">';
+    HDR.forEach(function(d){h+='<div class="jdow">'+d+'</div>'});
     cells.forEach(function(d){
-      var s=ymd(d),list=by[s]||[],out=mode==="month"&&d.getMonth()!==m,wk=d.getDay()===0||d.getDay()===6;
-      var wide=mode==="week"||d.getDate()===1;
-      var label=(mode==="week"?'<span class="dwk">'+DOWN[d.getDay()]+' </span>':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
-      var shown=mode==="week"?list:list.slice(0,2);
-      h+='<div class="day'+(out?' out':'')+(wk?' we':'')+(s===T?' today':'')+(s===sel?' sel':'')+'" data-day="'+s+'" tabindex="0" role="button" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
-        '<div class="dn"><span class="dnn">'+label+'</span></div>'+'<div class="dots">'+list.slice(0,3).map(function(x){return '<i'+(isDone(x)?' class="fin"':'')+' style="background:'+(overdue(x)?'var(--high)':TCOLOR[x.type])+'"></i>'}).join("")+(list.length>3?'<b>+'+(list.length-3)+'</b>':'')+'</div>'+shown.map(chipHTML).join("")+
-        (mode==="month"&&list.length>2?'<button class="more" data-more="'+s+'">'+(list.length-2)+' more</button>':'')+'</div>';
+      var s=ymd(d),list=by[s]||[],out=mode==="month"&&d.getMonth()!==m;
+      var label=(mode==="week"?DOWN[d.getDay()]+' ':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
+      var shown=mode==="week"?list:list.slice(0,4);
+      h+='<div class="jday'+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
+        '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-add-due="'+s+'" title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">+</button>':'')+'</div>'+
+        shown.map(calChip).join("")+
+        (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+'</div>';
     });
-    h+='<div class="calfoot">Showing '+cells.reduce(function(a,d){return a+(by[ymd(d)]||[]).length},0)+' of '+p.issues.filter(function(x){return x.due&&visible(x)}).length+' scheduled bids</div></div></div><section class="panel daypanel"><h3>'+parse(sel).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})+'</h3>';
-    if(!items.length)h+='<div class="empty">No bids due this day.</div>';
-    h+=kidRows(items)+'<div style="margin-top:10px"><button class="btn small" data-add-due="'+sel+'">Create bid due this day</button></div></section></div>';
-    h+='<aside class="panel unsch"><h3>Unscheduled work <span class="count">'+undated.length+'</span></h3>';
-    if(!undated.length)h+='<div class="empty">Every open bid has a due date.</div>';
-    undated.slice(0,40).forEach(function(x){
-      h+='<div class="unrow" draggable="true" data-iid="'+x.id+'">'+tiHTML(x.type)+'<button class="lt t" data-open="'+x.id+'">'+esc(x.title)+'</button><button class="btn small" data-schedule="'+x.id+'" aria-label="Schedule '+esc(ikey(x))+' on '+shortDate(sel)+'">'+shortDate(sel)+'</button></div>';
-    });
-    return h+'<p class="fine">Drag a bid onto a day, or tap a date button to schedule it on the selected day.</p></aside></div>';
+    return h+'</div>';
   }
 
   /* ---------- reports ---------- */
@@ -1791,12 +1836,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-more]"))){openDay(el.getAttribute("data-more"));return}
     if((el=t.closest("[data-schedule]"))){var si=byId(el.getAttribute("data-schedule"));if(si)setField(si,"due",state.calSel);return}
-    if((el=t.closest("[data-calmode]"))){
-      var cmode=el.getAttribute("data-calmode");state.calMode=cmode;
-      if(cmode==="week"&&state.calSel.slice(0,7)!==state.calMonth){var T0=today();state.calSel=T0.slice(0,7)===state.calMonth?T0:state.calMonth+"-01"}
-      if(cmode==="month")state.calMonth=state.calSel.slice(0,7);
-      save();render();return;
-    }
+    if((el=t.closest("[data-calmode]"))){setCalMode(el.getAttribute("data-calmode"));return}
+    if(t.closest("[data-unsch]")){ui.unsch=!ui.unsch;render();return}
     if(t.closest("[data-colsbtn]")){ui.colsOpen=!ui.colsOpen;render();return}
     if(t.closest("[data-colreset]")){state.listCols=null;save();render();return}
     if((el=t.closest("[data-colmv]"))){
@@ -1819,7 +1860,7 @@ img.who{object-fit:cover;background:var(--chip)}
       else{var cp=state.calMonth.split("-"),d=new Date(+cp[0],+cp[1]-1+parseInt(v,10),1);state.calMonth=d.getFullYear()+"-"+pad(d.getMonth()+1)}
       save();render();return;
     }
-    if((el=t.closest("[data-day]"))){state.calSel=el.getAttribute("data-day");if(state.calSel.slice(0,7)!==state.calMonth)state.calMonth=state.calSel.slice(0,7);save();render();return}
+    if((el=t.closest("[data-day]"))){state.calSel=el.getAttribute("data-day");savePrefs();return}
     if((el=t.closest("[data-gi]"))){var gi=parseInt(el.getAttribute("data-gi"),10);ui.rsel=ui.rsel===gi?null:gi;render();return}
     if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},r.cfg,{name:r.name});ui.rsel=null;save();render();return}
     if((el=t.closest("[data-delrep]"))){state.reports.splice(parseInt(el.getAttribute("data-delrep"),10),1);save();render();return}
@@ -1922,6 +1963,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
+    if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
     if(el.hasAttribute("data-spacetpl")){
       var stp=D.config.templates.filter(function(x){return x.id===el.value})[0];
       if(stp){applyTemplate(proj(),stp);save();render();toast("Workflow changed to "+stp.name)}
@@ -1997,7 +2039,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var th=e.target.closest("[data-lcol]");
     if(th&&ui.dragCol){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".th-over"),function(x){x.classList.remove("th-over")});th.classList.add("th-over");return}
     var dy=e.target.closest("[data-day]");
-    if(dy&&ui.dragId){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".day.drop"),function(x){x.classList.remove("drop")});dy.classList.add("drop");return}
+    if(dy&&ui.dragId){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll("[data-day].drop"),function(x){x.classList.remove("drop")});dy.classList.add("drop");return}
     var col=e.target.closest(".col");if(!col||!ui.dragId)return;
     e.preventDefault();
     Array.prototype.forEach.call(view.querySelectorAll(".col.over"),function(x){x.classList.remove("over")});
