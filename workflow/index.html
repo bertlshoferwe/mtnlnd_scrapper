@@ -1560,7 +1560,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
     var showTabs=spaceView&&!!p&&!loading&&!DENIED&&!!d;
     $("tabs").style.display=showTabs?"":"none";
-    $("tabs").innerHTML=VIEWS.filter(function(x){return x[0]!=="settings"||isDivAdmin(d)}).map(function(x){return '<button class="tab" role="tab" data-view="'+x[0]+'" aria-selected="'+(v===x[0])+'">'+VICON[x[0]]+x[1]+'</button>'}).join("");
+    $("tabs").innerHTML=VIEWS.filter(function(x){return x[0]!=="settings"||isDivAdmin(d)}).map(function(x){return '<button class="tab" role="tab" data-view="'+x[0]+'" aria-selected="'+(v===x[0])+'"'+(x[0]==="settings"?' title="Settings" aria-label="Settings">'+VICON[x[0]]:'>'+VICON[x[0]]+x[1])+'</button>'}).join("");
     var showF=showTabs&&["board","list","calendar"].indexOf(v)>-1;
     $("filters").style.display=showF?"":"none";
     if(showF)renderFsel();
