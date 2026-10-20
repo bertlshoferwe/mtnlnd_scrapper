@@ -164,7 +164,9 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .card:hover{background:color-mix(in srgb,var(--ink) 3%,var(--surface))}
 .ctitle{font-size:15px;font-weight:500;line-height:1.35;overflow-wrap:anywhere;margin-bottom:6px}
 .cdue{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);margin-bottom:8px}
-.cdue .odc{color:var(--high)}
+.cdue .odc.soon{color:var(--med)}
+.cdue .odc.late{color:var(--high)}
+.cdue.over{color:var(--high)}
 .cfoot{display:flex;align-items:center;gap:6px}
 .cfoot .sp{flex:1}
 .cfoot .key{font-size:13px}
@@ -745,6 +747,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function byId(id){var p=proj();return p?p.issues.filter(function(i){return i.id===id})[0]:undefined}
   function stat(p,id){return p.statuses.filter(function(s){return s.id===id})[0]||p.statuses[0]}
   function isDone(is){return stat(proj(),is.status).cat==="done"}
+  function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&is.due<=addDays(today(),3)}
   function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
   function overdue(is){return !!is.due&&!isDone(is)&&(is.due<today()||(is.due===today()&&!!is.dueTime&&is.dueTime<nowHM()))}
   function fmtTime(hm){if(!hm)return "";var p2=hm.split(":");return new Date(2000,0,1,+p2[0],+p2[1]).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}
@@ -1213,7 +1216,7 @@ img.who{object-fit:cover;background:var(--chip)}
         // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
         h+='<article class="card" draggable="true" data-id="'+is.id+'" data-open="'+is.id+'">'+
           '<div class="ctitle">'+esc(is.title)+'</div>'+
-          (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Overdue"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
+          (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
           echipHTML(is)+
           '<div class="cfoot"><span class="kc">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span></span><span class="sp"></span>'+
           '<span class="cpick" title="Priority: '+is.priority+'">'+prHTML(is.priority)+'<select data-cardpri="'+is.id+'" aria-label="Priority for '+ikey(is)+'">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>'+
