@@ -1312,7 +1312,7 @@ img.who{object-fit:cover;background:var(--chip)}
         return '<button class="proj" data-opendiv="'+x.id+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
       }).join("");
     }else if(d){
-      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division"><span class="pi" style="background:var(--c5)">M</span><span class="pn">Members</span></button>';
+      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division"><span class="pi" style="background:var(--c5)">S</span><span class="pn">Division settings</span></button>';
       h+='<div class="sl">'+esc(d.name)+'</div>';
       spaceTree(d.id).forEach(function(n){
         var s=n.sp;
@@ -1416,7 +1416,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function divisionHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
     var h='<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>';
-    h+='<section class="panel"><h3>People</h3>';
+    h+='<section class="panel"><h3>Members</h3>';
     ids.forEach(function(id){
       h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
     });
@@ -1430,7 +1430,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
     renderSide();renderDivTabs();
     if(v==="overview"){$("pkey").textContent="Organization";$("ptitle").textContent="Overview"}
-    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Members"}
+    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Division settings"}
     else if(p){$("pkey").textContent=(d?d.name+" · ":"")+p.key;$("ptitle").textContent=p.name}
     else{$("pkey").textContent=d?"Division":"";$("ptitle").textContent=d?d.name:"Bid board"}
     var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
