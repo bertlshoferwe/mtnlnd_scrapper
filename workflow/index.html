@@ -285,6 +285,9 @@ td.over{color:var(--high);font-weight:600}
   .sheet.issue{width:min(960px,96%);height:auto;max-height:92vh;border-radius:16px;padding-top:20px}
 }
 .sheet h3{font:700 20px var(--head);margin:0 0 14px}
+.sheet.wide{width:min(760px,100%)}
+.sheet .srow input{width:auto}
+.sheet .panel{margin-bottom:12px}
 label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
 .sheet input,.sheet select,.sheet textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
 .sheet input.h-title{font:700 22px var(--head);letter-spacing:-.01em;background:transparent;border-color:transparent;padding:6px 8px;margin-left:-8px;width:calc(100% + 8px)}
@@ -395,6 +398,14 @@ img.who{object-fit:cover;background:var(--chip)}
 <div class="toast" id="toast" role="status"></div>
 
 <!-- day -->
+<div class="overlay" id="ov-settings" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="sheet wide">
+    <h3 id="setTitle">Settings</h3>
+    <div id="orgSetBody"></div>
+    <div class="actions"><span class="spacer"></span><button class="btn" data-close="ov-settings">Close</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-day" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
   <div class="sheet">
     <h3 id="dayTitle"></h3>
@@ -794,7 +805,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var vis=myDivs();
     if(!orgView(state.view)&&!vis.concat(D.archived).some(function(d){return d.id===state.div})){
       state.div=vis.length?vis[0].id:"";state.cur="";
-      if(!state.div)state.view="overview";
+      if(!state.div)state.view="board";
     }
     if(!divSpaces(state.div).some(function(s){return s.id===state.cur})){
       var tr=spaceTree(state.div);state.cur=tr.length?tr[0].sp.id:"";
@@ -1332,15 +1343,14 @@ img.who{object-fit:cover;background:var(--chip)}
       if(isDivAdmin(d))h+='<button class="proj add" data-newspace title="Create space">+ Create space</button>';
     }
     $("plist").innerHTML=h;
-    $("sfoot").innerHTML=ORG?'<button class="proj'+(state.view==="orgsettings"?' on':'')+'" data-view="orgsettings" title="Settings"><span class="pi" style="background:var(--c6)">'+'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+'</span><span class="pn">Settings</span></button>':"";
+    $("sfoot").innerHTML=ORG?'<button class="proj'+($("ov-settings").classList.contains("open")?' on':'')+'" data-orgsettings title="Settings"><span class="pi" style="background:var(--c6)">'+'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+'</span><span class="pn">Settings</span></button>':"";
   }
   function renderDivTabs(){
     var vis=myDivs(),h="";
-    if(ORG)h+='<button class="dtab'+(state.view==="overview"?' on':'')+'" data-view="overview">Overview</button>';
     vis.forEach(function(d){h+='<button class="dtab'+(!orgView(state.view)&&d.id===state.div?' on':'')+'" data-div="'+d.id+'">'+esc(d.name)+'</button>'});
     if(!orgView(state.view)&&isArchived(state.div)){var ad=curDiv();h+='<button class="dtab on" data-div="'+esc(state.div)+'">'+esc(ad?ad.name:"Archived")+' (archived)</button>'}
     $("dtabs").innerHTML=h;
-    $("dtabs").style.display=(ORG||vis.length>1)?"":"none";
+    $("dtabs").style.display=vis.length||isArchived(state.div)?"":"none";
   }
   function renderFsel(){
     var p=proj(),f=ui.f,d=curDiv(),ids=d?teamIds(d):[];
@@ -1378,44 +1388,8 @@ img.who{object-fit:cover;background:var(--chip)}
     h+='<div class="srow"><input id="newtpl" placeholder="New template name" maxlength="40" aria-label="New template name"><button class="btn small primary" data-newtpl>Create template</button></div></section>';
     return h;
   }
-  function overviewHTML(){
-    var T=today(),soon=addDays(T,7),horizon=addDays(T,14),h='<div class="rep">';
-    var tot={n:0,open:0,over:0,soon:0},rows=[],dl=[];
-    D.divs.forEach(function(d){
-      var sps=divSpaces(d.id),c={todo:0,doing:0,done:0,over:0,soon:0,n:0};
-      sps.forEach(function(sp){sp.issues.forEach(function(is){
-        if(is.type==="Subtask")return;
-        var cat=stat(sp,is.status).cat;c[cat]=(c[cat]||0)+1;c.n++;
-        if(is.due&&cat!=="done"){
-          if(is.due<T)c.over++;else if(is.due<=soon)c.soon++;
-          if(is.due<=horizon)dl.push({is:is,sp:sp,d:d});
-        }
-      })});
-      tot.n+=c.n;tot.open+=c.todo+c.doing;tot.over+=c.over;tot.soon+=c.soon;
-      rows.push({d:d,spaces:sps.length,c:c});
-    });
-    dl.sort(function(a,b){return a.is.due<b.is.due?-1:a.is.due>b.is.due?1:0});
-    h+='<h2 class="sec">All divisions</h2>';
-    h+='<div class="stats">'+[[D.divs.length,"Divisions"],[tot.n,"Bids"],[tot.open,"Open"],[tot.over,"Overdue"],[tot.soon,"Due in 7 days"]].map(function(x){return '<div class="stat"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'}).join("")+'</div>';
-    if(!rows.length)h+='<div class="panel"><p class="empty">No divisions yet. Add one in Bid Scout and it will show up here.</p></div>';
-    rows.forEach(function(r){
-      var c=r.c,n=c.n||1,ppl=teamIds(r.d).length;
-      h+='<section class="panel"><button class="eh" data-opendiv="'+r.d.id+'" style="margin-bottom:10px"><span class="et">'+esc(r.d.name)+'</span><span class="fine" style="margin:0">'+ppl+' '+(ppl===1?'person':'people')+' · '+r.spaces+' space'+(r.spaces===1?'':'s')+'</span></button>'+
-        '<div class="sbar" role="img" aria-label="To do '+c.todo+', in progress '+c.doing+', done '+c.done+'"><i style="width:'+(c.todo/n*100)+'%;background:var(--c5)"></i><i style="width:'+(c.doing/n*100)+'%;background:var(--med)"></i><i style="width:'+(c.done/n*100)+'%;background:var(--low)"></i></div>'+
-        '<div class="kpis"><span class="chip">'+c.n+' bid'+(c.n===1?'':'s')+'</span><span class="chip">'+c.todo+' to do</span><span class="chip">'+c.doing+' in progress</span><span class="chip">'+c.done+' done</span>'+
-        (c.over?'<span class="chip over">'+c.over+' overdue</span>':'')+(c.soon?'<span class="sbadge cat-doing">'+c.soon+' due in 7 days</span>':'')+'</div></section>';
-    });
-    h+='<section class="panel"><h3>Upcoming deadlines</h3>';
-    if(!dl.length)h+='<p class="empty">Nothing is due in the next 14 days.</p>';
-    dl.slice(0,20).forEach(function(x){
-      h+='<button class="drow" data-gotobid="'+x.is.id+'"><span class="t">'+esc(x.is.title)+'<span class="fine" style="display:block;margin:2px 0 0">'+esc(x.d.name)+' · '+esc(x.sp.name)+'</span></span><span class="chip'+(x.is.due<T?' over':'')+'">Due '+shortDate(x.is.due)+'</span></button>';
-    });
-    if(dl.length>20)h+='<p class="fine">Showing the first 20 of '+dl.length+'.</p>';
-    h+='</section>';
-    return h+'</div>';
-  }
   function orgSettingsHTML(){
-    var h='<div class="rep">'+tplEditorHTML();
+    var h=tplEditorHTML();
     if(D.archived.length){
       h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
       D.archived.forEach(function(a){
@@ -1427,7 +1401,7 @@ img.who{object-fit:cover;background:var(--chip)}
       });
       h+='</section>';
     }
-    return h+'</div>';
+    return h;
   }
   function membersHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
@@ -1453,11 +1427,9 @@ img.who{object-fit:cover;background:var(--chip)}
     var v=state.view,d=curDiv(),p=proj();
     var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
     if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
-    if(v==="division")v=state.view="board";   // members now live in Settings
+    if(v==="division"||orgView(v))v=state.view="board";   // members live in a space's Settings; org settings is a window
     renderSide();renderDivTabs();
-    if(v==="overview"){$("pkey").textContent="Organization";$("ptitle").textContent="Overview"}
-    else if(v==="orgsettings"){$("pkey").textContent="Organization";$("ptitle").textContent="Settings"}
-    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Division settings"}
+    if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Division settings"}
     else if(p){$("pkey").textContent=(d?d.name+" · ":"")+p.key;$("ptitle").textContent=p.name}
     else{$("pkey").textContent=d?"Division":"";$("ptitle").textContent=d?d.name:"Bid board"}
     var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
@@ -1471,8 +1443,6 @@ img.who{object-fit:cover;background:var(--chip)}
     var html;
     if(DENIED)html=emptyHTML("Can’t open the bid board",esc(DENIED));
     else if(loading)html='<div class="rep"><p class="fine" style="font-size:14px">Loading…</p></div>';
-    else if(v==="overview"&&ORG)html=overviewHTML();
-    else if(v==="orgsettings"&&ORG)html=orgSettingsHTML();
     else if(!d)html=noDivisionHTML();
     else if(v==="division")html=divisionHTML(d);
     else if(!p)html=noSpaceHTML(d);
@@ -1480,7 +1450,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
+    if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
   }
+  function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
   // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
   function applySide(){
     $("side").parentNode.classList.toggle("side-hidden",!!state.sideHidden);
@@ -1490,12 +1462,12 @@ img.who{object-fit:cover;background:var(--chip)}
   function resetFilters(){ui.f={q:"",type:"",who:"",pri:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
   function switchSpace(id){
     state.cur=id;if(state.view==="division"||orgView(state.view))state.view="board";
-    resetFilters();closeOv("ov-issue");closeDrawer();save();render();
+    resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();save();render();
   }
   function switchDiv(id){
     state.div=id;state.cur="";state.view="board";
     var tr=spaceTree(id);if(tr.length)state.cur=tr[0].sp.id;
-    resetFilters();closeOv("ov-issue");closeDrawer();ensureScope();save();render();
+    resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();ensureScope();save();render();
   }
   function gotoBid(id){
     var sp=null;
@@ -1507,7 +1479,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-settings"){ui.armD=false;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -1674,6 +1646,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-div]"))){switchDiv(el.getAttribute("data-div"));return}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
+    if(t.closest("[data-orgsettings]")){openOrgSettings();return}
     if(t.closest("[data-newspace]")){closeDrawer();openSpace("");return}
     if((el=t.closest("[data-newsub]"))){openSpace(el.getAttribute("data-newsub"));return}
     if(t.closest("[data-addperson]")){
@@ -1994,7 +1967,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     try{sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}})}
     catch(e){onLoadErr(e);return}
-    if(!state.div)state.view="overview";
+    if(!state.div)state.view="board";
     loadAll().then(listen).catch(onLoadErr);
   })();
 })();
