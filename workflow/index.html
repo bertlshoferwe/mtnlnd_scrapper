@@ -1524,9 +1524,31 @@ img.who{object-fit:cover;background:var(--chip)}
   }
 
   /* ---------- reports ---------- */
+  // every field can group, filter, or (amounts/numbers) be totalled
+  function rFields(){return spaceFields(proj())}
+  function divMembers(){var d=curDiv();return d?teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))}):[]}
+  function rField(g){return g&&g.indexOf("cf:")===0?rFields().filter(function(x){return "cf:"+x.id===g})[0]:null}
+  function groupChoices(){
+    var o=GROUPS.slice(0,4).concat([["reporter","Reporter"]],GROUPS.slice(4));
+    rFields().forEach(function(fd){if(fd.type!=="money"&&fd.type!=="number")o.push(["cf:"+fd.id,fd.type==="date"?fd.name+" (month)":fd.name])});
+    return o;
+  }
+  function isTimeG(g){var fd=rField(g);return !!TIME[g]||!!(fd&&fd.type==="date")}
+  function isMonthG(g){var fd=rField(g);return g==="due"||!!(fd&&fd.type==="date")}
+  // what the chart counts: bids, or the total of an amount/number field
+  function measureField(){var m=state.rcfg.measure||"";return m?rFields().filter(function(x){return x.id===m&&(x.type==="money"||x.type==="number")})[0]||null:null}
+  function mval(items){var fd=measureField();if(!fd)return items.length;return items.reduce(function(a,t){var v=Number((t.fields||{})[fd.id]);return a+(isFinite(v)?v:0)},0)}
+  function fmtM(n){var fd=measureField();if(!fd)return String(n);return fd.type==="money"?"$"+Math.round(n).toLocaleString():n.toLocaleString(undefined,{maximumFractionDigits:2})}
   function scoped(){
-    var c=state.rcfg;
+    var c=state.rcfg,cf=c.cf||{},F=rFields();
     return proj().issues.filter(function(t){
+      if(c.rep&&(t.reporter||"__none")!==c.rep)return false;
+      for(var i=0;i<F.length;i++){
+        var fd=F[i],want=cf[fd.id],v=(t.fields||{})[fd.id]||"";if(!want)continue;
+        if(fd.type==="person"||fd.type==="team"){if((v||"__none")!==want)return false}
+        else if(fd.type==="text"){if(String(v).toLowerCase().indexOf(want.toLowerCase())<0)return false}
+        else if(want==="set"?!v:!!v)return false;
+      }
       if(c.scope==="open"&&isDone(t))return false;
       if(c.scope==="done"&&!isDone(t))return false;
       if(c.scope==="overdue"&&!overdue(t))return false;
@@ -1542,7 +1564,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(g==="type")return [t.type];
     if(g==="priority")return [t.priority];
     if(g==="assignee")return [t.assignee||"__none"];
-    
+    if(g==="reporter")return [t.reporter||"__none"];
+    if(g.indexOf("cf:")===0){var gf=rField(g),gv=gf?(t.fields||{})[gf.id]:"";if(!gv)return ["__none"];return [gf.type==="date"?gv.slice(0,7):gv]}
+
     if(g==="label")return t.labels.length?t.labels:["No label"];
     if(g==="due")return [t.due?t.due.slice(0,7):"No due date"];
     if(g==="created")return [weekStart(t.created)];
@@ -1550,6 +1574,8 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function keyLabel(g,k){
     if(g==="assignee")return k==="__none"?"Unassigned":nameOf(k);
+    if(g==="reporter")return k==="__none"?"None":nameOf(k);
+    if(g.indexOf("cf:")===0){var kf=rField(g);if(k==="__none")return "No "+(kf?kf.name:"value");if(kf&&kf.type==="date")return monthLabel(k);return kf?cfShow(kf,k):k}
     if(g==="status")return stat(proj(),k).name;
     if(g==="due"&&/^\d/.test(k))return monthLabel(k);
     if((g==="created"||g==="completed")&&/^\d/.test(k))return "Week of "+shortDate(k);
@@ -1563,50 +1589,51 @@ img.who{object-fit:cover;background:var(--chip)}
     if(g==="status")keys=proj().statuses.map(function(s){return s.id});
     else if(g==="priority")keys=PRI.slice();
     else if(g==="type")keys=TYPES.slice();
-    else if(TIME[g]){
+    else if(isTimeG(g)){
       var real=keys.filter(function(k){return /^\d/.test(k)}).sort(),extra=keys.filter(function(k){return !/^\d/.test(k)}),filled=[];
-      if(real.length){var k=real[0],last=real[real.length-1],guard=0;while(k<=last&&guard++<240){filled.push(k);k=g==="due"?nextMonth(k):addDays(k,7)}}
+      if(real.length){var k=real[0],last=real[real.length-1],guard=0;while(k<=last&&guard++<240){filled.push(k);k=isMonthG(g)?nextMonth(k):addDays(k,7)}}
       keys=filled.concat(extra);
-    }else keys.sort(function(a,b){return map[b].length-map[a].length||a.localeCompare(b)});
+    }else keys.sort(function(a,b){return mval(map[b])-mval(map[a])||a.localeCompare(b)});
     return keys.map(function(k){return {key:k,label:keyLabel(g,k),items:map[k]||[]}});
   }
   function colorFor(g,k,i){
     if(g==="priority")return PCOLOR[k];
     if(g==="type")return TCOLOR[k];
     if(g==="status"){var c=stat(proj(),k).cat;return c==="done"?"var(--low)":c==="doing"?"var(--accent)":"var(--c5)"}
-    if(TIME[g])return "var(--accent)";
+    if(isTimeG(g))return "var(--accent)";
     return "var(--c"+(i%6+1)+")";
   }
-  function groupLabel(g){return GROUPS.filter(function(x){return x[0]===g})[0][1]}
+  function groupLabel(g){var x=groupChoices().filter(function(x){return x[0]===g})[0];return x?x[1]:"Status"}
   function chartHTML(groups,total){
     var c=state.rcfg,g=c.groupBy,h="";
     if(!total)return '<p class="empty">No bids match these settings. Loosen the filters to see data.</p>';
-    var max=Math.max.apply(null,groups.map(function(x){return x.items.length}).concat([1]));
+    var mt=groups.reduce(function(a,x){return a+mval(x.items)},0);if(measureField())total=mt;
+    var max=Math.max.apply(null,groups.map(function(x){return mval(x.items)}).concat([1]));
     var on=function(i){return ui.rsel===i?' on':''};
     if(c.chart==="table"){
-      h='<div class="tablewrap" style="margin:0"><table class="list" style="min-width:0"><thead><tr><th scope="col"><button>Group</button></th><th scope="col"><button>Bids</button></th><th scope="col"><button>Share</button></th></tr></thead><tbody>';
-      groups.forEach(function(gr,i){h+='<tr><td><button class="lt" data-gi="'+i+'">'+esc(gr.label)+'</button></td><td>'+gr.items.length+'</td><td>'+pct(gr.items.length,total)+'%</td></tr>'});
+      h='<div class="tablewrap" style="margin:0"><table class="list" style="min-width:0"><thead><tr><th scope="col"><button>Group</button></th><th scope="col"><button>'+(measureField()?esc(measureField().name):'Bids')+'</button></th><th scope="col"><button>Share</button></th></tr></thead><tbody>';
+      groups.forEach(function(gr,i){h+='<tr><td><button class="lt" data-gi="'+i+'">'+esc(gr.label)+'</button></td><td>'+fmtM(mval(gr.items))+'</td><td>'+pct(mval(gr.items),total)+'%</td></tr>'});
       h+='</tbody></table></div>';
     }else if(c.chart==="donut"){
-      var sum=groups.reduce(function(a,x){return a+x.items.length},0),off=0,segs="";
+      var sum=groups.reduce(function(a,x){return a+mval(x.items)},0),off=0,segs="";
       groups.forEach(function(gr,i){
-        var n=gr.items.length;if(!n)return;
+        var n=mval(gr.items);if(!n)return;
         var p=n/sum*100;
         segs+='<circle r="15.9155" cx="21" cy="21" fill="none" stroke-width="6" style="stroke:'+colorFor(g,gr.key,i)+'" stroke-dasharray="'+p+' '+(100-p)+'" stroke-dashoffset="'+(25-off)+'"></circle>';
         off+=p;
       });
       h='<div class="donutwrap"><svg class="donut" viewBox="0 0 42 42" role="img" aria-label="Donut chart of bids by '+esc(groupLabel(g))+'"><circle r="15.9155" cx="21" cy="21" fill="none" stroke-width="6" style="stroke:var(--chip)"></circle>'+segs+
-        '<text x="21" y="22.4" text-anchor="middle" font-size="7" font-weight="700" style="fill:var(--ink)">'+total+'</text></svg><div class="legend">'+
-        groups.map(function(gr,i){return '<button class="leg'+on(i)+'" data-gi="'+i+'"><span class="sw" style="background:'+colorFor(g,gr.key,i)+'"></span>'+esc(gr.label)+'<span class="n">'+gr.items.length+' <small>'+pct(gr.items.length,total)+'%</small></span></button>'}).join("")+'</div></div>';
-    }else if(TIME[g]){
+        '<text x="21" y="22.4" text-anchor="middle" font-size="7" font-weight="700" style="fill:var(--ink)">'+fmtM(total)+'</text></svg><div class="legend">'+
+        groups.map(function(gr,i){return '<button class="leg'+on(i)+'" data-gi="'+i+'"><span class="sw" style="background:'+colorFor(g,gr.key,i)+'"></span>'+esc(gr.label)+'<span class="n">'+fmtM(mval(gr.items))+' <small>'+pct(mval(gr.items),total)+'%</small></span></button>'}).join("")+'</div></div>';
+    }else if(isTimeG(g)){
       h='<div class="vb">'+groups.map(function(gr,i){
-        var n=gr.items.length;
-        return '<button class="vcol'+on(i)+'" data-gi="'+i+'"><span class="vv">'+n+'</span><span class="bw"><span class="bar" style="height:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="vl">'+esc(gr.label.replace("Week of ",""))+'</span></button>';
+        var n=mval(gr.items);
+        return '<button class="vcol'+on(i)+'" data-gi="'+i+'"><span class="vv">'+fmtM(n)+'</span><span class="bw"><span class="bar" style="height:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="vl">'+esc(gr.label.replace("Week of ",""))+'</span></button>';
       }).join("")+'</div>';
     }else{
       h=groups.map(function(gr,i){
-        var n=gr.items.length;
-        return '<button class="hb'+on(i)+'" data-gi="'+i+'"><span class="lbl">'+esc(gr.label)+'</span><span class="track"><span class="fill" style="width:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="val">'+n+' <small>'+pct(n,total)+'%</small></span></button>';
+        var n=mval(gr.items);
+        return '<button class="hb'+on(i)+'" data-gi="'+i+'"><span class="lbl">'+esc(gr.label)+'</span><span class="track"><span class="fill" style="width:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="val">'+fmtM(n)+' <small>'+pct(n,total)+'%</small></span></button>';
       }).join("");
     }
     if(g==="label")h+='<p class="fine">A bid with several labels is counted once for each label.</p>';
@@ -1631,13 +1658,22 @@ img.who{object-fit:cover;background:var(--chip)}
     h+='<div class="saved-row"><span class="fine" style="margin:0">Saved reports</span>'+
       (state.reports.length?state.reports.map(function(r,i){return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">'+ic("x",18)+'</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
     h+='<section class="panel"><div class="ctrl">'+
-      '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+GROUPS.map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
+      '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+groupChoices().map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
+      '<div><label for="rc-m">Show</label><select id="rc-m" data-rc="measure">'+opt("","Number of bids",c.measure||"")+rFields().filter(function(f){return f.type==="money"||f.type==="number"}).map(function(f){return opt(f.id,"Total "+f.name,c.measure||"")}).join("")+'</select></div>'+
       '<div><label for="rc-c">Chart</label><select id="rc-c" data-rc="chart">'+opt("bar","Bars",c.chart)+opt("donut","Donut",c.chart)+opt("table","Table",c.chart)+'</select></div>'+
       '<div><label for="rc-s">Bids</label><select id="rc-s" data-rc="scope">'+opt("all","All bids",c.scope)+opt("open","Open only",c.scope)+opt("done","Done only",c.scope)+opt("overdue","Overdue only",c.scope)+'</select></div>'+
       '<div><label for="rc-t">Type</label><select id="rc-t" data-rc="type">'+opt("","Any type",c.type)+TYPES.map(function(x){return opt(x,x,c.type)}).join("")+'</select></div>'+
       '<div><label for="rc-p">Priority</label><select id="rc-p" data-rc="pri">'+opt("","Any priority",c.pri)+PRI.map(function(x){return opt(x,x,c.pri)}).join("")+'</select></div>'+
       '<div><label for="rc-w">Assignee</label><select id="rc-w" data-rc="who">'+opt("","Anyone",c.who)+opt("__none","Unassigned",c.who)+whos.map(function(w){return opt(w,nameOf(w),c.who)}).join("")+'</select></div>'+
       '<div><label for="rc-l">Label</label><select id="rc-l" data-rc="label">'+opt("","Any label",c.label)+labels.map(function(l){return opt(l,l,c.label)}).join("")+'</select></div>'+
+      '<div><label for="rc-r">Reporter</label><select id="rc-r" data-rc="rep">'+opt("","Anyone",c.rep||"")+opt("__none","None",c.rep||"")+divMembers().map(function(m){return opt(m,nameOf(m),c.rep||"")}).join("")+'</select></div>'+
+      rFields().map(function(fd){
+        var cv=(c.cf||{})[fd.id]||"",id='rcf-'+fd.id,lab='<label for="'+id+'">'+esc(fd.name)+'</label>';
+        if(fd.type==="text")return '<div>'+lab+'<input id="'+id+'" data-rcf="'+fd.id+'" value="'+esc(cv)+'" placeholder="Contains…"></div>';
+        if(fd.type==="person")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Anyone",cv)+opt("__none","None",cv)+divMembers().map(function(m){return opt(m,nameOf(m),cv)}).join("")+'</select></div>';
+        if(fd.type==="team")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any team",cv)+opt("__none","None",cv)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,cv)}).join("")+'</select></div>';
+        return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("empty","Empty",cv)+'</select></div>';
+      }).join("")+
       '</div><div class="ctrl" style="margin-top:12px;align-items:end"><div style="grid-column:span 2"><label for="rname">Report name</label><input id="rname" maxlength="60" placeholder="Name this report to save it" value="'+esc(c.name||"")+'"></div>'+
       '<div style="display:flex;gap:8px"><button class="btn primary" data-act="saveReport">Save report</button><button class="btn" data-act="copy">Copy summary</button></div></div></section>';
     h+='<div class="stats">'+
@@ -1645,8 +1681,9 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div class="stat"><b>'+pct(s.done,s.total)+'%</b><span>Done ('+s.done+')</span></div>'+
       '<div class="stat"><b>'+s.over+'</b><span>Overdue</span></div>'+
       '<div class="stat"><b>'+s.soon+'</b><span>Due in 7 days</span></div>'+
-      '<div class="stat"><b>'+s.un+'</b><span>Unassigned</span></div></div>';
-    h+='<section class="panel"><h3>'+esc(c.name||("Bids by "+groupLabel(c.groupBy).toLowerCase()))+'</h3>'+chartHTML(groups,s.total)+'</section>';
+      '<div class="stat"><b>'+s.un+'</b><span>Unassigned</span></div>'+
+      (measureField()?'<div class="stat"><b>'+fmtM(mval(list))+'</b><span>Total '+esc(measureField().name)+'</span></div>':'')+'</div>';
+    h+='<section class="panel"><h3>'+esc(c.name||((measureField()?"Total "+measureField().name:"Bids")+" by "+groupLabel(c.groupBy).toLowerCase()))+'</h3>'+chartHTML(groups,s.total)+'</section>';
     if(ui.rsel!==null&&groups[ui.rsel]){
       var gr=groups[ui.rsel];
       h+='<section class="panel"><h3>'+esc(gr.label)+' ('+gr.items.length+')</h3>'+
@@ -1659,7 +1696,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy);
     var lines=[(c.name||(proj().name+" report"))+": by "+groupLabel(c.groupBy).toLowerCase(),
       "Bids: "+s.total+", done: "+pct(s.done,s.total)+"%, overdue: "+s.over+", due in 7 days: "+s.soon+", unassigned: "+s.un,""];
-    groups.forEach(function(gr){lines.push(gr.label+": "+gr.items.length)});
+    groups.forEach(function(gr){lines.push(gr.label+": "+fmtM(mval(gr.items)))});
     return lines.join("\n");
   }
   function copyText(text){
@@ -2511,6 +2548,7 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("change",function(e){
     var el=e.target,v;
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
+    if((v=el.getAttribute("data-rcf"))){state.rcfg.cf=state.rcfg.cf||{};if(el.value)state.rcfg.cf[v]=el.value;else delete state.rcfg.cf[v];ui.rsel=null;save();render();return}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-fteam"))){var fi=ui.f.teams.indexOf(v);if(el.checked&&fi<0)ui.f.teams.push(v);else if(!el.checked&&fi>-1)ui.f.teams.splice(fi,1);ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
