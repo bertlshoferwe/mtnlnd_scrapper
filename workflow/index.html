@@ -185,6 +185,14 @@ table.list select{background:var(--bg);border:1px solid var(--line);border-radiu
 .jl .dots{background:none;border:0;border-radius:6px;padding:2px 6px;font-size:16px;font-weight:700;color:var(--muted);letter-spacing:-1px}
 .jl .dots:hover{background:var(--chip);color:var(--ink)}
 .jl .colsi{width:28px;height:28px;margin:0 auto}
+.jl th.th-rh,.jl td.rh{width:22px;min-width:22px;padding:0 0 0 4px;border-right:0}
+.jl .rgrip{display:grid;place-items:center;width:18px;height:26px;border-radius:4px;color:var(--muted);cursor:grab;opacity:0}
+.jl tr:hover .rgrip,.jl .rgrip:focus-visible{opacity:1}
+.jl .rgrip:hover{background:var(--chip);color:var(--ink)}
+@media (hover:none){.jl .rgrip{opacity:1}}
+.jl tr.dragging td{opacity:.45}
+.jl tr.row-before td{box-shadow:inset 0 2px 0 var(--c1)}
+.jl tr.row-after td{box-shadow:inset 0 -2px 0 var(--c1)}
 .lfoot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:8px 12px;border-top:1px solid var(--line)}
 .lcreate{background:none;border:0;padding:4px 6px;border-radius:6px;font-weight:600;justify-self:start}
 .lcreate:hover{background:var(--chip)}
@@ -592,7 +600,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:""},sort:"num",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
+  var ui={f:{q:"",type:"",who:"",pri:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -1063,6 +1071,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- list ---------- */
   function sortVal(is,k){
     var p=proj();
+    if(k==="rank")return rk(is);
     if(k==="num"||k==="title")return k==="num"?is.num:(is.title||"").toLowerCase();
     if(k==="status")return p.statuses.findIndex(function(s){return s.id===is.status});
     if(k==="priority")return PRI.indexOf(is.priority);
@@ -1109,6 +1118,17 @@ img.who{object-fit:cover;background:var(--chip)}
     if(k==="created")return '<td>'+fmtDay(is.created)+'</td>';
     return '<td>'+fmtStamp(is.updated)+'</td>';
   }
+  // List row dragged before/after another: give it a rank between its new neighbors
+  function moveRow(id,targetId,before){
+    var is=byId(id);if(!is||id===targetId)return render();
+    var order=proj().issues.filter(visible).sort(cmp).filter(function(x){return x.id!==id});
+    var j=order.findIndex(function(x){return x.id===targetId});if(j<0)return render();
+    if(!before)j++;
+    var prev=order[j-1],next=order[j];
+    is.rank=prev&&next?(rk(prev)+rk(next))/2:prev?rk(prev)+1000:next?rk(next)-1000:1000;
+    proj().issues.sort(function(a,b){return rk(a)-rk(b)});
+    save();render();
+  }
   function listHTML(){
     var p=proj(),order=listOrder(),all=p.issues.filter(function(i){return i.type!=="Subtask"||visible(i)}),rows=p.issues.filter(visible).sort(cmp),h='';
     if(ui.colsOpen){
@@ -1116,12 +1136,13 @@ img.who{object-fit:cover;background:var(--chip)}
         return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+LCOLS[k]+' left"'+(i===0?' disabled':'')+'>&larr;</button><span style="padding:5px 4px;font-size:14px">'+LCOLS[k]+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+LCOLS[k]+' right"'+(i===order.length-1?' disabled':'')+'>&rarr;</button></span>';
       }).join("")+'<button class="btn small" data-colreset>Reset order</button></div>';
     }
-    h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr>'+order.map(function(k){
+    var canDrag=ui.sort==="rank"&&canAct();
+    h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
       var on=ui.sort===k;
       return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">⋮⋮</span><button data-sort="'+k+'">'+LCOLS[k]+(on?(ui.dir>0?' ↑':' ↓'):'')+'</button></div></th>';
     }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Column order" aria-label="Column order"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
-    rows.forEach(function(is){h+='<tr>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">&middot;&middot;&middot;</button></td></tr>'});
-    if(!rows.length)h+='<tr><td colspan="'+(order.length+1)+'" class="empty">No bids match your filters.</td></tr>';
+    rows.forEach(function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">&middot;&middot;&middot;</button></td></tr>'});
+    if(!rows.length)h+='<tr><td colspan="'+(order.length+2)+'" class="empty">No bids match your filters.</td></tr>';
     h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-create>+ Create</button>':'<span></span>')+
       '<span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
     return h;
@@ -1881,7 +1902,11 @@ img.who{object-fit:cover;background:var(--chip)}
       var p=proj(),is=byId(el.getAttribute("data-id")),idx=p.statuses.findIndex(function(s){return s.id===is.status})+parseInt(el.getAttribute("data-mv"),10);
       if(idx>=0&&idx<p.statuses.length)moveTo(is.id,p.statuses[idx].id);return;
     }
-    if((el=t.closest("[data-sort]"))){var k=el.getAttribute("data-sort");if(ui.sort===k)ui.dir=-ui.dir;else{ui.sort=k;ui.dir=1}render();return}
+    if((el=t.closest("[data-sort]"))){
+      var k=el.getAttribute("data-sort");
+      if(ui.sort!==k){ui.sort=k;ui.dir=1}else if(ui.dir===1)ui.dir=-1;else{ui.sort="rank";ui.dir=1}
+      render();return;
+    }
     if((el=t.closest("[data-cal]"))){
       var v=el.getAttribute("data-cal"),T=today();
       if(v==="today"){state.calMonth=T.slice(0,7);state.calSel=T}
@@ -2062,14 +2087,24 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
   view.addEventListener("dragstart",function(e){
+    var rg=e.target.closest&&e.target.closest("[data-rowdrag]");
+    if(rg){ui.dragRow=rg.getAttribute("data-rowdrag");var rtr=rg.closest("tr");if(rtr)rtr.classList.add("dragging");
+      try{e.dataTransfer.setData("text/plain",ui.dragRow);e.dataTransfer.effectAllowed="move";if(rtr)e.dataTransfer.setDragImage(rtr,12,12)}catch(x){}return}
     var th=e.target.closest("[data-lcol]");
     if(th){ui.dragCol=th.getAttribute("data-lcol");try{e.dataTransfer.setData("text/plain",ui.dragCol);e.dataTransfer.effectAllowed="move"}catch(x){}return}
     var c=e.target.closest(".card,[data-iid]");if(!c)return;
     ui.dragId=c.getAttribute("data-id")||c.getAttribute("data-iid");c.classList.add("dragging");
     try{e.dataTransfer.setData("text/plain",ui.dragId);e.dataTransfer.effectAllowed="move"}catch(x){}
   });
-  view.addEventListener("dragend",function(){ui.dragId=null;ui.dragCol=null;render()});
+  view.addEventListener("dragend",function(){ui.dragId=null;ui.dragCol=null;ui.dragRow=null;render()});
   view.addEventListener("dragover",function(e){
+    if(ui.dragRow){
+      var otr=e.target.closest("tr[data-row]");if(!otr)return;
+      e.preventDefault();
+      var rr=otr.getBoundingClientRect(),up=e.clientY<rr.top+rr.height/2;
+      Array.prototype.forEach.call(view.querySelectorAll(".row-before,.row-after"),function(x){x.classList.remove("row-before","row-after")});
+      otr.classList.add(up?"row-before":"row-after");return;
+    }
     var th=e.target.closest("[data-lcol]");
     if(th&&ui.dragCol){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".th-over"),function(x){x.classList.remove("th-over")});th.classList.add("th-over");return}
     var dy=e.target.closest("[data-day]");
@@ -2080,6 +2115,12 @@ img.who{object-fit:cover;background:var(--chip)}
     col.classList.add("over");
   });
   view.addEventListener("drop",function(e){
+    if(ui.dragRow){
+      var dtr=e.target.closest("tr[data-row]"),rid=ui.dragRow;ui.dragRow=null;
+      if(!dtr){render();return}
+      e.preventDefault();
+      moveRow(rid,dtr.getAttribute("data-row"),dtr.classList.contains("row-before"));return;
+    }
     var th=e.target.closest("[data-lcol]");
     if(th&&ui.dragCol){e.preventDefault();var from=ui.dragCol;ui.dragCol=null;moveCol(from,th.getAttribute("data-lcol"));return}
     var dy=e.target.closest("[data-day]");
