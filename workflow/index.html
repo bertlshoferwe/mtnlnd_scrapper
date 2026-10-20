@@ -437,6 +437,9 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .frow{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:10px;min-height:38px}
 .frow .fl{font-size:13px;font-weight:600;color:var(--ink)}
 .frow .fv{min-width:0}
+.dt{display:flex;gap:6px;min-width:0}
+.dt input[type=date]{flex:1 1 auto;min-width:0}
+.dt input[type=time]{flex:0 0 120px;min-width:0}
 .frow .pv{display:flex;align-items:center;gap:8px;min-width:0}
 .frow .pv .who{width:22px;height:22px;font-size:9px;color:#fff}
 .sheet .frow input.bare,.sheet .frow select.bare{width:100%;border:1px solid transparent;background:transparent;border-radius:6px;padding:5px 8px;margin-left:-8px;font-size:14px;color:var(--ink)}
@@ -591,7 +594,7 @@ img.who{object-fit:cover;background:var(--chip)}
       <div><label for="c-who">Assignee</label><select id="c-who"></select></div>
     </div>
     <div class="row">
-      <div><label for="c-due">Due date</label><input id="c-due" type="date"></div>
+      <div><label for="c-due">Due date</label><div class="dt"><input id="c-due" type="date"><input id="c-due-time" type="time" aria-label="Due time"></div></div>
       <div><label for="c-labels">Labels</label><input id="c-labels" placeholder="design, bug"></div>
     </div>
     <div id="c-parent-wrap"><label for="c-parent" id="c-parent-label">Parent</label><select id="c-parent"></select></div>
@@ -642,7 +645,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false;
+  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false;
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -676,7 +679,9 @@ img.who{object-fit:cover;background:var(--chip)}
   function byId(id){var p=proj();return p?p.issues.filter(function(i){return i.id===id})[0]:undefined}
   function stat(p,id){return p.statuses.filter(function(s){return s.id===id})[0]||p.statuses[0]}
   function isDone(is){return stat(proj(),is.status).cat==="done"}
-  function overdue(is){return !!is.due&&!isDone(is)&&is.due<today()}
+  function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
+  function overdue(is){return !!is.due&&!isDone(is)&&(is.due<today()||(is.due===today()&&!!is.dueTime&&is.dueTime<nowHM()))}
+  function fmtTime(hm){if(!hm)return "";var p2=hm.split(":");return new Date(2000,0,1,+p2[0],+p2[1]).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}
   function ikey(is){return proj().key+"-"+is.num}
   function children(is){return proj().issues.filter(function(i){return i.parent===is.id})}
   function applyStatus(p,is,sid){
@@ -731,7 +736,8 @@ img.who{object-fit:cover;background:var(--chip)}
       if(arr.join(",")===is.labels.join(","))return false;
       logH(is,"Labels",is.labels.join(", ")||"None",arr.join(", ")||"None");is.labels=arr;
     }
-    else if(f==="due"){if(v===is.due)return false;logH(is,"Due date",is.due?shortDate(is.due):"None",v?shortDate(v):"None");is.due=v}
+    else if(f==="due"){if(v===is.due)return false;logH(is,"Due date",is.due?shortDate(is.due):"None",v?shortDate(v):"None");is.due=v;if(!v)is.dueTime=""}
+    else if(f==="dueTime"){if(v===(is.dueTime||""))return false;logH(is,"Due time",is.dueTime?fmtTime(is.dueTime):"None",v?fmtTime(v):"None");is.dueTime=v}
     else return false;
     is.updated=Date.now();save();render();return true;
   }
@@ -740,7 +746,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var mr=p.issues.reduce(function(a,i){return Math.max(a,rk(i))},0);
     p.next=num+1;
     var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
-      priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",
+      priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",dueTime:data.due&&data.dueTime||"",
       created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{}};
     applyStatus(p,is,is.status);
     p.issues.push(is);save();return is;
@@ -813,8 +819,8 @@ img.who{object-fit:cover;background:var(--chip)}
   /* rows <-> documents */
   function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],created:(r.created_at||"").slice(0,10)}}
   function spaceToRow(id,d){return {id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]}}
-  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{}}}
-  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined}}
+  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):""}}
+  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined}}
 
   function allDocs(){
     var m={};
@@ -900,12 +906,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var rs=await Promise.all([
       sb.from(dt).select("*"),sb.from("wf_people").select("*"),sb.from("wf_templates").select("*").order("created_at"),
       sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
-      sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1)]);
+      sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1),
+      sb.from("wf_bids").select("due_time").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
     // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
     HAS_FIELDS=!rs[6].error&&!rs[7].error;
+    HAS_DUETIME=!rs[8].error;   // the optional due time needs workflow/sql/004_due_time.sql
     raw.config={templates:rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[],fields:r.fields||[]}})};
     raw.spaces={};rs[3].data.forEach(function(r){raw.spaces[r.id]=rowToSpace(r)});
     raw.bids={};rs[4].data.forEach(function(r){raw.bids[r.id]=rowToBid(r)});
@@ -1096,7 +1104,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(o)out+='<span class="echip" style="--ec:var(--c1)" title="Copied from '+esc(o.is.title)+'">From '+esc(o.sp.key+"-"+o.is.num)+'</span>';
     return out;
   }
-  function dueChip(is){return is.due?'<span class="chip'+(overdue(is)?' over':'')+'">Due '+shortDate(is.due)+'</span>':''}
+  function dueChip(is){return is.due?'<span class="chip'+(overdue(is)?' over':'')+'">Due '+shortDate(is.due)+(is.dueTime?' '+fmtTime(is.dueTime):'')+'</span>':''}
   function sbadge(is){var s=stat(proj(),is.status);return '<span class="sbadge cat-'+s.cat+'">'+esc(s.name)+'</span>'}
   function opt(v,label,cur){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(label)+'</option>'}
   function visible(is){
@@ -1143,7 +1151,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(k==="num"||k==="title")return k==="num"?is.num:(is.title||"").toLowerCase();
     if(k==="status")return p.statuses.findIndex(function(s){return s.id===is.status});
     if(k==="priority")return PRI.indexOf(is.priority);
-    if(k==="due")return is.due||"9999";
+    if(k==="due")return (is.due||"9999")+(is.dueTime||"99:99");
     if(k==="assignee")return (is.assignee?nameOf(is.assignee):"~").toLowerCase();
     if(k==="resolution")return isDone(is)?0:1;
     if(k==="updated")return is.updated||0;
@@ -1177,7 +1185,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=proj(),done=isDone(is);
     if(k==="title")return '<td class="wk"><span class="kc">'+tiHTML(is.type)+'<button class="lkey'+(done?' done':'')+'" data-open="'+is.id+'">'+ikey(is)+'</button>'+
       '<button class="lt" data-open="'+is.id+'" title="'+esc(is.title)+'">'+esc(is.title)+'</button></span></td>';
-    if(k==="due")return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?fmtDay(is.due):'<span class="none">None</span>')+'</td>';
+    if(k==="due")return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):''):'<span class="none">None</span>')+'</td>';
     if(k==="assignee"){var an=is.assignee?nameOf(is.assignee):"";return '<td><span class="kc">'+nameAv(an)+'<span class="tr">'+(an?esc(an):'<span class="none">Unassigned</span>')+'</span></span></td>'}
     if(k==="reporter")return '<td><span class="kc">'+nameAv(is.reporter)+'<span class="tr">'+(is.reporter?esc(is.reporter):'<span class="none">None</span>')+'</span></span></td>';
     if(k==="priority")return '<td><span class="kc">'+prHTML(is.priority)+' '+is.priority+'</span></td>';
@@ -1781,7 +1789,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
     var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></div>';
     h+='<div class="ipanel"><div class="iph">Fields</div>'+
-      frow("Due date",'<input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">')+
+      frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
+        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>')+
       frow("Assignee",'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>')+
       frow("Reporter",'<span class="pv">'+nameAv(is.reporter)+'<span>'+esc(is.reporter||"Unknown")+'</span></span>');
     spaceFields(p).forEach(function(fd){h+=frow(esc(fd.name),cfInput(fd,is))});
@@ -1848,7 +1857,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("c-type").innerHTML=TYPES.map(function(t){return opt(t,t,pre.type||"Task")}).join("");
     $("c-status").innerHTML=p.statuses.map(function(s){return opt(s.id,s.name,pre.status||p.statuses[0].id)}).join("");
     $("c-pri").innerHTML=PRI.map(function(x){return opt(x,x,"Medium")}).join("");
-    $("c-title").value="";$("c-title").style.borderColor="";$("c-desc").value="";$("c-who").innerHTML=teamOptions("");$("c-due").value=pre.due||"";$("c-labels").value="";
+    $("c-title").value="";$("c-title").style.borderColor="";$("c-desc").value="";$("c-who").innerHTML=teamOptions("");$("c-due").value=pre.due||"";$("c-due-time").value="";$("c-due-time").style.display=HAS_DUETIME?"":"none";$("c-labels").value="";
     fillParent($("c-type").value,pre.parent);
     openOv("ov-create");setTimeout(function(){$("c-title").focus()},30);
   }
@@ -1856,7 +1865,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var title=$("c-title").value.trim();
     if(!title){$("c-title").focus();$("c-title").style.borderColor="var(--high)";return}
     var is=createIssue({type:$("c-type").value,title:title,desc:$("c-desc").value.trim(),status:$("c-status").value,priority:$("c-pri").value,
-      assignee:$("c-who").value,due:$("c-due").value,parent:$("c-parent").value,
+      assignee:$("c-who").value,due:$("c-due").value,dueTime:HAS_DUETIME?$("c-due-time").value:"",parent:$("c-parent").value,
       labels:$("c-labels").value.split(",").map(function(s){return s.trim()}).filter(Boolean)});
     closeOv("ov-create");render();toast(ikey(is)+" created");
   }
@@ -2187,7 +2196,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var cur=byId(ui.issueId);if(!cur)return;
       var changed=setField(cur,v,el.value);
       if(v==="title"&&!changed)el.value=cur.title;
-      if(changed&&(v==="assignee"||v.indexOf("cf:")===0))$("i-side").innerHTML=issueSideHTML(cur);
+      if(changed&&(v==="assignee"||v==="due"||v==="dueTime"||v.indexOf("cf:")===0))$("i-side").innerHTML=issueSideHTML(cur);
       if(changed&&(v==="status"||v==="priority"||v==="type"||v==="parent")){
         $("i-side").innerHTML=issueSideHTML(cur);
         renderIssueHead(cur);

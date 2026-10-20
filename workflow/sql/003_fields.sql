@@ -12,7 +12,6 @@ alter table wf_templates add column if not exists fields jsonb default '[]';
 update wf_templates set fields = jsonb_build_array(
   jsonb_build_object('id', 'f_ticket', 'name', 'Ticket #', 'type', 'text'),
   jsonb_build_object('id', 'f_rfq', 'name', 'Original RFQ', 'type', 'text'),
-  jsonb_build_object('id', 'f_biddate', 'name', 'Bid Date', 'type', 'date'),
   jsonb_build_object('id', 'f_team', 'name', 'Team', 'type', 'text'),
   jsonb_build_object('id', 'f_coassign', 'name', 'Co-Assignee', 'type', 'person'),
   jsonb_build_object('id', 'f_contractor', 'name', 'Contractor Name', 'type', 'text'),
