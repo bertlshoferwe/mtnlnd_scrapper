@@ -1161,6 +1161,21 @@ _fit_stats_cache = {}
 _FIT_STATS_TTL_S = 60
 
 
+def create_workflow_bid(division_id, project_key, title, due=None, source_url=None):
+    """Add a project to the workflow board's "Bid Scout inbox" for its
+    division (workflow/sql/001_workflow.sql's wf_create_bid_from_project).
+    Returns the bid id; calling it again for the same project returns the
+    same bid instead of a duplicate."""
+    res = get_client().rpc("wf_create_bid_from_project", {
+        "p_division_id": division_id,
+        "p_project_id": project_key,
+        "p_title": title,
+        "p_due": due,
+        "p_source_url": source_url,
+    }).execute()
+    return res.data
+
+
 def fit_training_stats(division_id):
     """{"decisions", "needed", "enabled", "sure_at", "active", "agreed",
     "compared"} for the dashboard: how many decisions the suggestions can learn from (same rules
@@ -1427,7 +1442,7 @@ def _fetch_all_scan_results(division_id, columns="*"):
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
                         updated_only=False, new_only=False, view=None,
-                        page=1, page_size=15):
+                        project_key=None, page=1, page_size=15):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -1608,6 +1623,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     for p in projects:
         view_counts[p["bucket"]] += 1
 
+    if project_key:
+        projects = [p for p in projects if p["key"] == project_key]
     if updated_only:
         projects = [p for p in projects if p["updated"]]
     if new_only:

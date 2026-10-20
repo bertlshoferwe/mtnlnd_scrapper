@@ -132,6 +132,8 @@
     white-space: nowrap;
   }
   .theme-toggle:hover { color: var(--masthead-text); border-color: rgba(255,255,255,.4); }
+  .masthead-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  a.theme-toggle { text-decoration: none; }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -929,9 +931,14 @@
       <h1 id="mastheadTitle">Bid Scout</h1>
       <p class="subtitle">Scans planning sites daily and flags the plans that match your keywords.</p>
     </div>
-    <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
-      <span id="themeToggleIcon">◐</span><span id="themeToggleLabel">Auto</span>
-    </button>
+    <div class="masthead-actions">
+      <a class="theme-toggle" id="bidBoardLink" href="/workflow/" target="_blank" rel="noopener"
+         onclick="this.href = '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : '')"
+         title="Track the projects this division is bidding on">Bid board</a>
+      <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
+        <span id="themeToggleIcon">◐</span><span id="themeToggleLabel">Auto</span>
+      </button>
+    </div>
   </div>
 </header>
 <div class="wrap">
@@ -3741,6 +3748,9 @@ async function addProjectToJira() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ project_key: p.key, summary: p.project, due_date: p.bid_date }),
     });
+    if (res.workflow_error) {
+      alert('Added to Jira, but it couldn\'t be added to the bid board. Add it there by hand for now.');
+    }
     p.jira_key = res.jira_key;
     p.jira_url = res.jira_url;
     p.bucket = 'jira';
@@ -4128,6 +4138,26 @@ async function init() {
   document.getElementById('resultsPageSizeSelect').value = String(resultsPageSize);
   await loadEverything();
   schedulePoll();
+  openLinkedProject();
+}
+
+// ?project=<key> — the "Open the project" link on a bid board bid. Opens
+// that project's window whichever tab it's in, then drops the parameter.
+async function openLinkedProject() {
+  const url = new URL(window.location);
+  const key = url.searchParams.get('project');
+  if (!key) return;
+  url.searchParams.delete('project');
+  history.replaceState(null, '', url);
+  if (!currentDivision) return;
+  try {
+    const params = new URLSearchParams({ project: key, include_closed: '1', page_size: 1 });
+    const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
+    const p = (data.projects || [])[0];
+    if (!p) { alert('That project isn\'t in Bid Scout any more.'); return; }
+    projectsData.push(p);
+    openProjectModal(projectsData.length - 1);
+  } catch (e) { /* leave the dashboard as it is */ }
 }
 
 init();
