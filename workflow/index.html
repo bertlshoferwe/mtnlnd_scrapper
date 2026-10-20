@@ -287,6 +287,11 @@ td.over{color:var(--high);font-weight:600}
 .sheet h3{font:700 20px var(--head);margin:0 0 14px}
 .sheet.wide{width:min(760px,100%)}
 .sheet .srow input{width:auto}
+.sheet .srow select{width:auto;flex:0 0 auto}
+.tplrow .tplname{flex:1 1 auto;min-width:0;font-weight:600}
+.tplrow .pen{width:32px;height:32px;opacity:0;transition:opacity .12s}
+.tplrow:hover .pen,.tplrow .pen:focus-visible{opacity:1}
+@media (hover:none){.tplrow .pen{opacity:1}}
 .sheet .panel{margin-bottom:12px}
 label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
 .sheet input,.sheet select,.sheet textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
@@ -1353,9 +1358,14 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function tplEditorHTML(){
     var T=D.config.templates;
-    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Divisions pick from these when they create a space or change its workflow. Spaces using a template update when it changes.</p>';
+    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Spaces pick one of these as their workflow, and update when it changes.</p>';
     T.forEach(function(t){
-      h+='<div class="tpl"><div class="srow"><input data-tname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Template name" maxlength="40"><button class="btn small danger" data-deltpl="'+t.id+'">Delete</button></div>';
+      // collapsed: just the name, with a pencil (on hover) that opens the editor
+      if(ui.editTpl!==t.id){
+        h+='<div class="srow tplrow"><span class="tplname">'+esc(t.name)+'</span><button class="icon pen" data-edittpl="'+t.id+'" aria-label="Edit '+esc(t.name)+'" title="Edit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></div>';
+        return;
+      }
+      h+='<div class="tpl"><div class="srow"><input data-tname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Template name" maxlength="40"><button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete')+'</button><button class="btn small primary" data-edittpl="'+t.id+'">Done</button></div>';
       t.statuses.forEach(function(s,i){
         var k=t.id+":"+i;
         h+='<div class="srow"><input data-tcname="'+k+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30"><select data-tccat="'+k+'" aria-label="Category">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
@@ -1459,7 +1469,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-settings"){ui.armD=false;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -1664,10 +1674,11 @@ img.who{object-fit:cover;background:var(--chip)}
       if(dp){dp.rules=(dp.rules||[]).filter(function(x){return x.id!==did});save();render()}
       return;
     }
+    if((el=t.closest("[data-edittpl]"))){var etid=el.getAttribute("data-edittpl");ui.editTpl=ui.editTpl===etid?null:etid;ui.armDT=null;render();return}
     if(t.closest("[data-newtpl]")){
       if(!ORG)return;
       var tnm=$("newtpl").value.trim();if(!tnm){$("newtpl").focus();return}
-      D.config.templates.push({id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)});save();render();return;
+      var ntp={id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)};D.config.templates.push(ntp);ui.editTpl=ntp.id;save();render();return;
     }
     if((el=t.closest("[data-tup]"))||(el=t.closest("[data-tdown]"))){
       if(!ORG)return;
@@ -1811,7 +1822,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-deltpl]"))){
       if(!ORG)return;
       var dtid=el.getAttribute("data-deltpl");
-      D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;save();render();return;
+      if(ui.armDT!==dtid){ui.armDT=dtid;render();return}
+      D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;ui.armDT=null;ui.editTpl=null;save();render();return;
     }
     if(t.closest("[data-delspace]")){
       if(!ui.armP){ui.armP=true;render();return}
