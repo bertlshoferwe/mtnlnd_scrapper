@@ -61,7 +61,7 @@ button{cursor:pointer}
   .side.open{transform:none}
   .scrim.open{display:block;position:fixed;inset:0;background:rgba(10,16,24,.5);z-index:35}
 }
-@media (min-width:900px){#menu{display:none}}
+@media (min-width:900px){.app.side-hidden .side{display:none}}
 @media (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
 
 .top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
@@ -326,9 +326,11 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 .btn.primary{border-color:var(--accent)}
 .icon{border:1.5px solid var(--line2);border-radius:10px}
 .filters input,.fsel select,.ctrl select,.ctrl input,.sheet input,.sheet select,.sheet textarea,.srow input,.srow select,.qa input,table.list select{border:1px solid var(--line2);border-radius:8px}
-.tabs{gap:4px;padding:8px 16px 0;border-bottom:2px solid var(--accent);align-items:flex-end}
-.tab{border:1px solid transparent;border-bottom:2px solid transparent;border-radius:12px 12px 0 0;padding:10px 16px;margin-bottom:-2px;font-weight:600;color:var(--muted)}
-.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:700;border-color:var(--accent);border-bottom-color:var(--surface)}
+/* view switcher: pills, same look as Bid Scout's pill buttons */
+.tabs{gap:6px;padding:10px 16px 2px;border-bottom:0;align-items:center}
+.tab{border:1px solid var(--line2);border-radius:999px;padding:6px 14px;margin:0;font-size:13.5px;font-weight:600;color:var(--muted);background:transparent}
+.tab:hover{border-color:var(--accent);color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .chip{border:1.5px solid transparent;border-radius:99px;padding:1px 9px}
 .chip.over{background:var(--highbg);color:var(--high);border-color:var(--high)}
 .sbadge{border:1.5px solid transparent;border-radius:99px;padding:2px 10px}
@@ -597,7 +599,7 @@ img.who{object-fit:cover;background:var(--chip)}
     setTimeout(rebuild,0);
     return true;
   }
-  function save(){savePrefs();if(archivedBlocked())return;scheduleFlush()}
+  function save(){savePrefs();if(archivedBlocked())return;syncTemplates();scheduleFlush()}
 
   /* ---------- shared store (Supabase) ---------- */
   var sb=null,CFG=window.APP_CONFIG||{},reloadTimer=null,handoffDone=false;
@@ -771,6 +773,7 @@ img.who{object-fit:cover;background:var(--chip)}
     base={};
     var snapshotDocs=allDocs();
     Object.keys(snapshotDocs).forEach(function(p){base[p]=canon(snapshotDocs[p])});
+    if(syncTemplates())scheduleFlush();   // a template changed elsewhere, or a space can start following one
     fixSelection();
     render();
     handoff();
@@ -1187,9 +1190,70 @@ img.who{object-fit:cover;background:var(--chip)}
   }
 
   function tplStatuses(id){
+    ensureTplIds();
     var t=D.config.templates.filter(function(x){return x.id===id})[0];
-    var src=t?t.statuses:[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-    return src.map(function(x){return {id:uid("s"),name:x.name,cat:x.cat}});
+    if(!t)return TPL_DEFAULT.map(function(x){return {id:uid("s"),name:x.name,cat:x.cat}});
+    return t.statuses.map(function(x){return {id:uid("s"),name:x.name,cat:x.cat,tpl:t.id,tc:x.id}});
+  }
+
+  /* A space made from (or applied) an org template follows it: each of its columns carries
+     tpl (template id) + tc (template column id), and editing the template updates every
+     following space — renames, reorders, categories, added and removed columns. Editing a
+     space's own columns stops it following (tpl set to ""). */
+  function ensureTplIds(){
+    var ch=false;
+    D.config.templates.forEach(function(t){
+      var used={};t.statuses.forEach(function(c){if(c.id)used[c.id]=1});
+      t.statuses.forEach(function(c,i){if(!c.id){var k="c"+i;while(used[k])k+="x";c.id=k;used[k]=1;ch=true}});
+    });
+    return ch;
+  }
+  function followedTpl(sp){
+    var st=sp.statuses;
+    if(!st.length||!st[0].tpl)return null;
+    if(st.some(function(c){return c.tpl!==st[0].tpl||!c.tc}))return null;
+    return D.config.templates.filter(function(t){return t.id===st[0].tpl})[0]||null;
+  }
+  function unfollow(sp){sp.statuses.forEach(function(c){c.tpl="";delete c.tc})}
+  // A space that never followed anything (e.g. the "Bid Scout inbox" made by the database)
+  // starts following a template whose column names match its own, in order.
+  function adoptTpl(sp){
+    if(sp.statuses.some(function(c){return "tpl" in c}))return null;
+    var names=sp.statuses.map(function(c){return c.name.toLowerCase()}).join("|");
+    var t=D.config.templates.filter(function(t){return t.statuses.map(function(c){return c.name.toLowerCase()}).join("|")===names})[0];
+    if(!t)return null;
+    sp.statuses.forEach(function(c,i){c.tpl=t.id;c.tc=t.statuses[i].id});
+    return t;
+  }
+  function syncSpaceToTpl(sp,t){
+    var old=sp.statuses,byTc={},ids={};
+    old.forEach(function(c){byTc[c.tc]=c;ids[c.id]=1});
+    var next=t.statuses.map(function(c){
+      var o=byTc[c.id],id=o?o.id:(ids[c.id]?uid("s"):c.id);
+      return {id:id,name:c.name,cat:c.cat,tpl:t.id,tc:c.id};
+    });
+    if(canon(next)===canon(old))return false;
+    sp.statuses=next;
+    var keep={};next.forEach(function(c){keep[c.id]=c});
+    sp.issues.forEach(function(is){
+      if(keep[is.status]){applyStatus(sp,is,is.status);return}   // category may have changed
+      // its column was removed from the template: move it to the nearest earlier column still there
+      var oi=old.findIndex(function(c){return c.id===is.status}),to=null;
+      for(var k=oi-1;k>=0&&!to;k--)if(keep[old[k].id])to=old[k].id;
+      if(!to)to=next[0].id;
+      logH(is,"Status",oi>-1?old[oi].name:"",keep[to].name);
+      applyStatus(sp,is,to);
+    });
+    return true;
+  }
+  function syncTemplates(){
+    var ch=ensureTplIds();
+    D.spaces.forEach(function(sp){
+      if(isArchived(sp.divisionId))return;
+      var t=followedTpl(sp)||adoptTpl(sp);
+      if(t&&syncSpaceToTpl(sp,t))ch=true;
+    });
+    return ch;
   }
   function applyTemplate(p,tpl){
     var old=p.statuses.slice();
@@ -1211,6 +1275,8 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
       '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
     h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">Columns appear on the board in this order. The category decides which bids count as done in reports.</p>';
+    var ft=followedTpl(p);
+    if(ft)h+='<p class="fine" style="margin:0 0 8px">These columns come from the <b>'+esc(ft.name)+'</b> template, so changes to that template show up here. Changing them here stops that.</p>';
     p.statuses.forEach(function(s,i){
       var n=p.issues.filter(function(x){return x.status===s.id}).length;
       h+='<div class="srow"><input data-sname="'+s.id+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30">'+
@@ -1246,13 +1312,13 @@ img.who{object-fit:cover;background:var(--chip)}
         return '<button class="proj" data-opendiv="'+x.id+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
       }).join("");
     }else if(d){
+      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division"><span class="pi" style="background:var(--c5)">M</span><span class="pn">Members</span></button>';
       h+='<div class="sl">'+esc(d.name)+'</div>';
       spaceTree(d.id).forEach(function(n){
         var s=n.sp;
         h+='<button class="proj'+(s.id===state.cur&&state.view!=="division"?' on':'')+'" style="padding-left:'+(10+n.depth*16)+'px" data-space="'+s.id+'"><span class="pi" style="background:var(--c'+(s.ci%6+1)+')">'+esc(s.key.slice(0,2))+'</span><span class="pn">'+esc(s.name)+'</span></button>';
       });
       if(isDivAdmin(d))h+='<button class="proj add" data-newspace>+ Create space</button>';
-      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division" style="margin-top:8px"><span class="pi" style="background:var(--c5)">T</span><span class="pn">Team</span></button>';
     }
     $("plist").innerHTML=h;
   }
@@ -1285,7 +1351,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function tplEditorHTML(){
     var T=D.config.templates;
-    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Divisions pick from these when they create a space or change its workflow.</p>';
+    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Divisions pick from these when they create a space or change its workflow. Spaces using a template update when it changes.</p>';
     T.forEach(function(t){
       h+='<div class="tpl"><div class="srow"><input data-tname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Template name" maxlength="40"><button class="btn small danger" data-deltpl="'+t.id+'">Delete</button></div>';
       t.statuses.forEach(function(s,i){
@@ -1364,7 +1430,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
     renderSide();renderDivTabs();
     if(v==="overview"){$("pkey").textContent="Organization";$("ptitle").textContent="Overview"}
-    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Team"}
+    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Members"}
     else if(p){$("pkey").textContent=(d?d.name+" · ":"")+p.key;$("ptitle").textContent=p.name}
     else{$("pkey").textContent=d?"Division":"";$("ptitle").textContent=d?d.name:"Bid board"}
     var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
@@ -1386,6 +1452,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&v!=="overview"&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
+  }
+  // Wide screens: the menu button hides/shows the sidebar (remembered per browser). Narrow: it opens the drawer.
+  function applySide(){
+    $("side").parentNode.classList.toggle("side-hidden",!!state.sideHidden);
+    $("menu").setAttribute("aria-label",state.sideHidden?"Show spaces":"Hide spaces");
   }
   function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
   function resetFilters(){ui.f={q:"",type:"",who:"",pri:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
@@ -1563,7 +1634,10 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- events ---------- */
   document.addEventListener("click",function(e){
     var el,t=e.target;
-    if(t.closest("[data-menu]")){$("side").classList.add("open");$("scrim").classList.add("open");return}
+    if(t.closest("[data-menu]")){
+      if(window.matchMedia("(min-width:900px)").matches){state.sideHidden=!state.sideHidden;savePrefs();applySide();return}
+      $("side").classList.add("open");$("scrim").classList.add("open");return;
+    }
     if(t.closest("[data-scrim]")){$("side").classList.remove("open");$("scrim").classList.remove("open");return}
     if((el=t.closest("[data-close]"))){closeOv(el.getAttribute("data-close"));return}
     if(t.classList&&t.classList.contains("overlay")){closeOv(t.id);return}
@@ -1719,6 +1793,7 @@ img.who{object-fit:cover;background:var(--chip)}
     /* settings */
     var p2=proj(),sid;
     if((el=t.closest("[data-sup]"))||(el=t.closest("[data-sdown]"))){
+      unfollow(p2);
       var up=el.hasAttribute("data-sup");sid=el.getAttribute(up?"data-sup":"data-sdown");
       var i=p2.statuses.findIndex(function(s){return s.id===sid}),j=i+(up?-1:1);
       if(j>=0&&j<p2.statuses.length){var tmp=p2.statuses[i];p2.statuses[i]=p2.statuses[j];p2.statuses[j]=tmp;save();render()}
@@ -1727,13 +1802,15 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-sdel]"))){
       sid=el.getAttribute("data-sdel");
       if(ui.armS!==sid){ui.armS=sid;render();return}
+      unfollow(p2);
       var idx2=p2.statuses.findIndex(function(s){return s.id===sid}),target=p2.statuses[idx2>0?idx2-1:1];
       p2.issues.forEach(function(is5){if(is5.status===sid)applyStatus(p2,is5,target.id)});
       p2.statuses.splice(idx2,1);ui.armS=null;save();render();return;
     }
     if(t.closest("[data-addstatus]")){
       var nm=$("ns").value.trim();if(!nm){$("ns").focus();return}
-      p2.statuses.push({id:uid("s"),name:nm,cat:$("nsc").value});save();render();return;
+      unfollow(p2);
+      p2.statuses.push({id:uid("s"),name:nm,cat:$("nsc").value,tpl:""});save();render();return;
     }
     if(t.closest("[data-savetpl]")){
       if(!ORG)return;
@@ -1771,10 +1848,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
-    if((v=el.getAttribute("data-scat"))){var s=proj().statuses.filter(function(x){return x.id===v})[0];s.cat=el.value;save();render();return}
+    if((v=el.getAttribute("data-scat"))){unfollow(proj());var s=proj().statuses.filter(function(x){return x.id===v})[0];s.cat=el.value;save();render();return}
     if((v=el.getAttribute("data-sname"))){
       var s2=proj().statuses.filter(function(x){return x.id===v})[0],nm=el.value.trim();
-      if(nm){s2.name=nm;save()}else el.value=s2.name;return;
+      if(nm&&nm!==s2.name){unfollow(proj());s2.name=nm;save();render()}else el.value=s2.name;return;
     }
     if(el.id==="pname"){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";render();return}
@@ -1880,7 +1957,7 @@ img.who{object-fit:cover;background:var(--chip)}
   ORG=true;CANWRITE=true;ME=state.myName||"Someone";
   // Same switch as Bid Scout (served from the same site, so same localStorage).
   try{var bt=localStorage.getItem("bidscout_theme");if(THEMES.indexOf(bt)>=0)state.theme=bt}catch(e){}
-  applyTheme();
+  applyTheme();applySide();
   render();
   (function boot(){
     $("myname").value=state.myName||"";
