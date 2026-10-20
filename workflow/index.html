@@ -112,6 +112,14 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .col.over{outline:2px dashed var(--accent);outline-offset:-2px}
 .col h2{display:flex;justify-content:space-between;align-items:center;gap:6px;font:600 15px var(--head);margin:2px 4px 10px}
 .col h2 .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* collapse / expand a column (remembered per browser, per space) */
+.colbtn{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);opacity:0;transition:opacity .12s;flex:0 0 auto}
+.colbtn:hover{background:var(--chip);color:var(--ink)}
+.col:hover .colbtn,.colbtn:focus-visible{opacity:1}
+@media (hover:none){.colbtn{opacity:1}}
+.col.folded{flex:0 0 46px;min-height:220px;padding:12px 4px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.col.folded .vn{writing-mode:vertical-rl;white-space:nowrap;font:800 13px var(--head);letter-spacing:.07em;text-transform:uppercase}
+.col.folded .count{font-size:13px;color:var(--muted)}
 .count{font:500 12px var(--body);color:var(--muted);background:var(--chip);border-radius:99px;padding:1px 9px}
 .cards{display:flex;flex-direction:column;gap:8px;min-height:24px}
 .card{background:var(--surface);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);cursor:grab}
@@ -944,11 +952,18 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- board ---------- */
   function boardHTML(){
-    var p=proj(),h='<div class="board">';
+    var p=proj(),h='<div class="board">',folded=(state.colFold||{})[p.id]||{};
     p.statuses.forEach(function(s,ci){
       var items=p.issues.filter(function(i){return i.status===s.id});
       var shown=items.filter(visible);
-      h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+'<span class="count">'+items.length+'</span></h2><div class="cards">';
+      // collapsed column: a narrow strip with the name on its side (still a drop target)
+      if(folded[s.id]){
+        h+='<section class="col folded" data-col="'+s.id+'"><span class="vn">'+esc(s.name)+'</span><span class="count">'+items.length+'</span>'+
+          '<button class="colbtn" data-colfold="'+s.id+'" title="Expand" aria-label="Expand '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button></section>';
+        return;
+      }
+      h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+'<span class="count">'+items.length+'</span>'+
+        '<button class="colbtn" data-colfold="'+s.id+'" title="Collapse" aria-label="Collapse '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h7M7 8l4 4-4 4M21 12h-7M17 8l-4 4 4 4"/></svg></button></h2><div class="cards">';
       shown.forEach(function(is){
         h+='<article class="card" draggable="true" data-id="'+is.id+'"><div class="ck">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+prHTML(is.priority)+'</div>'+
           '<button class="title" data-open="'+is.id+'">'+esc(is.title)+'</button>'+echipHTML(is)+
@@ -1637,6 +1652,12 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
     if(t.closest("[data-orgsettings]")){openOrgSettings();return}
+    if((el=t.closest("[data-colfold]"))){
+      var cfp=proj().id,cfs=el.getAttribute("data-colfold");
+      state.colFold=state.colFold||{};state.colFold[cfp]=state.colFold[cfp]||{};
+      if(state.colFold[cfp][cfs])delete state.colFold[cfp][cfs];else state.colFold[cfp][cfs]=true;
+      savePrefs();render();return;
+    }
     if(t.closest("[data-newspace]")){closeDrawer();openSpace("");return}
     if((el=t.closest("[data-newsub]"))){openSpace(el.getAttribute("data-newsub"));return}
     if(t.closest("[data-addperson]")){
