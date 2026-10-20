@@ -30,12 +30,13 @@ Routes:
   POST /api/<division_id>/cancel-scan        cancel the running scan
   POST /api/<division_id>/run-now            tell the local scan worker to start now
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
-  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=review|jira|not_fit)
+  GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=review|jira|not_fit, project=<key>)
   POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
-  POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars)
+  POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars), and as a bid on the workflow board
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
+  GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
 
 Every route that touches Supabase or the scan worker does one or two quick
 network calls and returns almost immediately — the actual scanning work
@@ -45,8 +46,10 @@ not here.
 
 import os
 import io
+import json
 import re
 import requests
+from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 
 # A scan_runs row can be left showing status='running' forever if the scanner
@@ -61,7 +64,7 @@ from datetime import datetime, timezone, timedelta
 # would flag a run as stale while it's still legitimately working.
 STALE_RUN_AFTER = timedelta(minutes=600)
 
-from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response
+from flask import Flask, jsonify, request, render_template, send_file, send_from_directory, abort, Response, redirect
 
 # openpyxl / pypdf / python-docx are only needed by the xlsx download and
 # keyword-upload routes, so they're imported lazily inside those functions
@@ -75,6 +78,7 @@ import credentials
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(_REPO_ROOT, "templates")
 VENDOR_DIR = os.path.join(_REPO_ROOT, "vendor")
+WORKFLOW_DIR = os.path.join(_REPO_ROOT, "workflow")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
 COLUMN_HEADERS = [
@@ -117,6 +121,13 @@ JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN") or ""
 JIRA_PROJECT_KEY = os.environ.get("JIRA_PROJECT_KEY") or ""
 JIRA_ISSUE_TYPE = os.environ.get("JIRA_ISSUE_TYPE") or "Task"
 
+# The bid workflow board (workflow/index.html), served at /workflow/. Unlike
+# the dashboard it talks to Supabase straight from the browser, so it needs
+# the address browsers use for Supabase (not the internal http://kong:8000)
+# and the anon key. Unset = the board shows a "not configured" message.
+WORKFLOW_SUPABASE_URL = (os.environ.get("WORKFLOW_SUPABASE_URL") or "").rstrip("/")
+WORKFLOW_SUPABASE_ANON_KEY = os.environ.get("WORKFLOW_SUPABASE_ANON_KEY") or ""
+
 
 def _require_division(division_id):
     division = supabase_store.get_division(division_id)
@@ -149,6 +160,46 @@ def vendor_asset(filename):
         resp.headers["Content-Type"] = "text/javascript; charset=utf-8"
     resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return resp
+
+
+# ---------------------------------------------------------------------------
+# Workflow board
+# ---------------------------------------------------------------------------
+
+@app.route("/workflow")
+def workflow_redirect():
+    # The page loads config.js and vendor/supabase.js by relative path, so it
+    # needs the trailing slash. Keep ?bid= / ?division= across the redirect.
+    qs = request.query_string.decode()
+    return redirect("/workflow/" + ("?" + qs if qs else ""), code=301)
+
+
+@app.route("/workflow/")
+def workflow_index():
+    resp = send_from_directory(WORKFLOW_DIR, "index.html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/workflow/config.js")
+def workflow_config():
+    cfg = {
+        "SUPABASE_URL": WORKFLOW_SUPABASE_URL,
+        "SUPABASE_ANON_KEY": WORKFLOW_SUPABASE_ANON_KEY,
+        # A view over `divisions` (id, name only) — see workflow/sql/002_bidscout.sql.
+        "DIVISIONS_TABLE": "wf_divisions",
+        "DIVISION_ID_COLUMN": "id",
+        "DIVISION_NAME_COLUMN": "name",
+    }
+    resp = Response("window.APP_CONFIG = " + json.dumps(cfg) + ";\n",
+                    mimetype="text/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/workflow/vendor/<path:filename>")
+def workflow_vendor(filename):
+    return send_from_directory(os.path.join(WORKFLOW_DIR, "vendor"), filename, max_age=86400)
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +812,8 @@ def api_get_results_grouped(division_id):
     include_closed = request.args.get("include_closed") in ("1", "true")
     updated_only = request.args.get("updated") in ("1", "true")
     new_only = request.args.get("new") in ("1", "true")
+    # One project by key — for a ?project= link back from the workflow board.
+    project_key = (request.args.get("project") or "").strip()
     # The dashboard's folder tabs: "review" (no decision yet, or "Not a fit"
     # with a newer matching document), "jira", "not_fit". Omitted = all.
     # The old "active"/"done" values still map across for a stale page.
@@ -778,7 +831,7 @@ def api_get_results_grouped(division_id):
         division_id, search=search or None, status=status or None, site=site or None,
         keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
         include_closed=include_closed, updated_only=updated_only, new_only=new_only,
-        view=view, page=page, page_size=page_size,
+        view=view, project_key=project_key or None, page=page, page_size=page_size,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "updated_total": updated_total, "new_total": new_total,
@@ -911,7 +964,22 @@ def api_add_project_to_jira(division_id):
         supabase_store.set_project_decision(division_id, key, "jira")
     except ValueError as e:
         print(f"  ! couldn't record the Jira decision for {key} ({e})")
-    return jsonify({"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"})
+    out = {"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"}
+    # Running side by side with Jira for now: the same project also becomes a
+    # bid on the workflow board. Never blocks the Jira filing — a failure just
+    # comes back as workflow_error for the dashboard to mention. Skipped until
+    # the board is configured (WORKFLOW_SUPABASE_URL), i.e. its SQL has been run.
+    if not WORKFLOW_SUPABASE_URL:
+        return jsonify(out)
+    try:
+        back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
+        bid_id = supabase_store.create_workflow_bid(
+            division_id, key, summary, due=due_date or None, source_url=back)
+        out["workflow_url"] = f"/workflow/?bid={bid_id}"
+    except Exception as e:
+        print(f"  ! couldn't add {key} to the workflow board ({e})")
+        out["workflow_error"] = str(e)
+    return jsonify(out)
 
 
 @app.route("/api/<division_id>/projects/jira/verify", methods=["POST"])

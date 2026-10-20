@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161B33">
+<title>Bid board</title>
+<style>
+:root{
+  --bg:#F1F3F7; --surface:#FFFFFF; --ink:#1B2140; --muted:#5A607C; --line:#D5DAE5; --line2:#BFC5D4;
+  --accent:#222B57; --accent-ink:#FFFFFF; --col:#E7E9F0; --high:#B8362B; --med:#A8701A; --low:#2F7A47;
+  --highbg:#FBE6E3; --medbg:#F7EBD3; --lowbg:#E3F1E6; --chip:#E9ECF3; --shadow:none;
+  --c1:#3D4DA3; --c2:#2F8F7B; --c3:#B8761F; --c4:#A2447F; --c5:#7A809B; --c6:#6B57C7;
+  --side-bg:#161B33; --side-ink:#DDE1F0; --side-mute:#8E96B8; --side-hi:rgba(255,255,255,.1);
+  --head:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1022; --surface:#171C30; --ink:#E8EAF3; --muted:#A3A9C4; --line:#2B3152; --line2:#3B4268;
+    --accent:#8E9AD6; --accent-ink:#10142B; --col:#20253D; --high:#F08A80; --med:#D2A24E; --low:#6FBF86;
+    --highbg:#3A1D21; --medbg:#2C2517; --lowbg:#16291F; --chip:#232944; --shadow:none;
+    --c1:#8E9AD6; --c2:#5CC4AE; --c3:#D9A257; --c4:#D98BBF; --c5:#9AA0BC; --c6:#A99AF0;
+    --side-bg:#090C1A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+    --bg:#0C1022; --surface:#171C30; --ink:#E8EAF3; --muted:#A3A9C4; --line:#2B3152; --line2:#3B4268;
+    --accent:#8E9AD6; --accent-ink:#10142B; --col:#20253D; --high:#F08A80; --med:#D2A24E; --low:#6FBF86;
+    --highbg:#3A1D21; --medbg:#2C2517; --lowbg:#16291F; --chip:#232944; --shadow:none;
+    --c1:#8E9AD6; --c2:#5CC4AE; --c3:#D9A257; --c4:#D98BBF; --c5:#9AA0BC; --c6:#A99AF0;
+    --side-bg:#090C1A; color-scheme:dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* layout */
+.app{display:flex;min-height:100vh}
+.main{flex:1 1 auto;min-width:0}
+.side{width:248px;flex:0 0 248px;background:var(--side-bg);color:var(--side-ink);padding:18px 12px 20px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;align-self:flex-start;overflow-y:auto}
+.brand{font:700 20px var(--head);letter-spacing:-.01em;padding:4px 10px 14px}
+.sl{font-size:12px;color:var(--side-mute);padding:6px 10px;font-weight:600}
+.proj{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-radius:8px;padding:8px 10px;color:inherit;text-align:left}
+.proj:hover{background:var(--side-hi)}
+.proj.on{background:var(--side-hi);box-shadow:inset 3px 0 0 #9DB0FF}
+.proj.add{color:var(--side-mute);margin-top:4px}
+.pi{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--surface);flex:0 0 auto}
+.pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me{margin-top:auto;padding:12px 10px 0}
+.me label{color:var(--side-mute);margin:0 0 4px}
+.me input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:8px 10px;color:var(--side-ink)}
+.scrim{display:none}
+@media (max-width:899px){
+  .side{position:fixed;left:0;top:0;bottom:0;height:auto;z-index:40;transform:translateX(-100%);padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:4px 0 24px rgba(0,0,0,.3)}
+  .side.open{transform:none}
+  .scrim.open{display:block;position:fixed;inset:0;background:rgba(10,16,24,.5);z-index:35}
+}
+@media (min-width:900px){#menu{display:none}}
+@media (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
+
+.top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+.top .crumb{flex:1;min-width:0}
+.top small{display:block;font-size:12px;color:var(--muted)}
+h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{background:var(--surface);border:1px solid var(--line);border-radius:8px;width:38px;height:38px;display:grid;place-items:center;padding:0}
+.tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{background:none;border:0;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.filters{padding:12px 16px 0;display:grid;gap:8px}
+.filters input,.fsel select,.ctrl select,.ctrl input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:0}
+.fsel{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.fsel select{flex:0 0 auto;max-width:180px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--high)}
+.btn.small{padding:6px 10px;font-size:14px}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* issue chips and icons */
+.ti{width:18px;height:18px;border-radius:5px;display:inline-grid;place-items:center;font-size:11px;font-weight:700;color:var(--surface);flex:0 0 auto}
+.pr{font-weight:700;font-size:13px;letter-spacing:-1px}
+.key{font-size:12px;color:var(--muted);font-weight:600}
+.chip{font-size:12px;background:var(--chip);border-radius:6px;padding:1px 7px;color:var(--muted)}
+.chip.over{background:var(--high);color:var(--surface)}
+.echip{display:inline-block;max-width:100%;font-size:12px;border-radius:6px;padding:1px 8px;margin:0 0 6px;background:var(--chip);color:var(--ink);border-left:4px solid var(--ec,var(--c6));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:600;display:grid;place-items:center;flex:0 0 auto}
+.who.none{background:var(--chip);color:var(--muted)}
+.sbadge{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.cat-todo{background:var(--chip);color:var(--muted)}
+.cat-doing{background:var(--accent);color:var(--accent-ink)}
+.cat-done{background:var(--low);color:var(--surface)}
+
+/* board */
+.board{display:flex;gap:12px;overflow-x:auto;padding:12px 16px 28px;scroll-snap-type:x proximity;align-items:flex-start}
+.col{flex:0 0 min(84vw,290px);background:var(--col);border-radius:12px;padding:10px;scroll-snap-align:start;min-height:140px}
+.col.over{outline:2px dashed var(--accent);outline-offset:-2px}
+.col h2{display:flex;justify-content:space-between;align-items:center;gap:6px;font:600 15px var(--head);margin:2px 4px 10px}
+.col h2 .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.count{font:500 12px var(--body);color:var(--muted);background:var(--chip);border-radius:99px;padding:1px 9px}
+.cards{display:flex;flex-direction:column;gap:8px;min-height:24px}
+.card{background:var(--surface);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);cursor:grab}
+.card.dragging{opacity:.4}
+.ck{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.ck .pr{margin-left:auto}
+.card .title{display:block;width:100%;text-align:left;background:none;border:0;padding:2px 0 8px;font-weight:500;font-size:15px}
+.meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.meta .who{margin-left:auto}
+.mv{display:flex;gap:6px;margin-top:8px}
+.mv button{flex:1;background:var(--chip);border:0;border-radius:6px;padding:5px 0;font-size:13px;color:var(--muted)}
+.mv button:disabled{opacity:.35;cursor:default}
+.add{width:100%;margin-top:8px;background:none;border:1px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted)}
+.empty{font-size:13px;color:var(--muted);padding:6px 4px}
+
+/* list */
+.tablewrap{margin:12px 16px 28px;overflow-x:auto;background:var(--surface);border-radius:12px;box-shadow:var(--shadow)}
+table.list{border-collapse:collapse;width:100%;min-width:680px}
+table.list th{text-align:left;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding:0}
+table.list th button{background:none;border:0;padding:10px 12px;font-weight:600;color:inherit;width:100%;text-align:left}
+.thc{display:flex;align-items:center}
+.thc button{flex:1}
+.grip{cursor:grab;color:var(--muted);padding:10px 0 10px 10px;font-size:12px;user-select:none;letter-spacing:-2px}
+table.list th.th-over{box-shadow:inset 3px 0 0 var(--accent)}
+.lbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 16px 0}
+.lbar+.tablewrap,.lbar+.lbar+.tablewrap{margin-top:12px}
+table.list td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:14px}
+table.list tr:last-child td{border-bottom:0}
+.kc{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.lt{background:none;border:0;padding:0;text-align:left;font-weight:500;font-size:14px}
+table.list select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:13px}
+td.over{color:var(--high);font-weight:600}
+
+/* calendar */
+.cal-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 16px}
+.cal-head h2{font:700 20px var(--head);margin:0;flex:1 1 150px}
+.cal{margin:0 16px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.dow{font-size:12px;color:var(--muted);text-align:center;padding:6px 0;background:var(--col);font-weight:600}
+.day{min-height:88px;padding:4px;background:var(--surface);cursor:pointer;min-width:0}
+.day.out{background:var(--bg)}
+.day.out .dn{color:var(--muted);opacity:.6}
+.day.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.dn{font-size:12px;font-weight:600;width:22px;height:22px;display:grid;place-items:center;border-radius:50%}
+.day.today .dn{background:var(--accent);color:var(--accent-ink)}
+.cc{display:flex;align-items:center;gap:6px;width:calc(100% - 8px);height:24px;margin:4px 4px 0;text-align:left;font-size:13px;border:0;border-left:3px solid var(--pc,var(--c5));border-radius:4px;background:var(--chip);padding:0 6px 0 5px;min-width:0;cursor:pointer;color:var(--ink)}
+.cc.over{background:color-mix(in srgb,var(--high) 16%,var(--surface))}
+.cc .ci{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--surface);background:var(--tc);flex:0 0 auto}
+.cc .ct{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;font-weight:500}
+.cc .cx{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.cc .od{display:block;color:var(--high)}
+.cc.fin .ct{text-decoration:line-through;opacity:.55}
+.more{display:block;background:none;border:0;font-size:13px;font-weight:500;color:var(--ink);margin:4px 0 0;padding:2px 8px;text-align:left}
+.day{padding:0 0 6px;min-height:92px}
+.day.out{background:var(--surface)}
+.day.drop{outline:2px dashed var(--accent);outline-offset:-2px}
+.dow{background:var(--surface);color:var(--ink);font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 0}
+.dn{display:flex;justify-content:center;width:auto;height:auto;border-radius:0;background:none;padding:6px 0 2px;font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase}
+.dn .dnn{min-width:22px;height:22px;padding:0 6px;border-radius:11px;display:grid;place-items:center}
+.day.today .dn{background:none;color:var(--ink)}
+.day.today .dnn{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.day.out .dn{opacity:.5}
+.calscroll{margin:0 16px;overflow-x:auto}
+.calscroll .cal{margin:0}
+.calfoot{grid-column:1/-1;background:var(--surface);text-align:center;padding:12px;font-size:13px;color:var(--muted)}
+.dwk{display:none}
+.cal.week .day{min-height:220px}
+.calwrap{display:block}
+.unsch{margin:0 16px 28px}
+.unrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:grab}
+.unrow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (min-width:900px){
+  .calwrap{display:grid;grid-template-columns:minmax(0,1fr) 250px;align-items:start}
+  .unsch{margin:12px 16px 0 0}
+}
+.dots{display:none;justify-content:center;align-items:center;gap:3px;flex-wrap:wrap;padding:2px 4px 0}
+.dots i{width:7px;height:7px;border-radius:50%;display:block}
+.dots i.fin{opacity:.35}
+.dots b{font-size:10px;line-height:7px;color:var(--muted);font-weight:600}
+@media (max-width:640px){
+  .calscroll{margin:0 8px}
+  .cal-head{padding:12px 12px 8px}
+  .cal-head h2{flex:1 1 100%}
+  .cal-head .seg{margin-left:auto}
+  .cal:not(.week) .day{min-height:58px;padding:0 0 4px}
+  .cal:not(.week) .cc,.cal:not(.week) .more{display:none}
+  .cal:not(.week) .dots{display:flex}
+  .cal:not(.week) .dow{padding:8px 0;font-size:11px;letter-spacing:.02em}
+  .cal:not(.week) .dn .dnn{min-width:24px;padding:0 4px}
+  .cal:not(.week) .day.sel{outline:0}
+  .cal:not(.week) .day.sel .dnn{box-shadow:0 0 0 2px var(--accent)}
+  .calfoot{display:none}
+  .cal.week{grid-template-columns:minmax(0,1fr)}
+  .cal.week .dow{display:none}
+  .cal.week .day{min-height:0}
+  .cal.week .dwk{display:inline}
+  .cal.week .dn{justify-content:flex-start;padding-left:10px}
+  .daypanel{margin:12px 8px 24px}
+  .unsch{margin:0 8px 28px}
+}
+.note{margin:10px 16px 0;font-size:13px;color:var(--muted)}
+.panel{background:var(--surface);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.daypanel{margin:12px 16px 28px}
+.daypanel h3,.panel h3{font:600 16px var(--head);margin:0 0 10px}
+.drow{display:flex;gap:10px;align-items:center;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:9px 0;text-align:left}
+.drow:first-of-type{border-top:0}
+.drow .t{flex:1;font-weight:500;min-width:0}
+.drow .s{font-size:12px;color:var(--muted)}
+
+/* epics */
+.sec{font:700 20px var(--head);margin:0}
+.epic{border-left:5px solid var(--ec)}
+.eh{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:0;text-align:left}
+.et{flex:1;font-weight:600;min-width:0}
+.prog{display:flex;align-items:center;gap:10px;margin-top:10px}
+.prog .track{flex:1}
+.pt{font-size:13px;color:var(--muted);white-space:nowrap}
+.qa{display:flex;gap:8px;margin-top:10px}
+.qa input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.kids{margin-top:6px}
+.kids>.kh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+
+/* reports + settings */
+.rep{padding:12px 16px 32px;display:grid;gap:14px;max-width:1000px}
+.ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.ctrl label{margin:0 0 4px}
+.ctrl select,.ctrl input{width:100%}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px}
+.stat{background:var(--surface);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+.stat b{display:block;font:700 28px var(--head);letter-spacing:-.02em}
+.stat span{font-size:13px;color:var(--muted)}
+.saved-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.saved{display:inline-flex;background:var(--chip);border-radius:99px;overflow:hidden}
+.saved button{background:none;border:0;padding:5px 10px;font-size:14px}
+.saved button+button{padding:5px 10px 5px 4px;color:var(--muted)}
+.hb{display:grid;grid-template-columns:minmax(70px,120px) 1fr 76px;gap:8px;align-items:center;width:100%;background:none;border:0;padding:5px 4px;text-align:left;border-radius:8px}
+.hb.on,.vcol.on,.leg.on{background:var(--chip)}
+.hb .lbl{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:18px;background:var(--chip);border-radius:6px;overflow:hidden;display:block}
+.hb.on .track{background:var(--surface)}
+.fill{display:block;height:100%;border-radius:6px}
+.val{font-weight:600;font-size:14px;text-align:right}
+.val small,.leg small{color:var(--muted);font-weight:400}
+.vb{display:flex;gap:6px;height:230px;overflow-x:auto;padding-bottom:2px}
+.vcol{flex:1 0 46px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;background:none;border:0;padding:4px 2px;border-radius:8px}
+.vv{font-size:13px;font-weight:600}
+.bw{flex:1;display:flex;align-items:flex-end;width:100%}
+.bar{display:block;width:100%;min-height:2px;border-radius:6px 6px 0 0}
+.vl{font-size:11px;color:var(--muted);white-space:nowrap}
+.donutwrap{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+.donut{width:170px;height:170px;flex:0 0 auto}
+.legend{flex:1 1 180px;display:grid;gap:2px}
+.leg{display:flex;align-items:center;gap:8px;background:none;border:0;text-align:left;padding:6px 8px;border-radius:8px;font-size:14px}
+.sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+.leg .n{margin-left:auto;font-weight:600}
+.fine{font-size:12px;color:var(--muted);margin:8px 0 0}
+.srow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.srow:first-of-type{border-top:0}
+.srow input{flex:1 1 150px;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.srow select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+.srow .cnt{font-size:12px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:14px;z-index:90;display:none}
+
+/* overlays */
+.overlay{position:fixed;inset:0;background:rgba(10,16,24,.55);display:none;align-items:flex-end;justify-content:center;z-index:60}
+.overlay.open{display:flex}
+.sheet{background:var(--surface);width:min(520px,100%);max-height:92%;overflow:auto;border-radius:16px 16px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.sheet.issue{width:100%;height:100%;max-height:100%;border-radius:0;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+@media (min-width:760px){
+  .overlay{align-items:center}
+  .sheet{border-radius:16px}
+  .sheet.issue{width:min(960px,96%);height:auto;max-height:92vh;border-radius:16px;padding-top:20px}
+}
+.sheet h3{font:700 20px var(--head);margin:0 0 14px}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+.sheet input,.sheet select,.sheet textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.sheet input.h-title{font:700 22px var(--head);letter-spacing:-.01em;background:transparent;border-color:transparent;padding:6px 8px;margin-left:-8px;width:calc(100% + 8px)}
+.sheet input.h-title:hover,.sheet input.h-title:focus{border-color:var(--line);background:var(--bg)}
+textarea{min-height:90px;resize:vertical}
+.row{display:flex;gap:10px}.row>div{flex:1;min-width:0}
+.actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.actions .spacer{flex:1}
+.ih{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ih .sp{flex:1}
+.ih .crumb-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:0;color:var(--muted);font-size:13px;font-weight:600}
+.ih .x{background:var(--chip);border:0;border-radius:8px;width:34px;height:34px;font-size:20px;line-height:1;color:var(--muted)}
+.ib{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "side" "act";gap:16px}
+@media (min-width:760px){.ib{grid-template-columns:minmax(0,1fr) 270px;grid-template-areas:"top side" "act side";align-items:start}}
+#i-top{grid-area:top;min-width:0}
+#i-side{grid-area:side;min-width:0}
+#i-act{grid-area:act;min-width:0}
+.detail{border:1px solid var(--line);border-radius:12px;padding:4px 12px 14px}
+.detail .ro{font-size:14px;padding:6px 0}
+.detail .meta2{font-size:12px;color:var(--muted);margin-top:12px}
+.linkbtn{background:none;border:0;color:var(--accent);font-size:13px;padding:2px 0;font-weight:600}
+.acth{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.acth b{font:600 16px var(--head)}
+.seg{display:inline-flex;background:var(--chip);border-radius:8px;padding:2px;margin-left:auto}
+.seg button{background:none;border:0;border-radius:6px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.comp textarea{min-height:64px}
+.comp .actions{margin-top:8px}
+.ev{display:flex;gap:10px;padding:12px 0 0}
+.ev .body{flex:1;min-width:0;font-size:14px}
+.ev .when{font-size:12px;color:var(--muted);margin-left:6px;font-weight:400}
+.ev .txt{white-space:pre-wrap;margin-top:2px;overflow-wrap:anywhere}
+.ev .tools2{display:flex;gap:12px;margin-top:4px}
+.ev .tools2 button{background:none;border:0;padding:0;font-size:12px;font-weight:600;color:var(--muted)}
+.hv{display:inline-block;background:var(--chip);border-radius:5px;padding:0 6px;font-size:13px}
+@media (prefers-reduced-motion:no-preference){.card{transition:opacity .15s}.fill,.bar{transition:all .25s}}
+
+/* ---- Bid Scout theme ---- */
+body{font-size:16px}
+h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
+.brand{font-weight:800}
+.panel,.stat,.detail{box-shadow:none;border:1px solid var(--line);border-radius:12px}
+.card{box-shadow:none;border:1px solid var(--line);border-radius:10px}
+.col{border:1px solid var(--line)}
+.col h2{font-size:13px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+.panel h3,.acth b{font-weight:800;font-size:15px;letter-spacing:.08em;text-transform:uppercase}
+.stat b{font-weight:800}
+.btn{border:1px solid var(--line2);border-radius:8px;font-weight:600}
+.btn.primary{border-color:var(--accent)}
+.icon{border:1.5px solid var(--line2);border-radius:10px}
+.filters input,.fsel select,.ctrl select,.ctrl input,.sheet input,.sheet select,.sheet textarea,.srow input,.srow select,.qa input,table.list select{border:1px solid var(--line2);border-radius:8px}
+.tabs{gap:4px;padding:8px 16px 0;border-bottom:2px solid var(--accent);align-items:flex-end}
+.tab{border:1px solid transparent;border-bottom:2px solid transparent;border-radius:12px 12px 0 0;padding:10px 16px;margin-bottom:-2px;font-weight:600;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:700;border-color:var(--accent);border-bottom-color:var(--surface)}
+.chip{border:1.5px solid transparent;border-radius:99px;padding:1px 9px}
+.chip.over{background:var(--highbg);color:var(--high);border-color:var(--high)}
+.sbadge{border:1.5px solid transparent;border-radius:99px;padding:2px 10px}
+.cat-todo{background:var(--chip);color:var(--muted);border-color:var(--line2)}
+.cat-doing{background:var(--medbg);color:var(--med);border-color:var(--med)}
+.cat-done{background:var(--lowbg);color:var(--low);border-color:var(--low)}
+.linkbtn{color:var(--ink);font-weight:600}
+.proj.on{box-shadow:inset 3px 0 0 #9AA7E8}
+@media (max-width:640px){#theme .tl{display:none}}
+
+/* ---- divisions, overview, team ---- */
+.dtabs{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;align-items:flex-end}
+.dtab{background:var(--col);border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;padding:8px 16px;font-weight:600;color:var(--muted);white-space:nowrap}
+.dtab.on{background:var(--surface);color:var(--ink);border-color:var(--accent);font-weight:700}
+.dtab.new{background:none;border:1px dashed var(--line2);border-bottom:0;padding:8px 14px}
+.dtabs+.tabs{padding-top:0;border-top:2px solid var(--accent)}
+img.who{object-fit:cover;background:var(--chip)}
+.srow .who{width:32px;height:32px;font-size:12px}
+.sbar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--chip)}
+.sbar i{display:block;height:100%}
+.kpis{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tpl{border:1px solid var(--line);border-radius:10px;padding:4px 10px 8px;margin-top:10px}
+#whoami{font-size:14px;overflow-wrap:anywhere}
+.me .sl{padding-left:0}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side" aria-label="Spaces">
+    <div class="brand">Bid board</div>
+    <div id="plist"></div>
+    <div class="me"><label for="myname">Your name</label><input id="myname" maxlength="30" placeholder="Shown on comments"></div>
+  </aside>
+  <div class="scrim" id="scrim" data-scrim></div>
+  <div class="main">
+    <header class="top">
+      <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
+      <div class="crumb"><small id="pkey"></small><h1 id="ptitle"></h1></div>
+      <button class="btn small" id="theme" type="button"></button>
+      <button class="btn primary" data-create id="createBtn">Create</button>
+    </header>
+    <nav class="dtabs" id="dtabs" aria-label="Divisions"></nav>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Views"></nav>
+    <div class="filters" id="filters">
+      <input id="q" type="search" placeholder="Search bids" aria-label="Search bids">
+      <div class="fsel" id="fsel"></div>
+    </div>
+    <main id="view"></main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<!-- day -->
+<div class="overlay" id="ov-day" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
+  <div class="sheet">
+    <h3 id="dayTitle"></h3>
+    <div id="dayList"></div>
+    <div class="actions">
+      <button class="btn small" id="dayAdd" data-add-due="">Create bid due this day</button>
+      <span class="spacer"></span>
+      <button class="btn" data-close="ov-day">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- issue -->
+<div class="overlay" id="ov-issue" role="dialog" aria-modal="true" aria-label="Bid details">
+  <div class="sheet issue">
+    <div class="ih" id="i-head"></div>
+    <div class="ib"><div id="i-top"></div><div id="i-side"></div><div id="i-act"></div></div>
+  </div>
+</div>
+
+<!-- create issue -->
+<div class="overlay" id="ov-create" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+  <div class="sheet">
+    <h3 id="cTitle">Create bid</h3>
+    <div class="row">
+      <div><label for="c-type">Type</label><select id="c-type"></select></div>
+      <div><label for="c-status">Status</label><select id="c-status"></select></div>
+    </div>
+    <label for="c-title">Summary</label>
+    <input id="c-title" maxlength="140">
+    <label for="c-desc">Description</label>
+    <textarea id="c-desc"></textarea>
+    <div class="row">
+      <div><label for="c-pri">Priority</label><select id="c-pri"></select></div>
+      <div><label for="c-who">Assignee</label><select id="c-who"></select></div>
+    </div>
+    <div class="row">
+      <div><label for="c-due">Due date</label><input id="c-due" type="date"></div>
+      <div><label for="c-labels">Labels</label><input id="c-labels" placeholder="design, bug"></div>
+    </div>
+    <div id="c-parent-wrap"><label for="c-parent" id="c-parent-label">Parent</label><select id="c-parent"></select></div>
+    <div class="actions">
+      <button class="btn primary" id="c-save">Create</button>
+      <button class="btn" data-close="ov-create">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- create space -->
+<div class="overlay" id="ov-space" role="dialog" aria-modal="true" aria-labelledby="pTitle">
+  <div class="sheet">
+    <h3 id="pTitle">Create space</h3>
+    <label for="p-name">Space name</label>
+    <input id="p-name" maxlength="40">
+    <label for="p-key">Space key</label>
+    <input id="p-key" maxlength="5" placeholder="Used in bid keys, like GEO-12">
+    <label for="p-parent">Parent space</label>
+    <select id="p-parent"></select>
+    <label for="p-tpl">Workflow</label>
+    <select id="p-tpl"></select>
+    <p class="fine" id="p-err" style="color:var(--high)"></p>
+    <div class="actions">
+      <button class="btn primary" id="p-save">Create space</button>
+      <button class="btn" data-close="ov-space">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  var PKEY="site-board-v4-prefs";
+  var TYPES=["Story","Task","Bug","Subtask"];
+  var TGLYPH={Story:"S",Task:"T",Bug:"B",Subtask:"↳"};
+  var TCOLOR={Story:"var(--c2)",Task:"var(--c1)",Bug:"var(--high)",Subtask:"var(--c5)"};
+  var PRI=["Highest","High","Medium","Low"];
+  var PGLYPH={Highest:"↑↑",High:"↑",Medium:"=",Low:"↓"};
+  var PCOLOR={Highest:"var(--high)",High:"var(--high)",Medium:"var(--med)",Low:"var(--low)"};
+  var CATS=[["todo","To do"],["doing","In progress"],["done","Done"]];
+  var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var VIEWS=[["board","Board"],["list","List"],["calendar","Calendar"],["reports","Reports"],["settings","Settings"]];
+  var GROUPS=[["status","Status"],["type","Type"],["priority","Priority"],["assignee","Assignee"],["label","Label"],["due","Due month"],["created","Created week"],["completed","Completed week"]];
+  var TIME={due:1,created:1,completed:1};
+  var state=null;
+  var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
+  var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
+  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={};
+  var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
+  var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
+  var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
+  var ui={f:{q:"",type:"",who:"",pri:""},sort:"num",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
+
+  /* ---------- helpers ---------- */
+  function $(id){return document.getElementById(id)}
+  function pad(n){return n<10?"0"+n:""+n}
+  function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+  function parse(s){var p=s.split("-");return new Date(+p[0],+p[1]-1,+p[2])}
+  function today(){return ymd(new Date())}
+  function addDays(s,n){var d=parse(s);d.setDate(d.getDate()+n);return ymd(d)}
+  function shortDate(s){var d=parse(s);return MONTHS[d.getMonth()]+" "+d.getDate()}
+  function monthLabel(k){var p=k.split("-");return MONTHS[+p[1]-1]+" "+p[0]}
+  function weekStart(s){var d=parse(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return ymd(d)}
+  function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+  function initials(n){return n.trim().split(/\s+/).map(function(p){return p[0]}).join("").slice(0,2).toUpperCase()}
+  function pct(n,t){return t?Math.round(n/t*100):0}
+  function ago(ms){
+    var s=Math.floor((Date.now()-ms)/1000);if(s<60)return "just now";
+    var m=Math.floor(s/60);if(m<60)return m+" min ago";
+    var h=Math.floor(m/60);if(h<24)return h+(h===1?" hour ago":" hours ago");
+    var d=Math.floor(h/24);if(d<30)return d+(d===1?" day ago":" days ago");
+    return new Date(ms).toLocaleDateString();
+  }
+  function toast(msg){var el=$("toast");el.textContent=msg;el.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(function(){el.style.display="none"},2000)}
+  function uid(p){return uuid()}
+
+  /* ---------- model ---------- */
+  function proj(){return curSpace()}
+  function byId(id){var p=proj();return p?p.issues.filter(function(i){return i.id===id})[0]:undefined}
+  function stat(p,id){return p.statuses.filter(function(s){return s.id===id})[0]||p.statuses[0]}
+  function isDone(is){return stat(proj(),is.status).cat==="done"}
+  function overdue(is){return !!is.due&&!isDone(is)&&is.due<today()}
+  function ikey(is){return proj().key+"-"+is.num}
+  function children(is){return proj().issues.filter(function(i){return i.parent===is.id})}
+  function applyStatus(p,is,sid){
+    is.status=sid;
+    if(stat(p,sid).cat==="done"){if(!is.doneAt)is.doneAt=today()}else is.doneAt="";
+  }
+  function logH(is,field,from,to){is.history.push({by:ME,at:Date.now(),field:field,from:from,to:to})}
+  function validParent(type,par){
+    if(!par)return true;
+    return type==="Subtask"&&par.type!=="Subtask";
+  }
+  function parentCandidates(type,selfId){
+    if(type!=="Subtask")return [];
+    return proj().issues.filter(function(i){return i.id!==selfId&&i.type!=="Subtask"});
+  }
+  function setField(is,f,v){
+    var p=proj();
+    if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
+    else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
+    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v)}
+    else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
+    else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
+    else if(f==="type"){
+      if(v===is.type)return false;logH(is,"Type",is.type,v);is.type=v;
+      var par=is.parent?byId(is.parent):null;if(!validParent(v,par))is.parent="";
+    }
+    else if(f==="parent"){
+      if(v===is.parent)return false;
+      var np=v?byId(v):null,op=is.parent?byId(is.parent):null;
+      logH(is,"Parent",op?ikey(op):"None",np?ikey(np):"None");is.parent=v;
+    }
+    else if(f==="labels"){
+      var arr=v.split(",").map(function(s){return s.trim()}).filter(Boolean);
+      if(arr.join(",")===is.labels.join(","))return false;
+      logH(is,"Labels",is.labels.join(", ")||"None",arr.join(", ")||"None");is.labels=arr;
+    }
+    else if(f==="due"){if(v===is.due)return false;logH(is,"Due date",is.due?shortDate(is.due):"None",v?shortDate(v):"None");is.due=v}
+    else return false;
+    is.updated=Date.now();save();render();return true;
+  }
+  function createIssue(data){
+    var p=proj(),mx=p.issues.reduce(function(a,i){return Math.max(a,i.num)},0),num=Math.max(p.next||1,mx+1);
+    var mr=p.issues.reduce(function(a,i){return Math.max(a,rk(i))},0);
+    p.next=num+1;
+    var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
+      priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",
+      created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}]};
+    applyStatus(p,is,is.status);
+    p.issues.push(is);save();return is;
+  }
+  function deleteIssue(id){
+    var p=proj();
+    p.issues=p.issues.filter(function(i){return !(i.parent===id&&i.type==="Subtask")&&i.id!==id});
+    p.issues.forEach(function(i){if(i.parent===id)i.parent=""});
+    save();
+  }
+  function moveTo(id,sid,beforeId){
+    var p=proj(),is=byId(id);if(!is)return;
+    if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);is.updated=Date.now()}
+    var col=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(function(a,b){return rk(a)-rk(b)});
+    var j=beforeId?col.findIndex(function(x){return x.id===beforeId}):-1;
+    if(j<0)is.rank=(col.length?rk(col[col.length-1]):0)+1000;
+    else is.rank=j>0?(rk(col[j-1])+rk(col[j]))/2:rk(col[0])-1000;
+    p.issues.sort(function(a,b){return rk(a)-rk(b)});
+    save();render();
+  }
+
+  /* ---------- preferences (this device only) ---------- */
+  function defaultPrefs(){
+    var T=today();
+    return {view:"board",div:"",cur:"",calMonth:T.slice(0,7),calSel:T,calMode:"month",listCols:null,theme:"auto",
+      rcfg:{groupBy:"status",chart:"bar",scope:"all",type:"",pri:"",who:"",label:"",name:""},
+      reports:[
+        {name:"Workload by assignee",cfg:{groupBy:"assignee",chart:"bar",scope:"open",type:"",pri:"",who:"",label:""}},
+        {name:"Overdue by priority",cfg:{groupBy:"priority",chart:"donut",scope:"overdue",type:"",pri:"",who:"",label:""}},
+        {name:"Completed per week",cfg:{groupBy:"completed",chart:"bar",scope:"done",type:"",pri:"",who:"",label:""}}
+      ]};
+  }
+  function loadPrefs(){
+    try{var r=localStorage.getItem(PKEY);if(r)return Object.assign(defaultPrefs(),JSON.parse(r))}catch(e){}
+    return defaultPrefs();
+  }
+  function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(state))}catch(e){}}
+  function archivedBlocked(){
+    if(state.view==="overview"||!isArchived(state.div))return false;
+    var m=allDocs(),dirty=false;
+    Object.keys(m).forEach(function(p){if(base[p]!==canon(m[p]))dirty=true});
+    Object.keys(base).forEach(function(p){if(!(p in m)&&p!=="org/config")dirty=true});
+    if(!dirty)return false;
+    toast("This division is archived, so it can’t be changed.");
+    setTimeout(rebuild,0);
+    return true;
+  }
+  function save(){savePrefs();if(archivedBlocked())return;scheduleFlush()}
+
+  /* ---------- shared store (Supabase) ---------- */
+  var sb=null,CFG=window.APP_CONFIG||{},reloadTimer=null,handoffDone=false;
+  function canon(v){
+    if(v===null||typeof v!=="object")return JSON.stringify(v===undefined?null:v);
+    if(Array.isArray(v))return "["+v.map(canon).join(",")+"]";
+    return "{"+Object.keys(v).sort().map(function(k){return JSON.stringify(k)+":"+canon(v[k])}).join(",")+"}";
+  }
+  function clone(o){return JSON.parse(JSON.stringify(o))}
+  function uuid(){
+    if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==="x"?r:(r&3|8)).toString(16)});
+  }
+  function newId(){return uuid()}
+  function byName(a,b){return (a.name||"").localeCompare(b.name||"")}
+  function rk(i){return i.rank!=null?i.rank:i.num*1000}
+  function strip(o){var c={};Object.keys(o).forEach(function(k){if(k!=="id")c[k]=o[k]});return c}
+  function stripSpace(sp){var c={};Object.keys(sp).forEach(function(k){if(k!=="issues"&&k!=="id")c[k]=sp[k]});return c}
+  function nz(s){return s?s:null}
+
+  /* rows <-> documents */
+  function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],created:(r.created_at||"").slice(0,10)}}
+  function spaceToRow(id,d){return {id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]}}
+  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||""}}
+  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString()}}
+
+  function allDocs(){
+    var m={};
+    m["org/config"]={templates:D.config.templates};
+    D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name}});
+    D.spaces.forEach(function(sp){
+      m["spaces/"+sp.id]=stripSpace(sp);
+      sp.issues.forEach(function(is){m["bids/"+is.id]=strip(is)});
+    });
+    return m;
+  }
+  function rawPut(path,data){
+    var p=path.split("/");
+    if(p[0]==="org")raw.config=data;
+    else if(p[0]==="people")raw.people[p[1]]=data;
+    else if(p[0]==="spaces")raw.spaces[p[1]]=data;
+    else if(p[0]==="bids")raw.bids[p[1]]=data;
+  }
+  function rawDel(path){
+    var p=path.split("/");
+    if(p[0]==="people")delete raw.people[p[1]];
+    else if(p[0]==="spaces")delete raw.spaces[p[1]];
+    else if(p[0]==="bids")delete raw.bids[p[1]];
+  }
+  async function writeTemplates(list){
+    var keep={},i,r;
+    for(i=0;i<list.length;i++){
+      keep[list[i].id]=1;
+      r=await sb.from("wf_templates").upsert({id:list[i].id,name:list[i].name,statuses:list[i].statuses});
+      if(r.error)throw r.error;
+    }
+    var old=(raw.config&&raw.config.templates)||[];
+    for(i=0;i<old.length;i++){
+      if(!keep[old[i].id]){r=await sb.from("wf_templates").delete().eq("id",old[i].id);if(r.error)throw r.error}
+    }
+  }
+  async function writeDoc(path,data){
+    var p=path.split("/"),id=p[1],r=null;
+    if(p[0]==="org")return writeTemplates(data.templates);
+    if(p[0]==="spaces")r=await sb.from("wf_spaces").upsert(spaceToRow(id,data));
+    else if(p[0]==="bids")r=await sb.from("wf_bids").upsert(bidToRow(id,data));
+    else if(p[0]==="people")r=await sb.from("wf_people").upsert({id:id,division_id:data.divisionId,name:data.name});
+    if(r&&r.error)throw r.error;
+  }
+  async function deleteDoc(path){
+    var p=path.split("/"),t={people:"wf_people",spaces:"wf_spaces",bids:"wf_bids"}[p[0]];
+    if(!t)return;
+    var r=await sb.from(t).delete().eq("id",p[1]);
+    if(r.error)throw r.error;
+  }
+  function scheduleFlush(){
+    if(!sb||!READY)return;
+    pendingLocal=true;clearTimeout(flushTimer);flushTimer=setTimeout(runFlush,0);
+  }
+  async function runFlush(){
+    if(flushing){again=true;return}
+    flushing=true;
+    try{
+      do{
+        again=false;
+        var m=allDocs(),ops=[];
+        Object.keys(m).forEach(function(p){var c=canon(m[p]);if(base[p]!==c)ops.push({p:p,c:c})});
+        Object.keys(base).forEach(function(p){if(!(p in m)&&p!=="org/config")ops.push({p:p,del:true})});
+        for(var i=0;i<ops.length;i++){
+          var o=ops[i];
+          try{
+            if(o.del){await deleteDoc(o.p);delete base[o.p];rawDel(o.p)}
+            else{var data=JSON.parse(o.c);await writeDoc(o.p,data);base[o.p]=o.c;rawPut(o.p,data)}
+          }catch(err){console.error("save failed",o.p,err);toast("Couldn’t save a change: "+((err&&err.message)||"unknown error"));again=false;break}
+        }
+      }while(again);
+    }finally{
+      flushing=false;pendingLocal=false;
+      if(rebuildPending)setTimeout(function(){if(!pendingLocal&&!flushing&&rebuildPending){rebuildPending=false;rebuild()}},250);
+    }
+  }
+
+  /* loading and live updates */
+  function onLoadErr(e){DENIED="Can’t reach the database. "+((e&&e.message)||"");console.error(e);render()}
+  async function loadAll(){
+    var dt=CFG.DIVISIONS_TABLE||"divisions",idc=CFG.DIVISION_ID_COLUMN||"id",nc=CFG.DIVISION_NAME_COLUMN||"name";
+    var rs=await Promise.all([
+      sb.from(dt).select("*"),sb.from("wf_people").select("*"),sb.from("wf_templates").select("*").order("created_at"),
+      sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*")]);
+    for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
+    raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
+    raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
+    raw.config={templates:rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[]}})};
+    raw.spaces={};rs[3].data.forEach(function(r){raw.spaces[r.id]=rowToSpace(r)});
+    raw.bids={};rs[4].data.forEach(function(r){raw.bids[r.id]=rowToBid(r)});
+    raw.names={};if(!rs[5].error)(rs[5].data||[]).forEach(function(r){raw.names[String(r.division_id)]={name:r.name,archivedAt:r.archived_at||""}});
+    loaded.config=loaded.divs=loaded.spaces=loaded.bids=true;
+    dataChanged();
+    snapshotNames();
+  }
+  function scheduleReload(){clearTimeout(reloadTimer);reloadTimer=setTimeout(function(){loadAll().catch(function(e){console.error(e)})},300)}
+  function listen(){
+    try{
+      var ch=sb.channel("wf-changes");
+      ["wf_spaces","wf_bids","wf_people","wf_templates"].forEach(function(t){ch.on("postgres_changes",{event:"*",schema:"public",table:t},scheduleReload)});
+      ch.subscribe();
+    }catch(e){console.warn("realtime unavailable, polling instead",e)}
+    setInterval(function(){if(!document.hidden&&!flushing&&!pendingLocal)scheduleReload()},30000);
+    document.addEventListener("visibilitychange",function(){if(!document.hidden)scheduleReload()});
+  }
+  function ensureScope(){}
+  /* remember each live division's name so it can be shown by name if it is later deleted in Bid Scout */
+  function snapshotNames(){
+    if(!sb)return;
+    var rows=[];
+    Object.keys(raw.divs).forEach(function(id){
+      var n=raw.names[id];
+      if(!n||n.name!==raw.divs[id].name||n.archivedAt)rows.push({division_id:id,name:raw.divs[id].name,archived_at:null,updated_at:new Date().toISOString()});
+    });
+    if(!rows.length)return;
+    Promise.resolve(sb.from("wf_division_names").upsert(rows)).then(function(r){
+      if(r&&!r.error)rows.forEach(function(x){raw.names[x.division_id]={name:x.name,archivedAt:""}});
+    },function(){});
+  }
+  function dataChanged(){
+    READY=true;
+    if(flushing||pendingLocal){rebuildPending=true;return}
+    rebuild();
+  }
+  function rebuild(){
+    D.config={templates:clone((raw.config&&raw.config.templates)||[])};
+    D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name}}).sort(byName);
+    D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
+    D.divs=Object.keys(raw.divs).map(function(id){return {id:id,name:raw.divs[id].name,members:[],admins:[]}}).sort(byName);
+    var seenIds={};
+    D.people.forEach(function(p){seenIds[p.divisionId]=1});
+    Object.keys(raw.spaces).forEach(function(id){seenIds[raw.spaces[id].divisionId]=1});
+    D.archived=Object.keys(seenIds).filter(function(id){return !raw.divs[id]}).map(function(id){
+      var n=raw.names[id]||{};
+      return {id:id,name:n.name||"Archived division",archivedAt:n.archivedAt||"",archived:true,members:[],admins:[]};
+    }).sort(byName);
+    var map={};
+    D.spaces=Object.keys(raw.spaces).map(function(id){var s=clone(raw.spaces[id]);s.id=id;s.issues=[];s.statuses=s.statuses||[];map[id]=s;return s}).sort(byName);
+    Object.keys(raw.bids).forEach(function(id){
+      var b=clone(raw.bids[id]),s=map[b.spaceId];b.id=id;
+      if(!s)return;
+      b.comments=b.comments||[];b.history=b.history||[];b.labels=b.labels||[];
+      s.issues.push(b);
+    });
+    D.spaces.forEach(function(s){s.issues.sort(function(a,b){return rk(a)-rk(b)})});
+    base={};
+    var snapshotDocs=allDocs();
+    Object.keys(snapshotDocs).forEach(function(p){base[p]=canon(snapshotDocs[p])});
+    fixSelection();
+    render();
+    handoff();
+  }
+  function fixSelection(){
+    var vis=myDivs();
+    if(state.view!=="overview"&&!vis.concat(D.archived).some(function(d){return d.id===state.div})){
+      state.div=vis.length?vis[0].id:"";state.cur="";
+      if(!state.div)state.view="overview";
+    }
+    if(!divSpaces(state.div).some(function(s){return s.id===state.cur})){
+      var tr=spaceTree(state.div);state.cur=tr.length?tr[0].sp.id:"";
+    }
+    savePrefs();
+  }
+  /* links from Bid Scout: ?bid=<id> opens a bid, ?division=<id> opens a division */
+  function handoff(){
+    if(handoffDone)return;
+    handoffDone=true;
+    var q=new URLSearchParams(location.search),bid=q.get("bid"),div=q.get("division");
+    if(!bid&&!div)return;
+    try{history.replaceState(null,"",location.pathname)}catch(e){}
+    if(bid){
+      var found=D.spaces.some(function(s){return s.issues.some(function(i){return i.id===bid})});
+      if(found){gotoBid(bid);return}
+      toast("That bid wasn’t found.");
+    }
+    if(div&&D.divs.some(function(d){return d.id===String(div)}))switchDiv(String(div));
+  }
+
+  /* ---------- people ---------- */
+  function nameOf(id){
+    if(!id)return "Unassigned";
+    var p=PROF[id];if(p&&p.name)return p.name;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id)?"Someone":id;
+  }
+  function avHTML(id){
+    if(!id)return '<span class="who none" title="Unassigned">?</span>';
+    return '<span class="who" title="'+esc(nameOf(id))+'">'+esc(initials(nameOf(id)))+'</span>';
+  }
+  function loadProfiles(){}
+  function findBid(id){
+    var out=null;
+    D.spaces.forEach(function(sp){sp.issues.forEach(function(i){if(i.id===id)out={sp:sp,is:i}})});
+    return out;
+  }
+  function originHTML(is){
+    var o=is.originBidId?findBid(is.originBidId):null;
+    if(!o)return '';
+    return '<label>Copied from</label><div class="ro"><button class="linkbtn" data-gotobid="'+esc(o.is.id)+'">'+esc(o.sp.key+"-"+o.is.num+" "+o.is.title)+'</button></div>';
+  }
+  function copiesHTML(is){
+    var list=[];
+    D.spaces.forEach(function(sp){sp.issues.forEach(function(i){if(i.originBidId===is.id)list.push({sp:sp,is:i})})});
+    if(!list.length)return '';
+    return '<label>Copies</label>'+list.map(function(x){return '<div class="ro"><button class="linkbtn" data-gotobid="'+esc(x.is.id)+'">'+esc(x.sp.key+"-"+x.is.num+" in "+x.sp.name)+'</button></div>'}).join("");
+  }
+  function childSpaces(sp){return D.spaces.filter(function(s){return s.parentId===sp.id})}
+  function automationsHTML(p){
+    var kids=childSpaces(p),rules=p.rules||[];
+    var h='<section class="panel"><h3>Automations</h3><p class="fine" style="margin:0 0 8px">Add a copy of a bid to a sub-space when it reaches a column. The original stays here. The copy is made once, and the two bids don’t stay in sync afterward.</p>';
+    rules.forEach(function(r){
+      var t=D.spaces.filter(function(x){return x.id===r.to})[0];
+      var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
+      var warn=!t?'That space no longer exists, so this does nothing.':(t.parentId!==p.id?'That space is no longer a sub-space of this one, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':''));
+      h+='<div class="srow"><div style="flex:1 1 220px;min-width:0">When a bid enters <b>'+esc(r.status)+'</b>, add a copy to <b>'+esc(t?t.name:"a deleted space")+'</b>'+(r.col?' in <b>'+esc(r.col)+'</b>':' in its first column')+
+        (warn?'<div class="fine" style="color:var(--high);margin:2px 0 0">'+warn+'</div>':'')+'</div><button class="btn small danger" data-delrule="'+esc(r.id)+'">Remove</button></div>';
+    });
+    if(!rules.length)h+='<p class="fine">No automations yet.</p>';
+    if(!kids.length){
+      h+='<p class="fine">Create a sub-space first (see Space details above), then you can send bids to it.</p>';
+    }else{
+      var f=ui.ar,tgt=kids.filter(function(k){return k.id===f.to})[0]||kids[0];
+      h+='<div class="ctrl" style="margin-top:10px">'+
+        '<div><label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,f.status||p.statuses[0].name)}).join("")+'</select></div>'+
+        '<div><label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select></div>'+
+        '<div><label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select></div></div>'+
+        '<div style="margin-top:10px"><button class="btn small primary" data-addrule>Add automation</button></div>';
+    }
+    return h+'</section>';
+  }
+  function srcLinkHTML(is){
+    return /^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="_blank" rel="noopener">Open the project</a></div>':'';
+  }
+
+  /* ---------- divisions and spaces ---------- */
+  function curDiv(){return D.divs.concat(D.archived).filter(function(d){return d.id===state.div})[0]||null}
+  function isArchived(id){return D.archived.some(function(d){return d.id===id})}
+  function divSpaces(divId){return D.spaces.filter(function(s){return s.divisionId===divId})}
+  function curSpace(){return divSpaces(state.div).filter(function(s){return s.id===state.cur})[0]||null}
+  function myDivs(){return D.divs}
+  function isDivAdmin(d){return !!d&&!d.archived}
+  function isMember(d){return !!d}
+  function canAct(){return CANWRITE&&isMember(curDiv())&&!isArchived(state.div)}
+  function teamIds(d){return D.people.filter(function(p){return p.divisionId===d.id}).map(function(p){return p.id})}
+  function teamOptions(cur){
+    var d=curDiv(),ids=d?teamIds(d):[];
+    if(cur&&ids.indexOf(cur)<0)ids.push(cur);
+    ids.sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
+    return '<option value="">Unassigned</option>'+ids.map(function(i){return opt(i,nameOf(i),cur||"")}).join("");
+  }
+  function spaceTree(divId){
+    var list=divSpaces(divId),ids={},out=[];
+    list.forEach(function(s){ids[s.id]=1});
+    function walk(pid,depth){
+      list.filter(function(s){return pid===""?(!s.parentId||!ids[s.parentId]):s.parentId===pid}).forEach(function(s){out.push({sp:s,depth:depth});walk(s.id,depth+1)});
+    }
+    walk("",0);
+    return out;
+  }
+  function descendants(id){
+    var out=[id];
+    D.spaces.forEach(function(s){
+      if(s.parentId===id&&out.indexOf(s.id)<0)descendants(s.id).forEach(function(x){if(out.indexOf(x)<0)out.push(x)});
+    });
+    return out;
+  }
+
+  /* ---------- shared html ---------- */
+  function tiHTML(t){return '<span class="ti" style="background:'+TCOLOR[t]+'" title="'+t+'">'+TGLYPH[t]+'</span>'}
+  function prHTML(p){return '<span class="pr" style="color:'+PCOLOR[p]+'" title="'+p+' priority">'+PGLYPH[p]+'</span>'}
+  function echipHTML(is){
+    var par=is.parent?byId(is.parent):null,out='';
+    if(par)out+='<span class="echip" style="--ec:var(--c5)" title="'+esc(par.title)+'">'+ikey(par)+' '+esc(par.title)+'</span>';
+    var o=is.originBidId?findBid(is.originBidId):null;
+    if(o)out+='<span class="echip" style="--ec:var(--c1)" title="Copied from '+esc(o.is.title)+'">From '+esc(o.sp.key+"-"+o.is.num)+'</span>';
+    return out;
+  }
+  function dueChip(is){return is.due?'<span class="chip'+(overdue(is)?' over':'')+'">Due '+shortDate(is.due)+'</span>':''}
+  function sbadge(is){var s=stat(proj(),is.status);return '<span class="sbadge cat-'+s.cat+'">'+esc(s.name)+'</span>'}
+  function opt(v,label,cur){return '<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(label)+'</option>'}
+  function visible(is){
+    var f=ui.f;
+    if(f.type&&is.type!==f.type)return false;
+    if(f.pri&&is.priority!==f.pri)return false;
+    if(f.who&&(is.assignee||"__none")!==f.who)return false;
+    
+    var q=f.q.trim().toLowerCase();if(!q)return true;
+    return (ikey(is)+" "+is.title+" "+is.desc+" "+is.labels.join(" ")+" "+nameOf(is.assignee)).toLowerCase().indexOf(q)>-1;
+  }
+
+  /* ---------- board ---------- */
+  function boardHTML(){
+    var p=proj(),h='<div class="board">';
+    p.statuses.forEach(function(s,ci){
+      var items=p.issues.filter(function(i){return i.status===s.id});
+      var shown=items.filter(visible);
+      h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+'<span class="count">'+items.length+'</span></h2><div class="cards">';
+      shown.forEach(function(is){
+        h+='<article class="card" draggable="true" data-id="'+is.id+'"><div class="ck">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+prHTML(is.priority)+'</div>'+
+          '<button class="title" data-open="'+is.id+'">'+esc(is.title)+'</button>'+echipHTML(is)+
+          '<div class="meta">'+dueChip(is)+avHTML(is.assignee)+'</div>'+
+          '<div class="mv"><button data-mv="-1" data-id="'+is.id+'" aria-label="Move to previous column"'+(ci===0?' disabled':'')+'>&larr;</button>'+
+          '<button data-mv="1" data-id="'+is.id+'" aria-label="Move to next column"'+(ci===p.statuses.length-1?' disabled':'')+'>&rarr;</button></div></article>';
+      });
+      if(!shown.length)h+='<div class="empty">'+(items.length?'No bids match your filters.':'Nothing here yet. Drag a bid in or create one.')+'</div>';
+      h+='</div>'+(canAct()?'<button class="add" data-add="'+s.id+'">+ Create bid</button>':'')+'</section>';
+    });
+    return h+'</div>';
+  }
+
+  /* ---------- list ---------- */
+  function sortVal(is,k){
+    var p=proj();
+    if(k==="num")return is.num;
+    if(k==="status")return p.statuses.findIndex(function(s){return s.id===is.status});
+    if(k==="priority")return PRI.indexOf(is.priority);
+    if(k==="due")return is.due||"9999";
+    return (is[k]||"~").toLowerCase();
+  }
+  function cmp(a,b){var x=sortVal(a,ui.sort),y=sortVal(b,ui.sort);return (x<y?-1:x>y?1:0)*ui.dir}
+  var LCOLS={num:"Key",title:"Summary",status:"Status",priority:"Priority",assignee:"Assignee",due:"Due date"};
+  function listOrder(){
+    var def=["num","title","status","priority","assignee","due"],o=(state.listCols||[]).filter(function(k){return def.indexOf(k)>-1});
+    def.forEach(function(k){if(o.indexOf(k)<0)o.push(k)});
+    return o;
+  }
+  function moveCol(from,to){
+    if(from===to)return;
+    var o=listOrder(),i=o.indexOf(from),j=o.indexOf(to);
+    if(i<0||j<0)return;
+    o.splice(i,1);o.splice(j,0,from);
+    state.listCols=o;save();render();
+  }
+  function listCell(k,is){
+    var p=proj();
+    if(k==="num")return '<td><span class="kc">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span></span></td>';
+    if(k==="title")return '<td><button class="lt" data-open="'+is.id+'">'+esc(is.title)+'</button>'+(echipHTML(is)?'<div style="margin-top:4px">'+echipHTML(is)+'</div>':'')+'</td>';
+    if(k==="status")return '<td><select data-status="'+is.id+'" aria-label="Status for '+ikey(is)+'">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></td>';
+    if(k==="priority")return '<td><span class="kc">'+prHTML(is.priority)+' '+is.priority+'</span></td>';
+    if(k==="assignee")return '<td>'+esc(nameOf(is.assignee))+'</td>';
+    return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?shortDate(is.due):'None')+'</td>';
+  }
+  function listHTML(){
+    var p=proj(),order=listOrder(),rows=p.issues.filter(visible).sort(cmp);
+    var h='<div class="lbar"><button class="btn small" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'">Columns</button><span class="fine" style="margin:0">Drag a column by its handle to reorder it.</span></div>';
+    if(ui.colsOpen){
+      h+='<div class="lbar">'+order.map(function(k,i){
+        return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+LCOLS[k]+' left"'+(i===0?' disabled':'')+'>&larr;</button><span style="padding:5px 4px;font-size:14px">'+LCOLS[k]+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+LCOLS[k]+' right"'+(i===order.length-1?' disabled':'')+'>&rarr;</button></span>';
+      }).join("")+'<button class="btn small" data-colreset>Reset order</button></div>';
+    }
+    h+='<div class="tablewrap"><table class="list"><thead><tr>'+order.map(function(k){
+      var on=ui.sort===k;
+      return '<th scope="col" draggable="true" data-lcol="'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">⋮⋮</span><button data-sort="'+k+'">'+LCOLS[k]+(on?(ui.dir>0?' ▲':' ▼'):'')+'</button></div></th>';
+    }).join("")+'</tr></thead><tbody>';
+    rows.forEach(function(is){h+='<tr>'+order.map(function(k){return listCell(k,is)}).join("")+'</tr>'});
+    if(!rows.length)h+='<tr><td colspan="'+order.length+'" class="empty">No bids match your filters.</td></tr>';
+    return h+'</tbody></table></div>';
+  }
+
+  /* ---------- epics ---------- */
+  function kidRows(kids){
+    return kids.map(function(k){return '<button class="drow" data-open="'+k.id+'">'+tiHTML(k.type)+'<span class="key">'+ikey(k)+'</span><span class="t">'+esc(k.title)+'</span>'+sbadge(k)+'</button>'}).join("");
+  }
+  function quickAddHTML(id,noun){
+    return '<div class="qa"><input data-quick="'+id+'" placeholder="Add '+noun+'" aria-label="Add '+noun+'"><button class="btn small" data-quickadd="'+id+'">Add</button></div>';
+  }
+
+  /* ---------- calendar ---------- */
+  function chipHTML(is){
+    var od=overdue(is);
+    var clock='<svg class="od" width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Overdue"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    return '<button class="cc'+(od?' over':'')+(isDone(is)?' fin':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" style="--tc:'+TCOLOR[is.type]+';--pc:'+PCOLOR[is.priority]+'" title="'+esc(ikey(is)+" "+is.title)+'"><span class="ci">'+TGLYPH[is.type]+'</span><span class="ct">'+esc(ikey(is)+" "+is.title)+'</span><span class="cx">'+(od?clock:'')+prHTML(is.priority)+'</span></button>';
+  }
+  function calHTML(){
+    var p=proj(),T=today(),mode=state.calMode==="week"?"week":"month",by={},undated=[],cells=[],title,i;
+    var DOWN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],HDR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    p.issues.filter(visible).forEach(function(x){if(x.due)(by[x.due]=by[x.due]||[]).push(x);else if(!isDone(x))undated.push(x)});
+    var cm=state.calMonth.split("-"),y=+cm[0],m=+cm[1]-1;
+    if(mode==="week"){
+      var sd=parse(state.calSel),ws=new Date(sd.getFullYear(),sd.getMonth(),sd.getDate()-((sd.getDay()+6)%7));
+      for(i=0;i<7;i++)cells.push(new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()+i));
+      var we=cells[6];
+      title=MONTHS[ws.getMonth()]+" "+ws.getDate()+" – "+(we.getMonth()!==ws.getMonth()?MONTHS[we.getMonth()]+" ":"")+we.getDate()+", "+we.getFullYear();
+    }else{
+      var first=new Date(y,m,1),lead=(first.getDay()+6)%7,days=new Date(y,m+1,0).getDate(),weeks=Math.ceil((lead+days)/7);
+      for(i=0;i<weeks*7;i++)cells.push(new Date(y,m,1-lead+i));
+      title=first.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+    }
+    var sel=state.calSel,items=by[sel]||[];
+    var h='<div class="calwrap"><div><div class="cal-head"><h2>'+title+'</h2>'+
+      '<button class="btn small" data-cal="-1" aria-label="Previous '+mode+'">&larr;</button>'+
+      '<button class="btn small" data-cal="today">Today</button>'+
+      '<button class="btn small" data-cal="1" aria-label="Next '+mode+'">&rarr;</button>'+
+      '<div class="seg" role="group" aria-label="Calendar range">'+[["month","Month"],["week","Week"]].map(function(x){return '<button data-calmode="'+x[0]+'" aria-pressed="'+(mode===x[0])+'">'+x[1]+'</button>'}).join("")+'</div></div>'+
+      '<div class="calscroll"><div class="cal'+(mode==="week"?' week':'')+'">';
+    HDR.forEach(function(d){h+='<div class="dow">'+d+'</div>'});
+    cells.forEach(function(d){
+      var s=ymd(d),list=by[s]||[],out=mode==="month"&&d.getMonth()!==m,wk=d.getDay()===0||d.getDay()===6;
+      var wide=mode==="week"||d.getDate()===1;
+      var label=(mode==="week"?'<span class="dwk">'+DOWN[d.getDay()]+' </span>':'')+(d.getDate()===1?MONTHS[d.getMonth()]+' ':'')+d.getDate();
+      var shown=mode==="week"?list:list.slice(0,2);
+      h+='<div class="day'+(out?' out':'')+(wk?' we':'')+(s===T?' today':'')+(s===sel?' sel':'')+'" data-day="'+s+'" tabindex="0" role="button" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
+        '<div class="dn"><span class="dnn">'+label+'</span></div>'+'<div class="dots">'+list.slice(0,3).map(function(x){return '<i'+(isDone(x)?' class="fin"':'')+' style="background:'+(overdue(x)?'var(--high)':TCOLOR[x.type])+'"></i>'}).join("")+(list.length>3?'<b>+'+(list.length-3)+'</b>':'')+'</div>'+shown.map(chipHTML).join("")+
+        (mode==="month"&&list.length>2?'<button class="more" data-more="'+s+'">'+(list.length-2)+' more</button>':'')+'</div>';
+    });
+    h+='<div class="calfoot">Showing '+cells.reduce(function(a,d){return a+(by[ymd(d)]||[]).length},0)+' of '+p.issues.filter(function(x){return x.due&&visible(x)}).length+' scheduled bids</div></div></div><section class="panel daypanel"><h3>'+parse(sel).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})+'</h3>';
+    if(!items.length)h+='<div class="empty">No bids due this day.</div>';
+    h+=kidRows(items)+'<div style="margin-top:10px"><button class="btn small" data-add-due="'+sel+'">Create bid due this day</button></div></section></div>';
+    h+='<aside class="panel unsch"><h3>Unscheduled work <span class="count">'+undated.length+'</span></h3>';
+    if(!undated.length)h+='<div class="empty">Every open bid has a due date.</div>';
+    undated.slice(0,40).forEach(function(x){
+      h+='<div class="unrow" draggable="true" data-iid="'+x.id+'">'+tiHTML(x.type)+'<button class="lt t" data-open="'+x.id+'">'+esc(x.title)+'</button><button class="btn small" data-schedule="'+x.id+'" aria-label="Schedule '+esc(ikey(x))+' on '+shortDate(sel)+'">'+shortDate(sel)+'</button></div>';
+    });
+    return h+'<p class="fine">Drag a bid onto a day, or tap a date button to schedule it on the selected day.</p></aside></div>';
+  }
+
+  /* ---------- reports ---------- */
+  function scoped(){
+    var c=state.rcfg;
+    return proj().issues.filter(function(t){
+      if(c.scope==="open"&&isDone(t))return false;
+      if(c.scope==="done"&&!isDone(t))return false;
+      if(c.scope==="overdue"&&!overdue(t))return false;
+      if(c.type&&t.type!==c.type)return false;
+      if(c.pri&&t.priority!==c.pri)return false;
+      if(c.who&&(t.assignee||"__none")!==c.who)return false;
+      if(c.label&&t.labels.indexOf(c.label)<0)return false;
+      return true;
+    });
+  }
+  function groupKeys(t,g){
+    if(g==="status")return [t.status];
+    if(g==="type")return [t.type];
+    if(g==="priority")return [t.priority];
+    if(g==="assignee")return [t.assignee||"__none"];
+    
+    if(g==="label")return t.labels.length?t.labels:["No label"];
+    if(g==="due")return [t.due?t.due.slice(0,7):"No due date"];
+    if(g==="created")return [weekStart(t.created)];
+    return t.doneAt?[weekStart(t.doneAt)]:["Not completed"];
+  }
+  function keyLabel(g,k){
+    if(g==="assignee")return k==="__none"?"Unassigned":nameOf(k);
+    if(g==="status")return stat(proj(),k).name;
+    if(g==="due"&&/^\d/.test(k))return monthLabel(k);
+    if((g==="created"||g==="completed")&&/^\d/.test(k))return "Week of "+shortDate(k);
+    return k;
+  }
+  function nextMonth(k){var p=k.split("-"),d=new Date(+p[0],+p[1],1);return d.getFullYear()+"-"+pad(d.getMonth()+1)}
+  function buildGroups(list,g){
+    var map={};
+    list.forEach(function(t){groupKeys(t,g).forEach(function(k){(map[k]=map[k]||[]).push(t)})});
+    var keys=Object.keys(map);
+    if(g==="status")keys=proj().statuses.map(function(s){return s.id});
+    else if(g==="priority")keys=PRI.slice();
+    else if(g==="type")keys=TYPES.slice();
+    else if(TIME[g]){
+      var real=keys.filter(function(k){return /^\d/.test(k)}).sort(),extra=keys.filter(function(k){return !/^\d/.test(k)}),filled=[];
+      if(real.length){var k=real[0],last=real[real.length-1],guard=0;while(k<=last&&guard++<240){filled.push(k);k=g==="due"?nextMonth(k):addDays(k,7)}}
+      keys=filled.concat(extra);
+    }else keys.sort(function(a,b){return map[b].length-map[a].length||a.localeCompare(b)});
+    return keys.map(function(k){return {key:k,label:keyLabel(g,k),items:map[k]||[]}});
+  }
+  function colorFor(g,k,i){
+    if(g==="priority")return PCOLOR[k];
+    if(g==="type")return TCOLOR[k];
+    if(g==="status"){var c=stat(proj(),k).cat;return c==="done"?"var(--low)":c==="doing"?"var(--accent)":"var(--c5)"}
+    if(TIME[g])return "var(--accent)";
+    return "var(--c"+(i%6+1)+")";
+  }
+  function groupLabel(g){return GROUPS.filter(function(x){return x[0]===g})[0][1]}
+  function chartHTML(groups,total){
+    var c=state.rcfg,g=c.groupBy,h="";
+    if(!total)return '<p class="empty">No bids match these settings. Loosen the filters to see data.</p>';
+    var max=Math.max.apply(null,groups.map(function(x){return x.items.length}).concat([1]));
+    var on=function(i){return ui.rsel===i?' on':''};
+    if(c.chart==="table"){
+      h='<div class="tablewrap" style="margin:0"><table class="list" style="min-width:0"><thead><tr><th scope="col"><button>Group</button></th><th scope="col"><button>Bids</button></th><th scope="col"><button>Share</button></th></tr></thead><tbody>';
+      groups.forEach(function(gr,i){h+='<tr><td><button class="lt" data-gi="'+i+'">'+esc(gr.label)+'</button></td><td>'+gr.items.length+'</td><td>'+pct(gr.items.length,total)+'%</td></tr>'});
+      h+='</tbody></table></div>';
+    }else if(c.chart==="donut"){
+      var sum=groups.reduce(function(a,x){return a+x.items.length},0),off=0,segs="";
+      groups.forEach(function(gr,i){
+        var n=gr.items.length;if(!n)return;
+        var p=n/sum*100;
+        segs+='<circle r="15.9155" cx="21" cy="21" fill="none" stroke-width="6" style="stroke:'+colorFor(g,gr.key,i)+'" stroke-dasharray="'+p+' '+(100-p)+'" stroke-dashoffset="'+(25-off)+'"></circle>';
+        off+=p;
+      });
+      h='<div class="donutwrap"><svg class="donut" viewBox="0 0 42 42" role="img" aria-label="Donut chart of bids by '+esc(groupLabel(g))+'"><circle r="15.9155" cx="21" cy="21" fill="none" stroke-width="6" style="stroke:var(--chip)"></circle>'+segs+
+        '<text x="21" y="22.4" text-anchor="middle" font-size="7" font-weight="700" style="fill:var(--ink)">'+total+'</text></svg><div class="legend">'+
+        groups.map(function(gr,i){return '<button class="leg'+on(i)+'" data-gi="'+i+'"><span class="sw" style="background:'+colorFor(g,gr.key,i)+'"></span>'+esc(gr.label)+'<span class="n">'+gr.items.length+' <small>'+pct(gr.items.length,total)+'%</small></span></button>'}).join("")+'</div></div>';
+    }else if(TIME[g]){
+      h='<div class="vb">'+groups.map(function(gr,i){
+        var n=gr.items.length;
+        return '<button class="vcol'+on(i)+'" data-gi="'+i+'"><span class="vv">'+n+'</span><span class="bw"><span class="bar" style="height:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="vl">'+esc(gr.label.replace("Week of ",""))+'</span></button>';
+      }).join("")+'</div>';
+    }else{
+      h=groups.map(function(gr,i){
+        var n=gr.items.length;
+        return '<button class="hb'+on(i)+'" data-gi="'+i+'"><span class="lbl">'+esc(gr.label)+'</span><span class="track"><span class="fill" style="width:'+(n/max*100)+'%;background:'+colorFor(g,gr.key,i)+'"></span></span><span class="val">'+n+' <small>'+pct(n,total)+'%</small></span></button>';
+      }).join("");
+    }
+    if(g==="label")h+='<p class="fine">A bid with several labels is counted once for each label.</p>';
+    return h;
+  }
+  function stats(list){
+    var T=today(),soon=addDays(T,7);
+    return {total:list.length,done:list.filter(isDone).length,over:list.filter(overdue).length,
+      soon:list.filter(function(t){return t.due&&!isDone(t)&&t.due>=T&&t.due<=soon}).length,
+      un:list.filter(function(t){return !t.assignee}).length};
+  }
+  function reportsHTML(){
+    var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy),p=proj();
+    ui.groups=groups;
+    var whos=[],labels=[];
+    p.issues.forEach(function(t){
+      if(t.assignee&&whos.indexOf(t.assignee)<0)whos.push(t.assignee);
+      t.labels.forEach(function(l){if(labels.indexOf(l)<0)labels.push(l)});
+    });
+    whos.sort();labels.sort();
+    var h='<div class="rep">';
+    h+='<div class="saved-row"><span class="fine" style="margin:0">Saved reports</span>'+
+      (state.reports.length?state.reports.map(function(r,i){return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">&times;</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
+    h+='<section class="panel"><div class="ctrl">'+
+      '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+GROUPS.map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
+      '<div><label for="rc-c">Chart</label><select id="rc-c" data-rc="chart">'+opt("bar","Bars",c.chart)+opt("donut","Donut",c.chart)+opt("table","Table",c.chart)+'</select></div>'+
+      '<div><label for="rc-s">Bids</label><select id="rc-s" data-rc="scope">'+opt("all","All bids",c.scope)+opt("open","Open only",c.scope)+opt("done","Done only",c.scope)+opt("overdue","Overdue only",c.scope)+'</select></div>'+
+      '<div><label for="rc-t">Type</label><select id="rc-t" data-rc="type">'+opt("","Any type",c.type)+TYPES.map(function(x){return opt(x,x,c.type)}).join("")+'</select></div>'+
+      '<div><label for="rc-p">Priority</label><select id="rc-p" data-rc="pri">'+opt("","Any priority",c.pri)+PRI.map(function(x){return opt(x,x,c.pri)}).join("")+'</select></div>'+
+      '<div><label for="rc-w">Assignee</label><select id="rc-w" data-rc="who">'+opt("","Anyone",c.who)+opt("__none","Unassigned",c.who)+whos.map(function(w){return opt(w,nameOf(w),c.who)}).join("")+'</select></div>'+
+      '<div><label for="rc-l">Label</label><select id="rc-l" data-rc="label">'+opt("","Any label",c.label)+labels.map(function(l){return opt(l,l,c.label)}).join("")+'</select></div>'+
+      '</div><div class="ctrl" style="margin-top:12px;align-items:end"><div style="grid-column:span 2"><label for="rname">Report name</label><input id="rname" maxlength="60" placeholder="Name this report to save it" value="'+esc(c.name||"")+'"></div>'+
+      '<div style="display:flex;gap:8px"><button class="btn primary" data-act="saveReport">Save report</button><button class="btn" data-act="copy">Copy summary</button></div></div></section>';
+    h+='<div class="stats">'+
+      '<div class="stat"><b>'+s.total+'</b><span>Bids</span></div>'+
+      '<div class="stat"><b>'+pct(s.done,s.total)+'%</b><span>Done ('+s.done+')</span></div>'+
+      '<div class="stat"><b>'+s.over+'</b><span>Overdue</span></div>'+
+      '<div class="stat"><b>'+s.soon+'</b><span>Due in 7 days</span></div>'+
+      '<div class="stat"><b>'+s.un+'</b><span>Unassigned</span></div></div>';
+    h+='<section class="panel"><h3>'+esc(c.name||("Bids by "+groupLabel(c.groupBy).toLowerCase()))+'</h3>'+chartHTML(groups,s.total)+'</section>';
+    if(ui.rsel!==null&&groups[ui.rsel]){
+      var gr=groups[ui.rsel];
+      h+='<section class="panel"><h3>'+esc(gr.label)+' ('+gr.items.length+')</h3>'+
+        (gr.items.length?kidRows(gr.items):'<div class="empty">No bids in this group.</div>')+
+        '<div style="margin-top:10px"><button class="btn small" data-act="clearSel">Close list</button></div></section>';
+    }
+    return h+'</div>';
+  }
+  function summaryText(){
+    var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy);
+    var lines=[(c.name||(proj().name+" report"))+": by "+groupLabel(c.groupBy).toLowerCase(),
+      "Bids: "+s.total+", done: "+pct(s.done,s.total)+"%, overdue: "+s.over+", due in 7 days: "+s.soon+", unassigned: "+s.un,""];
+    groups.forEach(function(gr){lines.push(gr.label+": "+gr.items.length)});
+    return lines.join("\n");
+  }
+  function copyText(text){
+    function fallback(){
+      var ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
+      var ok=false;try{ok=document.execCommand("copy")}catch(e){}
+      document.body.removeChild(ta);toast(ok?"Summary copied":"Couldn’t copy the summary");
+    }
+    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){toast("Summary copied")},fallback);else fallback()}catch(e){fallback()}
+  }
+
+  function tplStatuses(id){
+    var t=D.config.templates.filter(function(x){return x.id===id})[0];
+    var src=t?t.statuses:[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
+    return src.map(function(x){return {id:uid("s"),name:x.name,cat:x.cat}});
+  }
+  function applyTemplate(p,tpl){
+    var old=p.statuses.slice();
+    if(!tpl.statuses.length)return;
+    p.statuses=tplStatuses(tpl.id);
+    p.issues.forEach(function(is){
+      var os=old.filter(function(x){return x.id===is.status})[0]||old[0];
+      var nt=p.statuses.filter(function(x){return x.name.toLowerCase()===os.name.toLowerCase()})[0]||p.statuses.filter(function(x){return x.cat===os.cat})[0]||p.statuses[0];
+      if(nt.name!==os.name)logH(is,"Status",os.name,nt.name);
+      applyStatus(p,is,nt.id);
+    });
+  }
+
+  /* ---------- settings ---------- */
+  function settingsHTML(){
+    var p=proj(),tpls=D.config.templates,nBids=0;
+    descendants(p.id).forEach(function(id){D.spaces.forEach(function(s){if(s.id===id)nBids+=s.issues.length})});
+    var h='<div class="rep"><section class="panel"><h3>Space details</h3><div class="ctrl"><div><label for="pname">Name</label><input id="pname" maxlength="40" value="'+esc(p.name)+'"></div>'+
+      '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
+      '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
+    h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">Columns appear on the board in this order. The category decides which bids count as done in reports.</p>';
+    p.statuses.forEach(function(s,i){
+      var n=p.issues.filter(function(x){return x.status===s.id}).length;
+      h+='<div class="srow"><input data-sname="'+s.id+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30">'+
+        '<select data-scat="'+s.id+'" aria-label="Category for '+esc(s.name)+'">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
+        '<button class="btn small" data-sup="'+s.id+'" aria-label="Move column left"'+(i===0?' disabled':'')+'>&uarr;</button>'+
+        '<button class="btn small" data-sdown="'+s.id+'" aria-label="Move column right"'+(i===p.statuses.length-1?' disabled':'')+'>&darr;</button>'+
+        '<button class="btn small danger" data-sdel="'+s.id+'"'+(p.statuses.length<2?' disabled':'')+'>'+(ui.armS===s.id?'Tap to confirm':'Remove')+'</button>'+
+        '<span class="cnt">'+n+' bid'+(n===1?'':'s')+'</span></div>';
+    });
+    h+='<div class="srow"><input id="ns" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="nsc" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-addstatus>Add column</button></div>';
+    if(!p.statuses.some(function(s){return s.cat==="done"}))h+='<p class="fine" style="color:var(--high)">No column is in the Done category, so reports will show nothing as done.</p>';
+    h+='<p class="fine">Removing a column moves its bids to a neighboring column.</p></section>';
+    h+=automationsHTML(p);
+    h+='<section class="panel"><h3>Organization workflows</h3><p class="fine" style="margin:0 0 8px">Pick a workflow made by your organization. Applying one replaces this space’s columns.</p>';
+    tpls.forEach(function(t){
+      h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(t.name)+'</b><div class="fine" style="margin:2px 0 0">'+t.statuses.map(function(x){return esc(x.name)}).join(" → ")+'</div></div>'+
+        '<button class="btn small" data-applytpl="'+t.id+'">'+(ui.armT===t.id?'Tap to confirm':'Apply to this space')+'</button></div>';
+    });
+    if(!tpls.length)h+='<p class="fine">Your organization hasn’t created any workflow templates yet.</p>';
+    if(ui.armT)h+='<p class="fine">Bids move to the column with the same name, or the same category.</p>';
+    if(ORG)h+='<div class="srow"><input id="tname" placeholder="Save this workflow as an org template" maxlength="40" aria-label="Template name"><button class="btn small primary" data-savetpl>Save as org template</button></div>';
+    h+='</section>';
+    h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section></div>';
+    return h;
+  }
+
+  /* ---------- render ---------- */
+  function renderSide(){
+    var d=curDiv(),h="";
+    if(ORG)h+='<button class="proj'+(state.view==="overview"?' on':'')+'" data-view="overview"><span class="pi" style="background:var(--c6)">O</span><span class="pn">Overview</span></button>';
+    if(state.view==="overview"){
+      h+='<div class="sl">Divisions</div>'+D.divs.map(function(x,i){
+        return '<button class="proj" data-opendiv="'+x.id+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
+      }).join("");
+    }else if(d){
+      h+='<div class="sl">'+esc(d.name)+'</div>';
+      spaceTree(d.id).forEach(function(n){
+        var s=n.sp;
+        h+='<button class="proj'+(s.id===state.cur&&state.view!=="division"?' on':'')+'" style="padding-left:'+(10+n.depth*16)+'px" data-space="'+s.id+'"><span class="pi" style="background:var(--c'+(s.ci%6+1)+')">'+esc(s.key.slice(0,2))+'</span><span class="pn">'+esc(s.name)+'</span></button>';
+      });
+      if(isDivAdmin(d))h+='<button class="proj add" data-newspace>+ Create space</button>';
+      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division" style="margin-top:8px"><span class="pi" style="background:var(--c5)">T</span><span class="pn">Team</span></button>';
+    }
+    $("plist").innerHTML=h;
+  }
+  function renderDivTabs(){
+    var vis=myDivs(),h="";
+    if(ORG)h+='<button class="dtab'+(state.view==="overview"?' on':'')+'" data-view="overview">Overview</button>';
+    vis.forEach(function(d){h+='<button class="dtab'+(state.view!=="overview"&&d.id===state.div?' on':'')+'" data-div="'+d.id+'">'+esc(d.name)+'</button>'});
+    if(state.view!=="overview"&&isArchived(state.div)){var ad=curDiv();h+='<button class="dtab on" data-div="'+esc(state.div)+'">'+esc(ad?ad.name:"Archived")+' (archived)</button>'}
+    $("dtabs").innerHTML=h;
+    $("dtabs").style.display=(ORG||vis.length>1)?"":"none";
+  }
+  function renderFsel(){
+    var p=proj(),f=ui.f,d=curDiv(),ids=d?teamIds(d):[];
+    p.issues.forEach(function(i){if(i.assignee&&ids.indexOf(i.assignee)<0)ids.push(i.assignee)});
+    ids.sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
+    $("fsel").innerHTML=
+      '<select data-ff="type" aria-label="Filter by type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
+      '<select data-ff="who" aria-label="Filter by assignee">'+opt("","Anyone",f.who)+opt("__none","Unassigned",f.who)+ids.map(function(i){return opt(i,nameOf(i),f.who)}).join("")+'</select>'+
+      '<select data-ff="pri" aria-label="Filter by priority">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>';
+  }
+  function emptyHTML(title,body,btn){
+    return '<div class="rep"><section class="panel"><h3>'+title+'</h3><p class="fine" style="margin:0 0 10px;font-size:14px">'+body+'</p>'+(btn||'')+'</section></div>';
+  }
+  function noDivisionHTML(){
+    return emptyHTML("No divisions found","Divisions come from Bid Scout. Add one there and it will show up here.");
+  }
+  function noSpaceHTML(d){
+    return isDivAdmin(d)?emptyHTML("No spaces yet","A space is a board of bids. You can nest sub-spaces inside it later.",'<button class="btn primary" data-newspace>Create space</button>')
+      :emptyHTML("No spaces yet","Ask a division admin to create the first space.");
+  }
+  function tplEditorHTML(){
+    var T=D.config.templates;
+    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Divisions pick from these when they create a space or change its workflow.</p>';
+    T.forEach(function(t){
+      h+='<div class="tpl"><div class="srow"><input data-tname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Template name" maxlength="40"><button class="btn small danger" data-deltpl="'+t.id+'">Delete</button></div>';
+      t.statuses.forEach(function(s,i){
+        var k=t.id+":"+i;
+        h+='<div class="srow"><input data-tcname="'+k+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30"><select data-tccat="'+k+'" aria-label="Category">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
+          '<button class="btn small" data-tup="'+k+'" aria-label="Move up"'+(i===0?' disabled':'')+'>&uarr;</button><button class="btn small" data-tdown="'+k+'" aria-label="Move down"'+(i===t.statuses.length-1?' disabled':'')+'>&darr;</button>'+
+          '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div>';
+      });
+      h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div></div>';
+    });
+    if(!T.length)h+='<p class="fine">No templates yet.</p>';
+    h+='<div class="srow"><input id="newtpl" placeholder="New template name" maxlength="40" aria-label="New template name"><button class="btn small primary" data-newtpl>Create template</button></div></section>';
+    return h;
+  }
+  function overviewHTML(){
+    var T=today(),soon=addDays(T,7),horizon=addDays(T,14),h='<div class="rep">';
+    var tot={n:0,open:0,over:0,soon:0},rows=[],dl=[];
+    D.divs.forEach(function(d){
+      var sps=divSpaces(d.id),c={todo:0,doing:0,done:0,over:0,soon:0,n:0};
+      sps.forEach(function(sp){sp.issues.forEach(function(is){
+        if(is.type==="Subtask")return;
+        var cat=stat(sp,is.status).cat;c[cat]=(c[cat]||0)+1;c.n++;
+        if(is.due&&cat!=="done"){
+          if(is.due<T)c.over++;else if(is.due<=soon)c.soon++;
+          if(is.due<=horizon)dl.push({is:is,sp:sp,d:d});
+        }
+      })});
+      tot.n+=c.n;tot.open+=c.todo+c.doing;tot.over+=c.over;tot.soon+=c.soon;
+      rows.push({d:d,spaces:sps.length,c:c});
+    });
+    dl.sort(function(a,b){return a.is.due<b.is.due?-1:a.is.due>b.is.due?1:0});
+    h+='<h2 class="sec">All divisions</h2>';
+    h+='<div class="stats">'+[[D.divs.length,"Divisions"],[tot.n,"Bids"],[tot.open,"Open"],[tot.over,"Overdue"],[tot.soon,"Due in 7 days"]].map(function(x){return '<div class="stat"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'}).join("")+'</div>';
+    if(!rows.length)h+='<div class="panel"><p class="empty">No divisions yet. Add one in Bid Scout and it will show up here.</p></div>';
+    rows.forEach(function(r){
+      var c=r.c,n=c.n||1,ppl=teamIds(r.d).length;
+      h+='<section class="panel"><button class="eh" data-opendiv="'+r.d.id+'" style="margin-bottom:10px"><span class="et">'+esc(r.d.name)+'</span><span class="fine" style="margin:0">'+ppl+' '+(ppl===1?'person':'people')+' · '+r.spaces+' space'+(r.spaces===1?'':'s')+'</span></button>'+
+        '<div class="sbar" role="img" aria-label="To do '+c.todo+', in progress '+c.doing+', done '+c.done+'"><i style="width:'+(c.todo/n*100)+'%;background:var(--c5)"></i><i style="width:'+(c.doing/n*100)+'%;background:var(--med)"></i><i style="width:'+(c.done/n*100)+'%;background:var(--low)"></i></div>'+
+        '<div class="kpis"><span class="chip">'+c.n+' bid'+(c.n===1?'':'s')+'</span><span class="chip">'+c.todo+' to do</span><span class="chip">'+c.doing+' in progress</span><span class="chip">'+c.done+' done</span>'+
+        (c.over?'<span class="chip over">'+c.over+' overdue</span>':'')+(c.soon?'<span class="sbadge cat-doing">'+c.soon+' due in 7 days</span>':'')+'</div></section>';
+    });
+    h+='<section class="panel"><h3>Upcoming deadlines</h3>';
+    if(!dl.length)h+='<p class="empty">Nothing is due in the next 14 days.</p>';
+    dl.slice(0,20).forEach(function(x){
+      h+='<button class="drow" data-gotobid="'+x.is.id+'"><span class="t">'+esc(x.is.title)+'<span class="fine" style="display:block;margin:2px 0 0">'+esc(x.d.name)+' · '+esc(x.sp.name)+'</span></span><span class="chip'+(x.is.due<T?' over':'')+'">Due '+shortDate(x.is.due)+'</span></button>';
+    });
+    if(dl.length>20)h+='<p class="fine">Showing the first 20 of '+dl.length+'.</p>';
+    h+='</section>';
+    if(D.archived.length){
+      h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
+      D.archived.forEach(function(a){
+        var sps=divSpaces(a.id),nb=0;
+        sps.forEach(function(sp){nb+=sp.issues.length});
+        h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(a.name)+'</b><div class="fine" style="margin:2px 0 0">'+sps.length+' space'+(sps.length===1?'':'s')+' · '+nb+' bid'+(nb===1?'':'s')+(a.archivedAt?' · deleted '+esc(String(a.archivedAt).slice(0,10)):'')+'</div></div>'+
+          '<button class="btn small" data-opendiv="'+esc(a.id)+'">View</button>'+
+          '<button class="btn small danger" data-purgediv="'+esc(a.id)+'">'+(ui.armD===a.id?'Tap to delete forever':'Delete forever')+'</button></div>';
+      });
+      h+='</section>';
+    }
+    return h+tplEditorHTML()+'</div>';
+  }
+  function divisionHTML(d){
+    var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
+    var h='<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>';
+    h+='<section class="panel"><h3>People</h3>';
+    ids.forEach(function(id){
+      h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
+    });
+    if(!ids.length)h+='<p class="fine">No one yet. Add the people who work on this division’s bids so you can assign them.</p>';
+    h+='<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section></div>';
+    return h;
+  }
+  function render(){
+    var v=state.view,d=curDiv(),p=proj();
+    var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
+    if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
+    renderSide();renderDivTabs();
+    if(v==="overview"){$("pkey").textContent="Organization";$("ptitle").textContent="Overview"}
+    else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Team"}
+    else if(p){$("pkey").textContent=(d?d.name+" · ":"")+p.key;$("ptitle").textContent=p.name}
+    else{$("pkey").textContent=d?"Division":"";$("ptitle").textContent=d?d.name:"Bid board"}
+    var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
+    var showTabs=spaceView&&!!p&&!loading&&!DENIED&&!!d;
+    $("tabs").style.display=showTabs?"":"none";
+    $("tabs").innerHTML=VIEWS.filter(function(x){return x[0]!=="settings"||isDivAdmin(d)}).map(function(x){return '<button class="tab" role="tab" data-view="'+x[0]+'" aria-selected="'+(v===x[0])+'">'+x[1]+'</button>'}).join("");
+    var showF=showTabs&&["board","list","calendar"].indexOf(v)>-1;
+    $("filters").style.display=showF?"":"none";
+    if(showF)renderFsel();
+    $("createBtn").style.display=(showTabs&&canAct())?"":"none";
+    var html;
+    if(DENIED)html=emptyHTML("Can’t open the bid board",esc(DENIED));
+    else if(loading)html='<div class="rep"><p class="fine" style="font-size:14px">Loading…</p></div>';
+    else if(v==="overview"&&ORG)html=overviewHTML();
+    else if(!d)html=noDivisionHTML();
+    else if(v==="division")html=divisionHTML(d);
+    else if(!p)html=noSpaceHTML(d);
+    else html=v==="list"?listHTML():v==="calendar"?calHTML():v==="reports"?reportsHTML():v==="settings"?settingsHTML():boardHTML();
+    if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
+    if(!DENIED&&!loading&&v!=="overview"&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
+    $("view").innerHTML=html;
+  }
+  function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
+  function resetFilters(){ui.f={q:"",type:"",who:"",pri:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
+  function switchSpace(id){
+    state.cur=id;if(state.view==="division"||state.view==="overview")state.view="board";
+    resetFilters();closeOv("ov-issue");closeDrawer();save();render();
+  }
+  function switchDiv(id){
+    state.div=id;state.cur="";state.view="board";
+    var tr=spaceTree(id);if(tr.length)state.cur=tr[0].sp.id;
+    resetFilters();closeOv("ov-issue");closeDrawer();ensureScope();save();render();
+  }
+  function gotoBid(id){
+    var sp=null;
+    D.spaces.forEach(function(s){if(s.issues.some(function(i){return i.id===id}))sp=s});
+    if(!sp)return;
+    state.div=sp.divisionId;state.cur=sp.id;state.view="board";
+    resetFilters();ensureScope();save();render();openIssue(id);
+  }
+
+  /* ---------- overlays ---------- */
+  function openOv(id){$(id).classList.add("open")}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}}
+  function openDay(s){
+    var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
+    $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+    $("dayList").innerHTML=list.length?kidRows(list):'<div class="empty">No bids due this day.</div>';
+    $("dayAdd").setAttribute("data-add-due",s);
+    openOv("ov-day");
+  }
+  function closeTop(){
+    var ids=["ov-space","ov-create","ov-issue","ov-day"];
+    for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
+    $("side").classList.remove("open");$("scrim").classList.remove("open");
+  }
+
+  /* ---------- issue modal ---------- */
+  function openIssue(id){
+    ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";
+    renderIssue();openOv("ov-issue");
+    var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
+  }
+  function renderIssue(){
+    var is=byId(ui.issueId);if(!is){closeOv("ov-issue");return}
+    renderIssueHead(is);
+    $("i-top").innerHTML=issueTopHTML(is);
+    $("i-side").innerHTML=issueSideHTML(is);
+    renderIssueAct();
+  }
+  function renderIssueHead(is){
+    var par=is.parent?byId(is.parent):null;
+    $("i-head").innerHTML=(par?'<button class="crumb-btn" data-goto="'+par.id+'">'+tiHTML(par.type)+ikey(par)+'</button><span class="key">/</span>':'')+
+      tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">&times;</button>';
+  }
+  function issueTopHTML(is){
+    var kids=children(is);
+    var h='<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
+      '<label for="i-desc">Description</label><textarea id="i-desc" data-f="desc" style="min-height:120px" placeholder="Add a description…">'+esc(is.desc)+'</textarea>';
+    if(is.type!=="Subtask"){
+      var epic=false,done=kids.filter(isDone).length;
+      h+='<div class="kids" style="margin-top:16px"><div class="kh"><b style="font:600 16px var(--head)">'+(epic?'Child issues':'Subtasks')+'</b>'+(kids.length?'<span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</div>'+
+        (kids.length?'<div class="prog" style="margin:0 0 6px"><span class="track"><span class="fill" style="width:'+pct(done,kids.length)+'%;background:var(--low)"></span></span></div>'+kidRows(kids):'<div class="empty">'+(epic?'No child issues yet.':'No subtasks yet.')+'</div>')+
+        quickAddHTML(is.id,epic?"a child issue":"a subtask")+'</div>';
+    }
+    return h;
+  }
+  function issueSideHTML(is){
+    var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask";
+    var h='<div class="detail"><label for="i-status">Status</label><select id="i-status" data-f="status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
+      '<label for="i-who">Assignee</label><select id="i-who" data-f="assignee">'+teamOptions(is.assignee)+'</select>'+
+      '<label>Reporter</label><div class="ro">'+esc(is.reporter?nameOf(is.reporter):"Unknown")+'</div>'+srcLinkHTML(is)+originHTML(is)+copiesHTML(is)+
+      '<label for="i-pri">Priority</label><select id="i-pri" data-f="priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select>'+
+      '<label for="i-type">Type</label><select id="i-type" data-f="type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>';
+    if(isSub)h+='<label for="i-parent">Parent</label><select id="i-parent" data-f="parent">'+opt("","None",is.parent)+cands.map(function(c){return opt(c.id,ikey(c)+" "+c.title,is.parent)}).join("")+'</select>';
+    h+='<label for="i-labels">Labels</label><input id="i-labels" data-f="labels" placeholder="design, bug" value="'+esc(is.labels.join(", "))+'">'+
+      '<label for="i-due">Due date</label><input id="i-due" type="date" data-f="due" value="'+esc(is.due)+'">'+
+      '<div class="meta2">Created '+shortDate(is.created)+'<br>Updated '+ago(is.updated)+'</div>'+
+      '<div style="margin-top:12px"><button class="btn small danger" data-delissue>'+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div></div>';
+    return h;
+  }
+  function renderIssueAct(){
+    var is=byId(ui.issueId);if(!is)return;
+    var tab=ui.actTab,ev=[];
+    if(tab!=="history")is.comments.forEach(function(c){ev.push({k:"c",at:c.at,c:c})});
+    if(tab!=="comments")is.history.forEach(function(x){ev.push({k:"h",at:x.at,h:x})});
+    ev.sort(function(a,b){return b.at-a.at});
+    var h='<div class="acth"><b>Activity</b><div class="seg" role="group" aria-label="Show">'+
+      [["all","All"],["comments","Comments"],["history","History"]].map(function(t){return '<button data-acttab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+'</button>'}).join("")+'</div></div>';
+    if(tab!=="history"){
+      h+='<div class="ev comp">'+avHTML(ME)+'<div class="body"><textarea id="c-new" placeholder="Add a comment…" aria-label="Add a comment">'+esc(ui.draft)+'</textarea><div class="actions"><button class="btn primary small" data-act="comment">Save comment</button></div></div></div>';
+    }
+    ev.forEach(function(e){
+      if(e.k==="c"){
+        var c=e.c;
+        h+='<div class="ev">'+avHTML(c.by)+'<div class="body"><b>'+esc(nameOf(c.by))+'</b><span class="when">'+ago(c.at)+'</span>';
+        if(ui.editC===c.id){
+          h+='<textarea id="c-edit" style="margin-top:6px">'+esc(c.text)+'</textarea><div class="actions" style="margin-top:8px"><button class="btn primary small" data-sc="'+c.id+'">Save</button><button class="btn small" data-cc>Cancel</button></div>';
+        }else{
+          h+='<div class="txt">'+esc(c.text)+'</div><div class="tools2"><button data-ec="'+c.id+'">Edit</button><button data-dc="'+c.id+'">'+(ui.armC===c.id?'Tap to confirm':'Delete')+'</button></div>';
+        }
+        h+='</div></div>';
+      }else{
+        var x=e.h,what;
+        if(x.field==="created")what='created this bid';
+        else if(x.field==="Description")what='updated the description';
+        else if(x.field==="Assignee")what='changed <b>Assignee</b> from <span class="hv">'+esc(nameOf(x.from))+'</span> to <span class="hv">'+esc(nameOf(x.to))+'</span>';
+        else what='changed <b>'+esc(x.field)+'</b> from <span class="hv">'+esc(x.from)+'</span> to <span class="hv">'+esc(x.to)+'</span>';
+        h+='<div class="ev">'+avHTML(x.by)+'<div class="body"><b>'+esc(nameOf(x.by))+'</b> '+what+'<span class="when">'+ago(x.at)+'</span></div></div>';
+      }
+    });
+    if(!ev.length)h+='<div class="empty">Nothing here yet.</div>';
+    $("i-act").innerHTML=h;
+  }
+
+  /* ---------- create issue ---------- */
+  function fillParent(type,cur){
+    var wrap=$("c-parent-wrap");
+    if(type!=="Subtask"){wrap.style.display="none";$("c-parent").innerHTML="";return}
+    wrap.style.display="";
+    $("c-parent-label").textContent="Parent";
+    $("c-parent").innerHTML=opt("","None","")+parentCandidates(type,null).map(function(c){return opt(c.id,ikey(c)+" "+c.title,cur||"")}).join("");
+  }
+  function openCreate(pre){
+    var p=proj();pre=pre||{};
+    if(!p||!canAct()){toast("You don’t have access to create bids here.");return}
+    $("cTitle").textContent="Create bid in "+p.name;
+    $("c-type").innerHTML=TYPES.map(function(t){return opt(t,t,pre.type||"Task")}).join("");
+    $("c-status").innerHTML=p.statuses.map(function(s){return opt(s.id,s.name,pre.status||p.statuses[0].id)}).join("");
+    $("c-pri").innerHTML=PRI.map(function(x){return opt(x,x,"Medium")}).join("");
+    $("c-title").value="";$("c-title").style.borderColor="";$("c-desc").value="";$("c-who").innerHTML=teamOptions("");$("c-due").value=pre.due||"";$("c-labels").value="";
+    fillParent($("c-type").value,pre.parent);
+    openOv("ov-create");setTimeout(function(){$("c-title").focus()},30);
+  }
+  function submitCreate(){
+    var title=$("c-title").value.trim();
+    if(!title){$("c-title").focus();$("c-title").style.borderColor="var(--high)";return}
+    var is=createIssue({type:$("c-type").value,title:title,desc:$("c-desc").value.trim(),status:$("c-status").value,priority:$("c-pri").value,
+      assignee:$("c-who").value,due:$("c-due").value,parent:$("c-parent").value,
+      labels:$("c-labels").value.split(",").map(function(s){return s.trim()}).filter(Boolean)});
+    closeOv("ov-create");render();toast(ikey(is)+" created");
+  }
+  function quickAdd(parentId){
+    var inp=document.querySelector('[data-quick="'+parentId+'"]');if(!inp)return;
+    var title=inp.value.trim();if(!title){inp.focus();return}
+    var par=byId(parentId);
+    createIssue({type:"Subtask",title:title,parent:par.id,priority:"Medium"});
+    par.updated=Date.now();save();render();
+    if(ui.issueId){renderIssue()}
+    toast("Added");
+  }
+
+  /* ---------- create space and division ---------- */
+  function autoKey(name){
+    var w=name.toUpperCase().replace(/[^A-Z0-9 ]/g,"").split(/\s+/).filter(Boolean);
+    if(!w.length)return "";
+    return (w.length>1?w.slice(0,4).map(function(x){return x[0]}).join(""):w[0].slice(0,4)).slice(0,5);
+  }
+  function openSpace(parentId){
+    var d=curDiv();if(!d||!isDivAdmin(d)){toast("Only division admins can create spaces.");return}
+    ui.keyTouched=false;$("p-name").value="";$("p-key").value="";$("p-err").textContent="";
+    $("p-parent").innerHTML=opt("","None (top level)","")+spaceTree(d.id).map(function(n){return opt(n.sp.id,"\u00a0\u00a0".repeat(n.depth)+n.sp.name,parentId||"")}).join("");
+    $("p-tpl").innerHTML=opt("","Default (To do, In progress, Done)","")+D.config.templates.map(function(t){return opt(t.id,t.name,"")}).join("");
+    openOv("ov-space");setTimeout(function(){$("p-name").focus()},30);
+  }
+  function submitSpace(){
+    var d=curDiv(),name=$("p-name").value.trim(),key=$("p-key").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(!d)return;
+    if(!name){$("p-err").textContent="Enter a space name.";return}
+    if(key.length<2){$("p-err").textContent="Use a key with 2 to 5 letters or numbers.";return}
+    if(divSpaces(d.id).some(function(s){return s.key===key})){$("p-err").textContent="That key is already used in this division.";return}
+    var sp={id:newId("spaces"),divisionId:d.id,parentId:$("p-parent").value,name:name,key:key,ci:divSpaces(d.id).length,next:1,statuses:tplStatuses($("p-tpl").value),created:today(),issues:[]};
+    D.spaces.push(sp);closeOv("ov-space");
+    state.cur=sp.id;state.view="board";save();render();toast("Space created");
+  }
+  /* ---------- events ---------- */
+  document.addEventListener("click",function(e){
+    var el,t=e.target;
+    if(t.closest("[data-menu]")){$("side").classList.add("open");$("scrim").classList.add("open");return}
+    if(t.closest("[data-scrim]")){$("side").classList.remove("open");$("scrim").classList.remove("open");return}
+    if((el=t.closest("[data-close]"))){closeOv(el.getAttribute("data-close"));return}
+    if(t.classList&&t.classList.contains("overlay")){closeOv(t.id);return}
+    if((el=t.closest("[data-space]"))){switchSpace(el.getAttribute("data-space"));return}
+    if(t.closest("[data-create]")){openCreate();return}
+    if((el=t.closest("[data-div]"))){switchDiv(el.getAttribute("data-div"));return}
+    if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
+    if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
+    if(t.closest("[data-newspace]")){closeDrawer();openSpace("");return}
+    if((el=t.closest("[data-newsub]"))){openSpace(el.getAttribute("data-newsub"));return}
+    if(t.closest("[data-addperson]")){
+      var pin=$("newperson"),pnm=pin?pin.value.trim():"";
+      if(!pnm){if(pin)pin.focus();return}
+      D.people.push({id:uid("p"),divisionId:state.div,name:pnm});
+      save();render();return;
+    }
+    if((el=t.closest("[data-rmperson]"))){
+      var rpid=el.getAttribute("data-rmperson");
+      D.people=D.people.filter(function(x){return x.id!==rpid});
+      D.spaces.forEach(function(sp){sp.issues.forEach(function(is){if(is.assignee===rpid)is.assignee=""})});
+      save();render();return;
+    }
+    if((el=t.closest("[data-purgediv]"))){
+      var pgid=el.getAttribute("data-purgediv");
+      if(ui.armD!==pgid){ui.armD=pgid;render();return}
+      D.people=D.people.filter(function(x){return x.divisionId!==pgid});
+      D.spaces=D.spaces.filter(function(x){return x.divisionId!==pgid});
+      ui.armD=false;save();
+      if(sb)Promise.resolve(sb.from("wf_division_names").delete().eq("division_id",pgid)).then(function(){},function(){});
+      delete raw.names[pgid];render();toast("Archived division deleted");return;
+    }
+    if(t.closest("[data-addrule]")){
+      var rp=proj(),rkids=childSpaces(rp);
+      if(!rp||!rkids.length)return;
+      var rf=ui.ar,rt=rkids.filter(function(k){return k.id===rf.to})[0]||rkids[0],rs=rf.status||rp.statuses[0].name,rc=rf.col||"";
+      rp.rules=rp.rules||[];
+      if(rp.rules.some(function(x){return x.status===rs&&x.to===rt.id&&(x.col||"")===rc})){toast("That automation already exists.");return}
+      rp.rules.push({id:uid("r"),status:rs,to:rt.id,col:rc});
+      ui.ar={status:"",to:"",col:""};save();render();toast("Automation added");return;
+    }
+    if((el=t.closest("[data-delrule]"))){
+      var dp=proj(),did=el.getAttribute("data-delrule");
+      if(dp){dp.rules=(dp.rules||[]).filter(function(x){return x.id!==did});save();render()}
+      return;
+    }
+    if(t.closest("[data-newtpl]")){
+      if(!ORG)return;
+      var tnm=$("newtpl").value.trim();if(!tnm){$("newtpl").focus();return}
+      D.config.templates.push({id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)});save();render();return;
+    }
+    if((el=t.closest("[data-tup]"))||(el=t.closest("[data-tdown]"))){
+      if(!ORG)return;
+      var tup=el.hasAttribute("data-tup"),tk=el.getAttribute(tup?"data-tup":"data-tdown").split(":");
+      var tp1=D.config.templates.filter(function(x){return x.id===tk[0]})[0],ti1=+tk[1],tj1=ti1+(tup?-1:1);
+      if(tp1&&tj1>=0&&tj1<tp1.statuses.length){var sw=tp1.statuses[ti1];tp1.statuses[ti1]=tp1.statuses[tj1];tp1.statuses[tj1]=sw;save();render()}
+      return;
+    }
+    if((el=t.closest("[data-tdel]"))){
+      if(!ORG)return;
+      var tk2=el.getAttribute("data-tdel").split(":"),tp2=D.config.templates.filter(function(x){return x.id===tk2[0]})[0];
+      if(tp2&&tp2.statuses.length>1){tp2.statuses.splice(+tk2[1],1);save();render()}
+      return;
+    }
+    if((el=t.closest("[data-taddcol]"))){
+      if(!ORG)return;
+      var tid3=el.getAttribute("data-taddcol"),tp3=D.config.templates.filter(function(x){return x.id===tid3})[0],tin=$("tn-"+tid3);
+      if(!tin||!tin.value.trim()){if(tin)tin.focus();return}
+      if(tp3){tp3.statuses.push({name:tin.value.trim(),cat:$("tc-"+tid3).value});save();render()}
+      return;
+    }
+    if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
+    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
+    if((el=t.closest("[data-open]"))){
+      var id=el.getAttribute("data-open");
+      if($("ov-issue").classList.contains("open")&&$("ov-issue").contains(el)){ui.issueId=id;ui.draft="";ui.editC=null;ui.actTab="all";renderIssue()}
+      else{closeOv("ov-day");openIssue(id)}
+      return;
+    }
+    if((el=t.closest("[data-more]"))){openDay(el.getAttribute("data-more"));return}
+    if((el=t.closest("[data-schedule]"))){var si=byId(el.getAttribute("data-schedule"));if(si)setField(si,"due",state.calSel);return}
+    if((el=t.closest("[data-calmode]"))){
+      var cmode=el.getAttribute("data-calmode");state.calMode=cmode;
+      if(cmode==="week"&&state.calSel.slice(0,7)!==state.calMonth){var T0=today();state.calSel=T0.slice(0,7)===state.calMonth?T0:state.calMonth+"-01"}
+      if(cmode==="month")state.calMonth=state.calSel.slice(0,7);
+      save();render();return;
+    }
+    if(t.closest("[data-colsbtn]")){ui.colsOpen=!ui.colsOpen;render();return}
+    if(t.closest("[data-colreset]")){state.listCols=null;save();render();return}
+    if((el=t.closest("[data-colmv]"))){
+      var lo=listOrder(),li=lo.indexOf(el.getAttribute("data-colmv")),lj=li+parseInt(el.getAttribute("data-d"),10);
+      if(lj>=0&&lj<lo.length){var lt=lo[li];lo[li]=lo[lj];lo[lj]=lt;state.listCols=lo;save();render()}
+      return;
+    }
+    if((el=t.closest("[data-add]"))){openCreate({status:el.getAttribute("data-add")});return}
+    
+    if((el=t.closest("[data-add-due]"))){closeOv("ov-day");openCreate({due:el.getAttribute("data-add-due")});return}
+    if((el=t.closest("[data-mv]"))){
+      var p=proj(),is=byId(el.getAttribute("data-id")),idx=p.statuses.findIndex(function(s){return s.id===is.status})+parseInt(el.getAttribute("data-mv"),10);
+      if(idx>=0&&idx<p.statuses.length)moveTo(is.id,p.statuses[idx].id);return;
+    }
+    if((el=t.closest("[data-sort]"))){var k=el.getAttribute("data-sort");if(ui.sort===k)ui.dir=-ui.dir;else{ui.sort=k;ui.dir=1}render();return}
+    if((el=t.closest("[data-cal]"))){
+      var v=el.getAttribute("data-cal"),T=today();
+      if(v==="today"){state.calMonth=T.slice(0,7);state.calSel=T}
+      else if(state.calMode==="week"){state.calSel=addDays(state.calSel,7*parseInt(v,10));state.calMonth=state.calSel.slice(0,7)}
+      else{var cp=state.calMonth.split("-"),d=new Date(+cp[0],+cp[1]-1+parseInt(v,10),1);state.calMonth=d.getFullYear()+"-"+pad(d.getMonth()+1)}
+      save();render();return;
+    }
+    if((el=t.closest("[data-day]"))){state.calSel=el.getAttribute("data-day");if(state.calSel.slice(0,7)!==state.calMonth)state.calMonth=state.calSel.slice(0,7);save();render();return}
+    if((el=t.closest("[data-gi]"))){var gi=parseInt(el.getAttribute("data-gi"),10);ui.rsel=ui.rsel===gi?null:gi;render();return}
+    if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},r.cfg,{name:r.name});ui.rsel=null;save();render();return}
+    if((el=t.closest("[data-delrep]"))){state.reports.splice(parseInt(el.getAttribute("data-delrep"),10),1);save();render();return}
+    
+    if((el=t.closest("[data-quickadd]"))){quickAdd(el.getAttribute("data-quickadd"));return}
+    if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
+    if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
+    if(t.closest("[data-delissue]")){
+      if(!ui.armI){ui.armI=true;var ai2=byId(ui.issueId);$("i-side").innerHTML=issueSideHTML(ai2);return}
+      var did=ui.issueId;closeOv("ov-issue");deleteIssue(did);render();toast("Bid deleted");return;
+    }
+    if((el=t.closest("[data-ec]"))){ui.editC=el.getAttribute("data-ec");renderIssueAct();return}
+    if(t.closest("[data-cc]")){ui.editC=null;renderIssueAct();return}
+    if((el=t.closest("[data-sc]"))){
+      var is2=byId(ui.issueId),cid=el.getAttribute("data-sc"),txt=$("c-edit").value.trim();
+      var cmt=is2.comments.filter(function(c){return c.id===cid})[0];
+      if(cmt&&txt){cmt.text=txt;save()}
+      ui.editC=null;renderIssueAct();return;
+    }
+    if((el=t.closest("[data-dc]"))){
+      var dcid=el.getAttribute("data-dc");
+      if(ui.armC!==dcid){ui.armC=dcid;renderIssueAct();return}
+      var is3=byId(ui.issueId);is3.comments=is3.comments.filter(function(c){return c.id!==dcid});ui.armC=null;save();renderIssueAct();return;
+    }
+    if((el=t.closest("[data-act]"))){
+      var a=el.getAttribute("data-act");
+      if(a==="clearSel"){ui.rsel=null;render()}
+      if(a==="copy")copyText(summaryText());
+      if(a==="comment"){
+        var ta=$("c-new"),text=ta.value.trim();if(!text){ta.focus();return}
+        var is4=byId(ui.issueId);is4.comments.push({id:uid("c"),by:ME,at:Date.now(),text:text});is4.updated=Date.now();
+        ui.draft="";save();renderIssueAct();
+      }
+      if(a==="saveReport"){
+        var name=state.rcfg.name.trim();
+        if(!name){var inp=$("rname");inp.focus();inp.style.borderColor="var(--high)";inp.placeholder="Enter a name first";return}
+        var cfg=Object.assign({},state.rcfg);delete cfg.name;
+        var ix=state.reports.findIndex(function(r){return r.name===name});
+        if(ix>-1)state.reports[ix].cfg=cfg;else state.reports.push({name:name,cfg:cfg});
+        save();render();toast("Report saved");
+      }
+      return;
+    }
+    /* settings */
+    var p2=proj(),sid;
+    if((el=t.closest("[data-sup]"))||(el=t.closest("[data-sdown]"))){
+      var up=el.hasAttribute("data-sup");sid=el.getAttribute(up?"data-sup":"data-sdown");
+      var i=p2.statuses.findIndex(function(s){return s.id===sid}),j=i+(up?-1:1);
+      if(j>=0&&j<p2.statuses.length){var tmp=p2.statuses[i];p2.statuses[i]=p2.statuses[j];p2.statuses[j]=tmp;save();render()}
+      return;
+    }
+    if((el=t.closest("[data-sdel]"))){
+      sid=el.getAttribute("data-sdel");
+      if(ui.armS!==sid){ui.armS=sid;render();return}
+      var idx2=p2.statuses.findIndex(function(s){return s.id===sid}),target=p2.statuses[idx2>0?idx2-1:1];
+      p2.issues.forEach(function(is5){if(is5.status===sid)applyStatus(p2,is5,target.id)});
+      p2.statuses.splice(idx2,1);ui.armS=null;save();render();return;
+    }
+    if(t.closest("[data-addstatus]")){
+      var nm=$("ns").value.trim();if(!nm){$("ns").focus();return}
+      p2.statuses.push({id:uid("s"),name:nm,cat:$("nsc").value});save();render();return;
+    }
+    if(t.closest("[data-savetpl]")){
+      if(!ORG)return;
+      var tn=$("tname").value.trim();if(!tn){$("tname").focus();return}
+      var tpl={id:uid("t"),name:tn,statuses:p2.statuses.map(function(x){return {name:x.name,cat:x.cat}})};
+      var tix=D.config.templates.findIndex(function(x){return x.name===tn});
+      if(tix>-1){tpl.id=D.config.templates[tix].id;D.config.templates[tix]=tpl}else D.config.templates.push(tpl);
+      save();render();toast("Template saved");return;
+    }
+    if((el=t.closest("[data-applytpl]"))){
+      var tid=el.getAttribute("data-applytpl");
+      if(ui.armT!==tid){ui.armT=tid;render();return}
+      var tp=D.config.templates.filter(function(x){return x.id===tid})[0];
+      if(tp)applyTemplate(p2,tp);
+      ui.armT=null;save();render();toast("Template applied");return;
+    }
+    if((el=t.closest("[data-deltpl]"))){
+      if(!ORG)return;
+      var dtid=el.getAttribute("data-deltpl");
+      D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;save();render();return;
+    }
+    if(t.closest("[data-delspace]")){
+      if(!ui.armP){ui.armP=true;render();return}
+      var gone=descendants(state.cur);
+      D.spaces=D.spaces.filter(function(x){return gone.indexOf(x.id)<0});
+      ui.armP=false;state.cur="";state.view="board";
+      var rest=spaceTree(state.div);if(rest.length)state.cur=rest[0].sp.id;
+      save();render();toast("Space deleted");return;
+    }
+  });
+  function renderIssueSideOnly(){var is=byId(ui.issueId);if(is){$("i-side").innerHTML=issueSideHTML(is)}}
+
+  document.addEventListener("change",function(e){
+    var el=e.target,v;
+    if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
+    if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;render();return}
+    if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
+    if((v=el.getAttribute("data-scat"))){var s=proj().statuses.filter(function(x){return x.id===v})[0];s.cat=el.value;save();render();return}
+    if((v=el.getAttribute("data-sname"))){
+      var s2=proj().statuses.filter(function(x){return x.id===v})[0],nm=el.value.trim();
+      if(nm){s2.name=nm;save()}else el.value=s2.name;return;
+    }
+    if(el.id==="pname"){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
+    if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";render();return}
+    if(el.id==="myname"){state.myName=el.value.trim();ME=state.myName||"Someone";save();return}
+    if((v=el.getAttribute("data-pname"))){
+      var pp=D.people.filter(function(x){return x.id===v})[0],pv=el.value.trim();
+      if(pp&&pv){pp.name=pv;PROF[pp.id]={name:pv,avatarUrl:""};save()}else if(pp)el.value=pp.name;
+      return;
+    }
+    if((v=el.getAttribute("data-tname"))){
+      var tt=D.config.templates.filter(function(x){return x.id===v})[0],tv=el.value.trim();
+      if(tt&&tv){tt.name=tv;save()}else if(tt)el.value=tt.name;return;
+    }
+    if((v=el.getAttribute("data-tcname"))){
+      var pr=v.split(":"),t2=D.config.templates.filter(function(x){return x.id===pr[0]})[0],cv=el.value.trim();
+      if(t2&&t2.statuses[+pr[1]]){if(cv){t2.statuses[+pr[1]].name=cv;save()}else el.value=t2.statuses[+pr[1]].name}
+      return;
+    }
+    if((v=el.getAttribute("data-tccat"))){
+      var pr2=v.split(":"),t3=D.config.templates.filter(function(x){return x.id===pr2[0]})[0];
+      if(t3&&t3.statuses[+pr2[1]]){t3.statuses[+pr2[1]].cat=el.value;save();render()}
+      return;
+    }
+    if(el.id==="c-type"){fillParent(el.value,"");return}
+    if((v=el.getAttribute("data-f"))&&ui.issueId&&$("ov-issue").contains(el)){
+      var cur=byId(ui.issueId);if(!cur)return;
+      var changed=setField(cur,v,el.value);
+      if(v==="title"&&!changed)el.value=cur.title;
+      if(changed&&(v==="status"||v==="priority"||v==="type"||v==="parent")){
+        renderIssueHead(cur);
+        if(v==="type"||v==="parent"){$("i-top").innerHTML=issueTopHTML(cur);$("i-side").innerHTML=issueSideHTML(cur)}
+        renderIssueAct();
+      }
+    }
+  });
+  document.addEventListener("input",function(e){
+    var el=e.target;
+    if(el.id==="q"){ui.f.q=el.value;render();return}
+    if(el.id==="rname"){state.rcfg.name=el.value;el.style.borderColor="";save();return}
+    if(el.id==="c-new"){ui.draft=el.value;return}
+    if(el.id==="p-name"&&!ui.keyTouched){$("p-key").value=autoKey(el.value);return}
+    if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
+  });
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"){closeTop();return}
+    var t=e.target;
+    var day=t.closest&&t.closest("[data-day]");
+    if(day&&t===day&&(e.key==="Enter"||e.key===" ")){e.preventDefault();state.calSel=day.getAttribute("data-day");save();render();return}
+    if(e.key==="Enter"&&t.getAttribute&&t.getAttribute("data-quick")){e.preventDefault();quickAdd(t.getAttribute("data-quick"));return}
+    if(e.key==="Enter"&&t.id==="ns"){e.preventDefault();var b=document.querySelector("[data-addstatus]");if(b)b.click()}
+    if(e.key==="Enter"&&(t.id==="c-title"||t.id==="p-name"||t.id==="p-key")){e.preventDefault();if(t.id==="c-title")submitCreate();else submitSpace()}
+    if(e.key==="Enter"&&t.id==="newperson"){e.preventDefault();var ab=document.querySelector("[data-addperson]");if(ab)ab.click()}
+  });
+  /* drag and drop on the board */
+  var view=$("view");
+  view.addEventListener("dragstart",function(e){
+    var th=e.target.closest("[data-lcol]");
+    if(th){ui.dragCol=th.getAttribute("data-lcol");try{e.dataTransfer.setData("text/plain",ui.dragCol);e.dataTransfer.effectAllowed="move"}catch(x){}return}
+    var c=e.target.closest(".card,[data-iid]");if(!c)return;
+    ui.dragId=c.getAttribute("data-id")||c.getAttribute("data-iid");c.classList.add("dragging");
+    try{e.dataTransfer.setData("text/plain",ui.dragId);e.dataTransfer.effectAllowed="move"}catch(x){}
+  });
+  view.addEventListener("dragend",function(){ui.dragId=null;ui.dragCol=null;render()});
+  view.addEventListener("dragover",function(e){
+    var th=e.target.closest("[data-lcol]");
+    if(th&&ui.dragCol){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".th-over"),function(x){x.classList.remove("th-over")});th.classList.add("th-over");return}
+    var dy=e.target.closest("[data-day]");
+    if(dy&&ui.dragId){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".day.drop"),function(x){x.classList.remove("drop")});dy.classList.add("drop");return}
+    var col=e.target.closest(".col");if(!col||!ui.dragId)return;
+    e.preventDefault();
+    Array.prototype.forEach.call(view.querySelectorAll(".col.over"),function(x){x.classList.remove("over")});
+    col.classList.add("over");
+  });
+  view.addEventListener("drop",function(e){
+    var th=e.target.closest("[data-lcol]");
+    if(th&&ui.dragCol){e.preventDefault();var from=ui.dragCol;ui.dragCol=null;moveCol(from,th.getAttribute("data-lcol"));return}
+    var dy=e.target.closest("[data-day]");
+    if(dy&&ui.dragId){e.preventDefault();var did0=ui.dragId;ui.dragId=null;var di=byId(did0);if(di)setField(di,"due",dy.getAttribute("data-day"));return}
+    var col=e.target.closest(".col");if(!col||!ui.dragId)return;
+    e.preventDefault();
+    var over=e.target.closest(".card");
+    var before=over&&over.getAttribute("data-id")!==ui.dragId?over.getAttribute("data-id"):null;
+    var id=ui.dragId;ui.dragId=null;
+    moveTo(id,col.getAttribute("data-col"),before);
+  });
+
+  var THEMES=["auto","light","dark"],TGL={auto:"◐",light:"☀",dark:"☾"},TLBL={auto:"Auto",light:"Light",dark:"Dark"};
+  function applyTheme(){
+    var t=state.theme||"auto",r=document.documentElement;
+    if(t==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",t);
+    $("theme").innerHTML='<span aria-hidden="true">'+TGL[t]+'</span><span class="tl"> '+TLBL[t]+'</span>';
+    $("theme").setAttribute("aria-label","Theme: "+TLBL[t]+". Tap to change.");
+  }
+  $("theme").addEventListener("click",function(){
+    var i=THEMES.indexOf(state.theme||"auto");
+    state.theme=THEMES[(i+1)%THEMES.length];save();applyTheme();
+    try{localStorage.setItem("bidscout_theme",state.theme)}catch(e){}
+  });
+  $("c-save").addEventListener("click",submitCreate);
+  $("p-save").addEventListener("click",submitSpace);
+
+  state=loadPrefs();
+  ORG=true;CANWRITE=true;ME=state.myName||"Someone";
+  // Same switch as Bid Scout (served from the same site, so same localStorage).
+  try{var bt=localStorage.getItem("bidscout_theme");if(THEMES.indexOf(bt)>=0)state.theme=bt}catch(e){}
+  applyTheme();
+  render();
+  (function boot(){
+    $("myname").value=state.myName||"";
+    if(!window.supabase||!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY){
+      DENIED="The app isn’t configured. Set SUPABASE_URL and SUPABASE_ANON_KEY (see the README).";render();return;
+    }
+    try{sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}})}
+    catch(e){onLoadErr(e);return}
+    if(!state.div)state.view="overview";
+    loadAll().then(listen).catch(onLoadErr);
+  })();
+})();
+</script>
+</body>
+</html>
