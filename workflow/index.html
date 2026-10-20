@@ -110,6 +110,15 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .fright{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .fright select{background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font-weight:600}
 .fright .btn.on{border-color:var(--accent)}
+.gwrap{position:relative}
+.gpop{left:auto;right:0;width:200px;padding:6px}
+.gopt{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:7px 10px;font-size:14px;color:var(--ink)}
+.gopt:hover{background:var(--chip)}
+.gopt.on{background:color-mix(in srgb,var(--c1) 14%,var(--surface));color:var(--c1);font-weight:600}
+.jl tr.grp td{background:var(--col);padding:0;border-right:0}
+.jl tr.grp button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;padding:8px 10px;font-weight:700;font-size:13px;color:var(--ink);text-align:left}
+.jl tr.grp .chev{width:12px;color:var(--muted);font-size:12px}
+.jl tr.grp:hover td{background:var(--col)}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px;font-weight:600}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.danger{color:var(--high)}
@@ -1236,6 +1245,36 @@ img.who{object-fit:cover;background:var(--chip)}
     proj().issues.sort(function(a,b){return rk(a)-rk(b)});
     save();render();
   }
+  /* ---------- List grouping (Group button in the toolbar; remembered per browser) ---------- */
+  function groupOpts(p){
+    var o=[["","None"],["status","Status"],["assignee","Assignee"],["reporter","Reporter"],["priority","Priority"],["type","Type"]];
+    spaceFields(p).forEach(function(fd){if(fd.type==="person"||fd.type==="team")o.push(["cf:"+fd.id,fd.name])});
+    return o;
+  }
+  function curGroup(p){var g=state.listGroup||"";return groupOpts(p).some(function(x){return x[0]===g})?g:""}
+  // [sort key, label] of a bid's group
+  function groupOf(is,g,p){
+    if(g==="status"){var st=stat(p,is.status);return [p.statuses.indexOf(st),st.name]}
+    if(g==="priority")return [PRI.indexOf(is.priority),is.priority];
+    if(g==="type")return [TYPES.indexOf(is.type),is.type];
+    if(g==="assignee"||g==="reporter"){var pid=is[g];return pid?[nameOf(pid).toLowerCase(),nameOf(pid)]:["~",g==="assignee"?"Unassigned":"None"]}
+    if(g.indexOf("cf:")===0){
+      var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===g})[0],v=fd?(is.fields||{})[fd.id]:"";
+      return v?[cfShow(fd,v).toLowerCase(),cfShow(fd,v)]:["~","None"];
+    }
+    return [0,""];
+  }
+  var GROUPBAR="";
+  function groupBarHTML(p){
+    var g=curGroup(p),lab=(groupOpts(p).filter(function(x){return x[0]===g})[0]||["",""])[1];
+    var h='<div class="gwrap"><button class="btn small fbtn'+(g?' on':'')+'" data-gopen aria-expanded="'+(!!ui.gOpen)+'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>Group'+(g?': '+esc(lab):'')+'</button>';
+    if(ui.gOpen){
+      h+='<div class="fpop gpop" role="menu" aria-label="Group by">'+groupOpts(p).map(function(x){
+        return '<button class="gopt'+(x[0]===g?' on':'')+'" role="menuitemradio" aria-checked="'+(x[0]===g)+'" data-group="'+esc(x[0])+'">'+esc(x[1])+'</button>';
+      }).join("")+'</div>';
+    }
+    return h+'</div>';
+  }
   function listHTML(){
     var p=proj(),order=listOrder(),all=p.issues.filter(function(i){return i.type!=="Subtask"||visible(i)}),rows=p.issues.filter(visible).sort(cmp),h='';
     if(ui.colsOpen){
@@ -1243,12 +1282,25 @@ img.who{object-fit:cover;background:var(--chip)}
         return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+LCOLS[k]+' left"'+(i===0?' disabled':'')+'>&larr;</button><span style="padding:5px 4px;font-size:14px">'+LCOLS[k]+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+LCOLS[k]+' right"'+(i===order.length-1?' disabled':'')+'>&rarr;</button></span>';
       }).join("")+'<button class="btn small" data-colreset>Reset order</button></div>';
     }
-    var canDrag=ui.sort==="rank"&&canAct();
+    var grp=curGroup(p);GROUPBAR=groupBarHTML(p);
+    var canDrag=ui.sort==="rank"&&canAct()&&!grp;
     h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
       var on=ui.sort===k;
       return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">⋮⋮</span><button data-sort="'+k+'">'+LCOLS[k]+(on?(ui.dir>0?' ↑':' ↓'):'')+'</button></div></th>';
     }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Column order" aria-label="Column order"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
-    rows.forEach(function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">&middot;&middot;&middot;</button></td></tr>'});
+    var emit=function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">&middot;&middot;&middot;</button></td></tr>'};
+    if(!grp)rows.forEach(emit);
+    else{
+      var gs={},gk=[];
+      rows.forEach(function(is){var g2=groupOf(is,grp,p),key=g2[1];if(!gs[key]){gs[key]={sk:g2[0],label:g2[1],items:[]};gk.push(key)}gs[key].items.push(is)});
+      gk.sort(function(x,y){var a1=gs[x].sk,b1=gs[y].sk;return a1<b1?-1:a1>b1?1:0});
+      var closed=ui.gClosed||{};
+      gk.forEach(function(key){
+        var G=gs[key],shut=!!closed[grp+"|"+key];
+        h+='<tr class="grp"><td colspan="'+(order.length+2)+'"><button data-gtoggle="'+esc(grp+"|"+key)+'" aria-expanded="'+(!shut)+'"><span class="chev">'+(shut?'&#9656;':'&#9662;')+'</span>'+esc(G.label)+' <span class="count">'+G.items.length+'</span></button></td></tr>';
+        if(!shut)G.items.forEach(emit);
+      });
+    }
     if(!rows.length)h+='<tr><td colspan="'+(order.length+2)+'" class="empty">No bids match your filters.</td></tr>';
     h+='</tbody></table></div><div class="lfoot">'+(canAct()?'<button class="lcreate" data-create>+ Create</button>':'<span></span>')+
       '<span class="fine" style="margin:0">'+rows.length+' of '+all.length+'</span><span></span></div></div>';
@@ -1747,7 +1799,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
-    $("fright").innerHTML=showF&&v==="calendar"?CALBAR:"";
+    $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
     placeCalPop();
   }
@@ -2119,6 +2171,9 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if((el=t.closest("[data-fwho]"))){var fw=el.getAttribute("data-fwho");ui.f.who=ui.f.who===fw?"":fw;render();return}
+    if(t.closest("[data-gopen]")){ui.gOpen=!ui.gOpen;render();return}
+    if((el=t.closest("[data-group]"))){state.listGroup=el.getAttribute("data-group");ui.gOpen=false;savePrefs();render();return}
+    if((el=t.closest("[data-gtoggle]"))){var gtk=el.getAttribute("data-gtoggle");ui.gClosed=ui.gClosed||{};ui.gClosed[gtk]=!ui.gClosed[gtk];render();return}
     if(t.closest("[data-fopen]")){ui.fOpen=!ui.fOpen;render();return}
     if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";render();return}
     if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
@@ -2375,6 +2430,7 @@ img.who{object-fit:cover;background:var(--chip)}
   window.addEventListener("scroll",function(e){if(ui.calPop&&!(e.target.nodeType===1&&e.target.closest(".jpop")))closeCalPop()},true);
   window.addEventListener("resize",placeCalPop);
   document.addEventListener("mousedown",function(e){
+    if(ui.gOpen&&!e.target.closest(".gwrap")){ui.gOpen=false;var gp=document.querySelector(".gpop");if(gp)gp.remove()}
     if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
