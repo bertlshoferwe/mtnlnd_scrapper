@@ -61,7 +61,16 @@ button{cursor:pointer}
   .side.open{transform:none}
   .scrim.open{display:block;position:fixed;inset:0;background:rgba(10,16,24,.5);z-index:35}
 }
-@media (min-width:900px){.app.side-hidden .side{display:none}}
+/* wide screens: the menu button shrinks the sidebar to an icon rail */
+@media (min-width:900px){
+  .app.side-hidden .side{width:64px;flex-basis:64px;padding-left:10px;padding-right:10px;overflow-x:hidden}
+  .app.side-hidden .side .brand,.app.side-hidden .side .sl,.app.side-hidden .side .pn,.app.side-hidden .side .me{display:none}
+  .app.side-hidden .side .proj{justify-content:center;padding:8px 0!important}
+  .app.side-hidden .side .proj.add{font-size:0;padding:6px 0!important}
+  .app.side-hidden .side .proj.add::before{content:"+";font-size:18px;line-height:1}
+  .app.side-hidden .side #plist{display:flex;flex-direction:column;gap:4px}
+}
+@media (min-width:900px) and (prefers-reduced-motion:no-preference){.side{transition:width .18s,flex-basis .18s}}
 @media (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
 
 .top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
@@ -1307,18 +1316,18 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- render ---------- */
   function renderSide(){
     var d=curDiv(),h="";
-    if(ORG)h+='<button class="proj'+(state.view==="overview"?' on':'')+'" data-view="overview"><span class="pi" style="background:var(--c6)">O</span><span class="pn">Overview</span></button>';
+    if(ORG)h+='<button class="proj'+(state.view==="overview"?' on':'')+'" data-view="overview" title="Overview"><span class="pi" style="background:var(--c6)">O</span><span class="pn">Overview</span></button>';
     if(state.view==="overview"){
       h+='<div class="sl">Divisions</div>'+D.divs.map(function(x,i){
-        return '<button class="proj" data-opendiv="'+x.id+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
+        return '<button class="proj" data-opendiv="'+x.id+'" title="'+esc(x.name)+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
       }).join("");
     }else if(d){
       h+='<div class="sl">'+esc(d.name)+'</div>';
       spaceTree(d.id).forEach(function(n){
         var s=n.sp;
-        h+='<button class="proj'+(s.id===state.cur&&state.view!=="division"?' on':'')+'" style="padding-left:'+(10+n.depth*16)+'px" data-space="'+s.id+'"><span class="pi" style="background:var(--c'+(s.ci%6+1)+')">'+esc(s.key.slice(0,2))+'</span><span class="pn">'+esc(s.name)+'</span></button>';
+        h+='<button class="proj'+(s.id===state.cur&&state.view!=="division"?' on':'')+'" style="padding-left:'+(10+n.depth*16)+'px" data-space="'+s.id+'" title="'+esc(s.name)+'"><span class="pi" style="background:var(--c'+(s.ci%6+1)+')">'+esc(s.key.slice(0,2))+'</span><span class="pn">'+esc(s.name)+'</span></button>';
       });
-      if(isDivAdmin(d))h+='<button class="proj add" data-newspace>+ Create space</button>';
+      if(isDivAdmin(d))h+='<button class="proj add" data-newspace title="Create space">+ Create space</button>';
     }
     $("plist").innerHTML=h;
   }
@@ -1463,10 +1472,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!DENIED&&!loading&&v!=="overview"&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
   }
-  // Wide screens: the menu button hides/shows the sidebar (remembered per browser). Narrow: it opens the drawer.
+  // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
   function applySide(){
     $("side").parentNode.classList.toggle("side-hidden",!!state.sideHidden);
-    $("menu").setAttribute("aria-label",state.sideHidden?"Show spaces":"Hide spaces");
+    $("menu").setAttribute("aria-label",state.sideHidden?"Expand the sidebar":"Shrink the sidebar");
   }
   function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
   function resetFilters(){ui.f={q:"",type:"",who:"",pri:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
