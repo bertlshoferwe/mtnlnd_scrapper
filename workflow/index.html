@@ -1274,6 +1274,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var h='<div class="rep"><section class="panel"><h3>Space details</h3><div class="ctrl"><div><label for="pname">Name</label><input id="pname" maxlength="40" value="'+esc(p.name)+'"></div>'+
       '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
       '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
+    if(curDiv())h+=membersHTML(curDiv());
     h+='<section class="panel"><h3>Workflow</h3><p class="fine" style="margin:0 0 8px">Columns appear on the board in this order. The category decides which bids count as done in reports.</p>';
     var ft=followedTpl(p);
     if(ft)h+='<p class="fine" style="margin:0 0 8px">These columns come from the <b>'+esc(ft.name)+'</b> template, so changes to that template show up here. Changing them here stops that.</p>';
@@ -1312,7 +1313,6 @@ img.who{object-fit:cover;background:var(--chip)}
         return '<button class="proj" data-opendiv="'+x.id+'"><span class="pi" style="background:var(--c'+(i%6+1)+')">'+esc(x.name.slice(0,2))+'</span><span class="pn">'+esc(x.name)+'</span></button>';
       }).join("");
     }else if(d){
-      h+='<button class="proj'+(state.view==="division"?' on':'')+'" data-view="division"><span class="pi" style="background:var(--c5)">S</span><span class="pn">Division settings</span></button>';
       h+='<div class="sl">'+esc(d.name)+'</div>';
       spaceTree(d.id).forEach(function(n){
         var s=n.sp;
@@ -1413,6 +1413,15 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     return h+tplEditorHTML()+'</div>';
   }
+  function membersHTML(d){
+    var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
+    var h='<section class="panel"><h3>Members</h3><p class="fine" style="margin:0 0 8px">The people bids can be assigned to. Shared by every space in '+esc(d.name)+'.</p>';
+    ids.forEach(function(id){
+      h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
+    });
+    if(!ids.length)h+='<p class="fine">No one yet. Add the people who work on this division’s bids so you can assign them.</p>';
+    return h+'<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section>';
+  }
   function divisionHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
     var h='<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>';
@@ -1428,6 +1437,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var v=state.view,d=curDiv(),p=proj();
     var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
     if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
+    if(v==="division")v=state.view="board";   // members now live in Settings
     renderSide();renderDivTabs();
     if(v==="overview"){$("pkey").textContent="Organization";$("ptitle").textContent="Overview"}
     else if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Division settings"}
