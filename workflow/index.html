@@ -1807,7 +1807,8 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<div class="fpop" role="dialog" aria-label="Filter">'+
         '<label for="ff-type">Type</label><select id="ff-type" data-ff="type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
         '<label for="ff-pri">Priority</label><select id="ff-pri" data-ff="pri">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>'+
-        (tl.length?'<label>Team</label><div class="fchecks">'+tl.map(function(x){var on=f.teams.indexOf(x.id)>-1;return '<label class="fcheck"><input type="checkbox" data-fteam="'+x.id+'"'+(on?' checked':'')+'>'+esc(x.name)+'</label>'}).join("")+'</div>':'')+
+        (HAS_TEAMS?'<label>Team</label>'+(tl.length?'<div class="fchecks">'+tl.map(function(x){var on=f.teams.indexOf(x.id)>-1;return '<label class="fcheck"><input type="checkbox" data-fteam="'+x.id+'"'+(on?' checked':'')+'>'+esc(x.name)+'</label>'}).join("")+'</div>'
+          :'<p class="fine" style="margin:2px 0 0">No teams yet. Add them in Settings (bottom of the sidebar), on the Division tab.</p>'):'')+
         (nf?'<button class="linkbtn" data-fclear style="margin-top:10px">Clear filters</button>':'')+'</div>';
     }
     $("fsel").innerHTML=h+'</div>';
