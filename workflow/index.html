@@ -105,6 +105,10 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .fpop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:230px;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:8px 12px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
 .fpop label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:8px 0 4px}
 .fpop select{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:6px 8px}
+.fchecks{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto}
+.fpop label.fcheck{display:flex;align-items:center;gap:8px;margin:0;padding:4px 2px;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer;border-radius:6px}
+.fpop label.fcheck:hover{background:var(--chip)}
+.fcheck input{width:16px;height:16px;accent-color:var(--c1);margin:0}
 .fsp{flex:1}
 .fright{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .fright select{background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font-weight:600}
@@ -743,7 +747,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",team:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -1226,7 +1230,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(f.type&&is.type!==f.type)return false;
     if(f.pri&&is.priority!==f.pri)return false;
     if(f.who&&(is.assignee||"__none")!==f.who)return false;
-    if(f.team&&!inTeam(is,f.team))return false;
+    if(f.teams.length&&!f.teams.some(function(tid){return inTeam(is,tid)}))return false;
     
     var q=f.q.trim().toLowerCase();if(!q)return true;
     return (ikey(is)+" "+is.title+" "+is.desc+" "+is.labels.join(" ")+" "+nameOf(is.assignee)).toLowerCase().indexOf(q)>-1;
@@ -1775,14 +1779,15 @@ img.who{object-fit:cover;background:var(--chip)}
     var h='<div class="fav" role="group" aria-label="Show bids assigned to">'+
       '<button class="favb none'+(f.who==="__none"?' on':'')+'" data-fwho="__none" title="Unassigned" aria-pressed="'+(f.who==="__none")+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></button>'+
       ids.map(function(i){var n=nameOf(i);return '<button class="favb'+(f.who===i?' on':'')+'" data-fwho="'+esc(i)+'" title="'+esc(n)+'" aria-pressed="'+(f.who===i)+'">'+nameAv(n)+'</button>'}).join("")+'</div>';
-    var tl=HAS_TEAMS?divTeams(d):[];if(f.team&&!tl.some(function(x){return x.id===f.team}))f.team="";
-    var nf=(f.type?1:0)+(f.pri?1:0)+(f.team?1:0);
+    var tl=HAS_TEAMS?divTeams(d):[];
+    f.teams=f.teams.filter(function(id){return tl.some(function(x){return x.id===id})});
+    var nf=(f.type?1:0)+(f.pri?1:0)+f.teams.length;
     h+='<div class="fwrap"><button class="btn small fbtn'+(nf?' on':'')+'" data-fopen aria-expanded="'+(!!ui.fOpen)+'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter'+(nf?' <span class="count">'+nf+'</span>':'')+'</button>';
     if(ui.fOpen){
       h+='<div class="fpop" role="dialog" aria-label="Filter">'+
         '<label for="ff-type">Type</label><select id="ff-type" data-ff="type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
         '<label for="ff-pri">Priority</label><select id="ff-pri" data-ff="pri">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>'+
-        (tl.length?'<label for="ff-team">Team</label><select id="ff-team" data-ff="team">'+opt("","All teams",f.team)+tl.map(function(x){return opt(x.id,x.name,f.team)}).join("")+'</select>':'')+
+        (tl.length?'<label>Team</label><div class="fchecks">'+tl.map(function(x){var on=f.teams.indexOf(x.id)>-1;return '<label class="fcheck"><input type="checkbox" data-fteam="'+x.id+'"'+(on?' checked':'')+'>'+esc(x.name)+'</label>'}).join("")+'</div>':'')+
         (nf?'<button class="linkbtn" data-fclear style="margin-top:10px">Clear filters</button>':'')+'</div>';
     }
     $("fsel").innerHTML=h+'</div>';
@@ -1932,7 +1937,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("menu").setAttribute("aria-label",state.sideHidden?"Expand the sidebar":"Shrink the sidebar");
   }
   function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
-  function resetFilters(){ui.f={q:"",type:"",who:"",pri:"",team:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
+  function resetFilters(){ui.f={q:"",type:"",who:"",pri:"",teams:[]};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
   function switchSpace(id){
     state.cur=id;if(state.view==="division"||orgView(state.view))state.view="board";
     resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();save();render();
@@ -2299,7 +2304,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-group]"))){state.listGroup=el.getAttribute("data-group");ui.gOpen=false;savePrefs();render();return}
     if((el=t.closest("[data-gtoggle]"))){var gtk=el.getAttribute("data-gtoggle");ui.gClosed=ui.gClosed||{};ui.gClosed[gtk]=!ui.gClosed[gtk];render();return}
     if(t.closest("[data-fopen]")){ui.fOpen=!ui.fOpen;render();return}
-    if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.team="";render();return}
+    if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.teams=[];render();return}
     if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
       var tfid=el.getAttribute("data-taddfield"),tfp=D.config.templates.filter(function(x){return x.id===tfid})[0],tfin=$("tfn-"+tfid);
@@ -2486,6 +2491,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var el=e.target,v;
     if((v=el.getAttribute("data-rc"))){state.rcfg[v]=el.value;ui.rsel=null;save();render();return}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
+    if((v=el.getAttribute("data-fteam"))){var fi=ui.f.teams.indexOf(v);if(el.checked&&fi<0)ui.f.teams.push(v);else if(!el.checked&&fi>-1)ui.f.teams.splice(fi,1);ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
     if((v=el.getAttribute("data-cardpri"))){var cpi=byId(v);if(cpi)setField(cpi,"priority",el.value);return}
