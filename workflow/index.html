@@ -1488,7 +1488,7 @@ img.who{object-fit:cover;background:var(--chip)}
     openOv("ov-day");
   }
   function closeTop(){
-    var ids=["ov-space","ov-create","ov-issue","ov-day"];
+    var ids=["ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
