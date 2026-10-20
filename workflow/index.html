@@ -403,7 +403,35 @@ textarea{min-height:90px;resize:vertical}
 .ih .crumb-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:0;color:var(--muted);font-size:13px;font-weight:600}
 .ih .x{background:var(--chip);border:0;border-radius:8px;width:34px;height:34px;font-size:20px;line-height:1;color:var(--muted)}
 .ib{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "side" "act";gap:16px}
-@media (min-width:760px){.ib{grid-template-columns:minmax(0,1fr) 270px;grid-template-areas:"top side" "act side";align-items:start}}
+@media (min-width:760px){.ib{grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"top side" "act side";align-items:start;column-gap:32px}}
+/* bid window (Jira-style) */
+.isec{margin-top:18px}
+.isec h4{font:700 15px var(--head);margin:0 0 6px;display:flex;align-items:center;gap:8px}
+.isec h4 .pt{font-size:12px;font-weight:500;color:var(--muted)}
+textarea.bare{width:100%;min-height:44px;border:1px solid transparent!important;background:transparent!important;border-radius:6px;padding:6px 8px;margin-left:-8px;resize:vertical;font-size:14px}
+textarea.bare:hover,textarea.bare:focus{border-color:var(--line)!important;background:var(--bg)!important}
+.istat{margin-bottom:12px}
+select.lzb{width:auto!important;font-weight:700;font-size:14px;padding:6px 10px!important;border-radius:6px!important;cursor:pointer}
+select.lzb.cat-todo{background:var(--chip)!important;color:var(--ink);border-color:var(--line2)!important}
+select.lzb.cat-doing{background:color-mix(in srgb,var(--c1) 18%,var(--surface))!important;color:var(--c1);border-color:var(--c1)!important}
+select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-color:var(--low)!important}
+.ipanel{border:1px solid var(--line);border-radius:10px;padding:6px 14px 10px;margin-bottom:10px}
+.iph{display:flex;align-items:center;gap:8px;font:700 15px var(--head);padding:8px 0 6px;background:none;border:0;width:100%;text-align:left;color:var(--ink)}
+.iph .chev{width:12px;color:var(--muted);font-size:12px}
+.frow{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:10px;min-height:38px}
+.frow .fl{font-size:13px;font-weight:600;color:var(--ink)}
+.frow .fv{min-width:0}
+.frow .pv{display:flex;align-items:center;gap:8px;min-width:0}
+.frow .pv .who{width:22px;height:22px;font-size:9px;color:#fff}
+.sheet .frow input.bare,.sheet .frow select.bare{width:100%;border:1px solid transparent;background:transparent;border-radius:6px;padding:5px 8px;margin-left:-8px;font-size:14px;color:var(--ink)}
+.sheet .frow input.bare:hover,.sheet .frow select.bare:hover,.sheet .frow input.bare:focus,.sheet .frow select.bare:focus{border-color:var(--line);background:var(--bg)}
+.sheet .frow input.bare::placeholder{color:var(--muted)}
+.sheet .frow input.bare.empty:not(:focus){color:var(--muted)}
+.ilinks:empty{display:none}
+.ilinks{margin-top:8px}
+.imeta{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:12px;color:var(--muted);padding:2px 4px}
+.imeta .danger{color:var(--high);font-size:12px}
+.tplsub{font-weight:700;font-size:13px;margin:14px 0 2px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 #i-top{grid-area:top;min-width:0}
 #i-side{grid-area:side;min-width:0}
 #i-act{grid-area:act;min-width:0}
@@ -596,7 +624,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={};
+  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false;
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -646,8 +674,26 @@ img.who{object-fit:cover;background:var(--chip)}
     if(type!=="Subtask")return [];
     return proj().issues.filter(function(i){return i.id!==selfId&&i.type!=="Subtask"});
   }
+  var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"]];
+  // the custom fields a space's bids have: those of the workflow template it follows
+  function spaceFields(p){var t=HAS_FIELDS&&p?followedTpl(p):null;return t?(t.fields||[]):[]}
+  function cfShow(fd,v){
+    if(!v)return "None";
+    if(fd.type==="person")return nameOf(v);
+    if(fd.type==="date")return shortDate(v);
+    if(fd.type==="money")return "$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    return String(v);
+  }
   function setField(is,f,v){
     var p=proj();
+    if(f.indexOf("cf:")===0){
+      var fid=f.slice(3),fd=spaceFields(p).filter(function(x){return x.id===fid})[0];if(!fd)return false;
+      is.fields=is.fields||{};v=String(v||"").trim();
+      if(v===(is.fields[fid]||""))return false;
+      logH(is,fd.name,cfShow(fd,is.fields[fid]),cfShow(fd,v));
+      if(v)is.fields[fid]=v;else delete is.fields[fid];
+      is.updated=Date.now();save();render();return true;
+    }
     if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
     else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v)}
@@ -677,7 +723,7 @@ img.who{object-fit:cover;background:var(--chip)}
     p.next=num+1;
     var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
       priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",
-      created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}]};
+      created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{}};
     applyStatus(p,is,is.status);
     p.issues.push(is);save();return is;
   }
@@ -749,8 +795,8 @@ img.who{object-fit:cover;background:var(--chip)}
   /* rows <-> documents */
   function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],created:(r.created_at||"").slice(0,10)}}
   function spaceToRow(id,d){return {id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]}}
-  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||""}}
-  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString()}}
+  function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{}}}
+  function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined}}
 
   function allDocs(){
     var m={};
@@ -779,7 +825,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var keep={},i,r;
     for(i=0;i<list.length;i++){
       keep[list[i].id]=1;
-      r=await sb.from("wf_templates").upsert({id:list[i].id,name:list[i].name,statuses:list[i].statuses});
+      var trow={id:list[i].id,name:list[i].name,statuses:list[i].statuses};if(HAS_FIELDS)trow.fields=list[i].fields||[];
+      r=await sb.from("wf_templates").upsert(trow);
       if(r.error)throw r.error;
     }
     var old=(raw.config&&raw.config.templates)||[];
@@ -834,11 +881,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var dt=CFG.DIVISIONS_TABLE||"divisions",idc=CFG.DIVISION_ID_COLUMN||"id",nc=CFG.DIVISION_NAME_COLUMN||"name";
     var rs=await Promise.all([
       sb.from(dt).select("*"),sb.from("wf_people").select("*"),sb.from("wf_templates").select("*").order("created_at"),
-      sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*")]);
+      sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
+      sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
-    raw.config={templates:rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[]}})};
+    // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
+    HAS_FIELDS=!rs[6].error&&!rs[7].error;
+    raw.config={templates:rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[],fields:r.fields||[]}})};
     raw.spaces={};rs[3].data.forEach(function(r){raw.spaces[r.id]=rowToSpace(r)});
     raw.bids={};rs[4].data.forEach(function(r){raw.bids[r.id]=rowToBid(r)});
     raw.names={};if(!rs[5].error)(rs[5].data||[]).forEach(function(r){raw.names[String(r.division_id)]={name:r.name,archivedAt:r.archived_at||""}});
@@ -1534,7 +1584,19 @@ img.who{object-fit:cover;background:var(--chip)}
           '<button class="btn small" data-tup="'+k+'" aria-label="Move up"'+(i===0?' disabled':'')+'>&uarr;</button><button class="btn small" data-tdown="'+k+'" aria-label="Move down"'+(i===t.statuses.length-1?' disabled':'')+'>&darr;</button>'+
           '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div>';
       });
-      h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div></div>';
+      h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div>';
+      if(HAS_FIELDS){
+        var F=t.fields||[];
+        h+='<div class="tplsub">Fields <span class="fine" style="margin:0;font-weight:400">shown on every bid in spaces using this workflow</span></div>';
+        F.forEach(function(fd,i){
+          var k=t.id+":"+i;
+          h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
+            '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>&uarr;</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>&darr;</button>'+
+            '<button class="btn small danger" data-tfdel="'+k+'">Remove</button></div>';
+        });
+        h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
+      }
+      h+='</div>';
     });
     if(!T.length)h+='<p class="fine">No templates yet.</p>';
     h+='</section>';
@@ -1669,27 +1731,44 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueTopHTML(is){
     var kids=children(is);
     var h='<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
-      '<label for="i-desc">Description</label><textarea id="i-desc" data-f="desc" style="min-height:120px" placeholder="Add a description…">'+esc(is.desc)+'</textarea>';
+      '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>';
     if(is.type!=="Subtask"){
-      var epic=false,done=kids.filter(isDone).length;
-      h+='<div class="kids" style="margin-top:16px"><div class="kh"><b style="font:600 16px var(--head)">'+(epic?'Child issues':'Subtasks')+'</b>'+(kids.length?'<span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</div>'+
-        (kids.length?'<div class="prog" style="margin:0 0 6px"><span class="track"><span class="fill" style="width:'+pct(done,kids.length)+'%;background:var(--low)"></span></span></div>'+kidRows(kids):'<div class="empty">'+(epic?'No child issues yet.':'No subtasks yet.')+'</div>')+
-        quickAddHTML(is.id,epic?"a child issue":"a subtask")+'</div>';
+      var done=kids.filter(isDone).length;
+      h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
+        (kids.length?'<div class="prog" style="margin:0 0 6px"><span class="track"><span class="fill" style="width:'+pct(done,kids.length)+'%;background:var(--low)"></span></span></div>'+kidRows(kids):'')+
+        quickAddHTML(is.id,"subtask")+'</div>';
     }
     return h;
   }
+  // a label / value row in the side panels; inputs look like plain text until hovered
+  function frow(label,ctl){return '<div class="frow"><span class="fl">'+label+'</span><div class="fv">'+ctl+'</div></div>'}
+  function cfInput(fd,is){
+    var v=(is.fields||{})[fd.id]||"",a=' data-f="cf:'+fd.id+'" aria-label="'+esc(fd.name)+'"';
+    if(fd.type==="person")return '<select class="bare"'+a+'>'+teamOptions(v).replace('>Unassigned<','>None<')+'</select>';
+    if(fd.type==="date")return '<input class="bare'+(v?'':' empty')+'" type="date"'+a+' value="'+esc(v)+'">';
+    if(fd.type==="number"||fd.type==="money")return '<input class="bare" type="number" step="any" inputmode="decimal"'+a+' value="'+esc(v)+'" placeholder="'+(fd.type==="money"?'Add amount':'Add number')+'">';
+    return '<input class="bare"'+a+' value="'+esc(v)+'" maxlength="200" placeholder="Add text">';
+  }
   function issueSideHTML(is){
-    var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask";
-    var h='<div class="detail"><label for="i-status">Status</label><select id="i-status" data-f="status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
-      '<label for="i-who">Assignee</label><select id="i-who" data-f="assignee">'+teamOptions(is.assignee)+'</select>'+
-      '<label>Reporter</label><div class="ro">'+esc(is.reporter?nameOf(is.reporter):"Unknown")+'</div>'+srcLinkHTML(is)+originHTML(is)+copiesHTML(is)+
-      '<label for="i-pri">Priority</label><select id="i-pri" data-f="priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select>'+
-      '<label for="i-type">Type</label><select id="i-type" data-f="type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>';
-    if(isSub)h+='<label for="i-parent">Parent</label><select id="i-parent" data-f="parent">'+opt("","None",is.parent)+cands.map(function(c){return opt(c.id,ikey(c)+" "+c.title,is.parent)}).join("")+'</select>';
-    h+='<label for="i-labels">Labels</label><input id="i-labels" data-f="labels" placeholder="design, bug" value="'+esc(is.labels.join(", "))+'">'+
-      '<label for="i-due">Due date</label><input id="i-due" type="date" data-f="due" value="'+esc(is.due)+'">'+
-      '<div class="meta2">Created '+shortDate(is.created)+'<br>Updated '+ago(is.updated)+'</div>'+
-      '<div style="margin-top:12px"><button class="btn small danger" data-delissue>'+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div></div>';
+    var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
+    var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></div>';
+    h+='<div class="ipanel"><div class="iph">Fields</div>'+
+      frow("Due date",'<input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">')+
+      frow("Assignee",'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>')+
+      frow("Reporter",'<span class="pv">'+nameAv(is.reporter)+'<span>'+esc(is.reporter||"Unknown")+'</span></span>');
+    spaceFields(p).forEach(function(fd){h+=frow(esc(fd.name),cfInput(fd,is))});
+    h+='</div>';
+    var open=!!ui.detOpen;
+    h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?'&#9662;':'&#9656;')+'</span>Details <span class="fine" style="margin:0;font-weight:400">Priority, Type, Labels'+(isSub?', Parent':'')+'</span></button>';
+    if(open){
+      h+=frow("Priority",'<span class="pv">'+prHTML(is.priority)+'<select id="i-pri" class="bare" data-f="priority" aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>')+
+        frow("Type",'<select id="i-type" class="bare" data-f="type" aria-label="Type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>')+
+        frow("Labels",'<input id="i-labels" class="bare" data-f="labels" placeholder="Add labels" value="'+esc(is.labels.join(", "))+'" aria-label="Labels">');
+      if(isSub)h+=frow("Parent",'<select id="i-parent" class="bare" data-f="parent" aria-label="Parent">'+opt("","None",is.parent)+cands.map(function(c){return opt(c.id,ikey(c)+" "+c.title,is.parent)}).join("")+'</select>');
+      h+='<div class="ilinks">'+srcLinkHTML(is)+originHTML(is)+copiesHTML(is)+'</div>';
+    }
+    h+='</div>';
+    h+='<div class="imeta"><div>Created '+(is.created?shortDate(is.created):"")+'<br>Updated '+ago(is.updated)+'</div><button class="linkbtn danger" data-delissue>'+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div>';
     return h;
   }
   function renderIssueAct(){
@@ -1868,6 +1947,23 @@ img.who{object-fit:cover;background:var(--chip)}
       if(tp2&&tp2.statuses.length>1){tp2.statuses.splice(+tk2[1],1);save();render()}
       return;
     }
+    if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
+    if((el=t.closest("[data-taddfield]"))){
+      var tfid=el.getAttribute("data-taddfield"),tfp=D.config.templates.filter(function(x){return x.id===tfid})[0],tfin=$("tfn-"+tfid);
+      if(!tfin||!tfin.value.trim()){if(tfin)tfin.focus();return}
+      if(tfp){tfp.fields=tfp.fields||[];tfp.fields.push({id:"f"+uuid().slice(0,8),name:tfin.value.trim(),type:$("tft-"+tfid).value});save();render()}
+      return;
+    }
+    if((el=t.closest("[data-tfmv]"))){
+      var mk=el.getAttribute("data-tfmv").split(":"),mt=D.config.templates.filter(function(x){return x.id===mk[0]})[0],mi=+mk[1],mj=mi+parseInt(el.getAttribute("data-d"),10);
+      if(mt&&mt.fields&&mj>=0&&mj<mt.fields.length){var mf=mt.fields[mi];mt.fields[mi]=mt.fields[mj];mt.fields[mj]=mf;save();render()}
+      return;
+    }
+    if((el=t.closest("[data-tfdel]"))){
+      var dk=el.getAttribute("data-tfdel").split(":"),dt2=D.config.templates.filter(function(x){return x.id===dk[0]})[0];
+      if(dt2&&dt2.fields){dt2.fields.splice(+dk[1],1);save();render()}
+      return;
+    }
     if((el=t.closest("[data-taddcol]"))){
       if(!ORG)return;
       var tid3=el.getAttribute("data-taddcol"),tp3=D.config.templates.filter(function(x){return x.id===tid3})[0],tin=$("tn-"+tid3);
@@ -2044,6 +2140,12 @@ img.who{object-fit:cover;background:var(--chip)}
       if(t2&&t2.statuses[+pr[1]]){if(cv){t2.statuses[+pr[1]].name=cv;save()}else el.value=t2.statuses[+pr[1]].name}
       return;
     }
+    if((v=el.getAttribute("data-tfname"))||(v=el.getAttribute("data-tftype"))){
+      var fk=v.split(":"),ft=D.config.templates.filter(function(x){return x.id===fk[0]})[0],ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
+      if(!ff)return;
+      if(el.hasAttribute("data-tftype"))ff.type=el.value;else if(el.value.trim())ff.name=el.value.trim();else{el.value=ff.name;return}
+      save();render();return;
+    }
     if((v=el.getAttribute("data-tccat"))){
       var pr2=v.split(":"),t3=D.config.templates.filter(function(x){return x.id===pr2[0]})[0];
       if(t3&&t3.statuses[+pr2[1]]){t3.statuses[+pr2[1]].cat=el.value;save();render()}
@@ -2054,7 +2156,9 @@ img.who{object-fit:cover;background:var(--chip)}
       var cur=byId(ui.issueId);if(!cur)return;
       var changed=setField(cur,v,el.value);
       if(v==="title"&&!changed)el.value=cur.title;
+      if(changed&&(v==="assignee"||v.indexOf("cf:")===0))$("i-side").innerHTML=issueSideHTML(cur);
       if(changed&&(v==="status"||v==="priority"||v==="type"||v==="parent")){
+        $("i-side").innerHTML=issueSideHTML(cur);
         renderIssueHead(cur);
         if(v==="type"||v==="parent"){$("i-top").innerHTML=issueTopHTML(cur);$("i-side").innerHTML=issueSideHTML(cur)}
         renderIssueAct();
