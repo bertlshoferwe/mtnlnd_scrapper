@@ -1177,9 +1177,7 @@ img.who{object-fit:cover;background:var(--chip)}
       shown.forEach(function(is){
         h+='<article class="card" draggable="true" data-id="'+is.id+'"><div class="ck">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+prHTML(is.priority)+'</div>'+
           '<button class="title" data-open="'+is.id+'">'+esc(is.title)+'</button>'+echipHTML(is)+
-          '<div class="meta">'+dueChip(is)+avHTML(is.assignee)+'</div>'+
-          '<div class="mv"><button data-mv="-1" data-id="'+is.id+'" aria-label="Move to previous column"'+(ci===0?' disabled':'')+'>&larr;</button>'+
-          '<button data-mv="1" data-id="'+is.id+'" aria-label="Move to next column"'+(ci===p.statuses.length-1?' disabled':'')+'>&rarr;</button></div></article>';
+          '<div class="meta">'+dueChip(is)+avHTML(is.assignee)+'</div>'+'</article>';
       });
       if(!shown.length&&items.length)h+='<div class="empty">No bids match your filters.</div>';
       h+='</div>'+(canAct()?'<button class="add" data-add="'+s.id+'" title="Create bid" aria-label="Create bid in '+esc(s.name)+'">+</button>':'')+'</section>';
