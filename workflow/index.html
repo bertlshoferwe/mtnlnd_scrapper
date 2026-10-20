@@ -376,7 +376,6 @@ img.who{object-fit:cover;background:var(--chip)}
     <div class="brand">Bid board</div>
     <div id="plist"></div>
     <div id="sfoot"></div>
-    <div class="me"><label for="myname">Your name</label><input id="myname" maxlength="30" placeholder="Shown on comments"></div>
   </aside>
   <div class="scrim" id="scrim" data-scrim></div>
   <div class="main">
@@ -1842,7 +1841,6 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(el.id==="pname"){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";render();return}
-    if(el.id==="myname"){state.myName=el.value.trim();ME=state.myName||"Someone";save();return}
     if((v=el.getAttribute("data-pname"))){
       var pp=D.people.filter(function(x){return x.id===v})[0],pv=el.value.trim();
       if(pp&&pv){pp.name=pv;PROF[pp.id]={name:pv,avatarUrl:""};save()}else if(pp)el.value=pp.name;
@@ -1947,7 +1945,6 @@ img.who{object-fit:cover;background:var(--chip)}
   applyTheme();applySide();
   render();
   (function boot(){
-    $("myname").value=state.myName||"";
     if(!window.supabase||!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY){
       DENIED="The app isn’t configured. Set SUPABASE_URL and SUPABASE_ANON_KEY (see the README).";render();return;
     }
