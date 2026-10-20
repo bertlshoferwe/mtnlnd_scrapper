@@ -299,6 +299,9 @@ td.over{color:var(--high);font-weight:600}
 }
 .sheet h3{font:700 20px var(--head);margin:0 0 14px}
 .sheet.wide{width:min(760px,100%)}
+.sethead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.sethead h3{margin:0}
+.sethead .icon{font-size:22px;line-height:1;color:var(--ink)}
 .sheet .srow input{width:auto}
 .sheet .srow select{width:auto;flex:0 0 auto}
 .tplrow .tplname{flex:1 1 auto;min-width:0;font-weight:600}
@@ -417,7 +420,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <!-- day -->
 <div class="overlay" id="ov-settings" role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <div class="sheet wide">
-    <h3 id="setTitle">Settings</h3>
+    <div class="sethead"><h3 id="setTitle">Settings</h3><button class="icon" data-newtpl title="New workflow template" aria-label="New workflow template">+</button></div>
     <div id="orgSetBody"></div>
     <div class="actions"><span class="spacer"></span><button class="btn" data-close="ov-settings">Close</button></div>
   </div>
@@ -1395,7 +1398,7 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div></div>';
     });
     if(!T.length)h+='<p class="fine">No templates yet.</p>';
-    h+='<div class="srow"><input id="newtpl" placeholder="New template name" maxlength="40" aria-label="New template name"><button class="btn small primary" data-newtpl>Create template</button></div></section>';
+    h+='</section>';
     return h;
   }
   function orgSettingsHTML(){
@@ -1703,8 +1706,12 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-edittpl]"))){var etid=el.getAttribute("data-edittpl");ui.editTpl=ui.editTpl===etid?null:etid;ui.armDT=null;render();return}
     if(t.closest("[data-newtpl]")){
       if(!ORG)return;
-      var tnm=$("newtpl").value.trim();if(!tnm){$("newtpl").focus();return}
-      var ntp={id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)};D.config.templates.push(ntp);ui.editTpl=ntp.id;save();render();return;
+      // "+" in the Settings window: a new template, opened for editing with its name selected
+      var tnm="New workflow",tno=2;
+      while(D.config.templates.some(function(x){return x.name===tnm}))tnm="New workflow "+(tno++);
+      var ntp={id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)};D.config.templates.push(ntp);ui.editTpl=ntp.id;save();render();
+      var nti=document.querySelector('[data-tname="'+ntp.id+'"]');if(nti){nti.focus();nti.select()}
+      return;
     }
     if((el=t.closest("[data-tup]"))||(el=t.closest("[data-tdown]"))){
       if(!ORG)return;
