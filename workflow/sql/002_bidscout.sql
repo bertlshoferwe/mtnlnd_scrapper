@@ -2,14 +2,19 @@
 -- Supabase SQL Editor. Safe to run more than once.
 
 -- 1. Divisions the board can read.
--- The board runs in the browser with the anon key, and `divisions` has RLS on
--- with no policies (schema.sql), so it can't read that table directly. This
--- view exposes only id + name; views run with their owner's rights, so it
--- reads past RLS without opening up `divisions` (or its settings) itself.
--- The board is pointed at it via DIVISIONS_TABLE in /workflow/config.js.
-create or replace view wf_divisions as
+-- The board runs in the browser with the anon key. It may read only the id
+-- and name columns of `divisions` (column grants), every row (a select-only
+-- policy); `settings` and the other tables stay locked. wf_divisions is a
+-- plain security-invoker view over those two columns; the board is pointed
+-- at it via DIVISIONS_TABLE in /workflow/config.js.
+create or replace view wf_divisions with (security_invoker = true) as
   select id, name from divisions;
 grant select on wf_divisions to anon, authenticated;
+revoke select on divisions from anon, authenticated;
+grant select (id, name) on divisions to anon, authenticated;
+drop policy if exists wf_divisions_read on divisions;
+create policy wf_divisions_read on divisions
+  for select to anon, authenticated using (true);
 
 -- 2. Keep wf_division_names exact (adapted from the board's
 -- 003_archive_divisions.sql.example): names recorded on create/rename, and a
