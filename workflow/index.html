@@ -160,6 +160,18 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .ck{display:flex;align-items:center;gap:6px;margin-bottom:2px}
 .ck .pr{margin-left:auto}
 .card .title{display:block;width:100%;text-align:left;background:none;border:0;padding:2px 0 8px;font-weight:500;font-size:15px}
+.card{cursor:pointer}
+.card:hover{background:color-mix(in srgb,var(--ink) 3%,var(--surface))}
+.ctitle{font-size:15px;font-weight:500;line-height:1.35;overflow-wrap:anywhere;margin-bottom:6px}
+.cdue{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);margin-bottom:8px}
+.cdue .odc{color:var(--high)}
+.cfoot{display:flex;align-items:center;gap:6px}
+.cfoot .sp{flex:1}
+.cfoot .key{font-size:13px}
+.cpick{position:relative;display:grid;place-items:center;min-width:24px;height:24px;border-radius:6px}
+.cpick:hover{background:var(--chip)}
+.cpick select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.cpick .who{width:24px;height:24px;font-size:10px;color:#fff}
 .meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta .who{margin-left:auto}
 .mv{display:flex;gap:6px;margin-top:8px}
@@ -1197,9 +1209,16 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+'<span class="count">'+items.length+'</span>'+
         '<button class="colbtn" data-colfold="'+s.id+'" title="Collapse" aria-label="Collapse '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h7M7 8l4 4-4 4M21 12h-7M17 8l-4 4 4 4"/></svg></button></h2><div class="cards">';
       shown.forEach(function(is){
-        h+='<article class="card" draggable="true" data-id="'+is.id+'"><div class="ck">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+prHTML(is.priority)+'</div>'+
-          '<button class="title" data-open="'+is.id+'">'+esc(is.title)+'</button>'+echipHTML(is)+
-          '<div class="meta">'+dueChip(is)+avHTML(is.assignee)+'</div>'+'</article>';
+        // Jira-style card: title, due date, then type + key on the left and priority + assignee on the right.
+        // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
+        h+='<article class="card" draggable="true" data-id="'+is.id+'" data-open="'+is.id+'">'+
+          '<div class="ctitle">'+esc(is.title)+'</div>'+
+          (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Overdue"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
+          echipHTML(is)+
+          '<div class="cfoot"><span class="kc">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span></span><span class="sp"></span>'+
+          '<span class="cpick" title="Priority: '+is.priority+'">'+prHTML(is.priority)+'<select data-cardpri="'+is.id+'" aria-label="Priority for '+ikey(is)+'">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>'+
+          '<span class="cpick" title="'+esc(is.assignee?nameOf(is.assignee):"Unassigned")+'">'+(is.assignee?nameAv(nameOf(is.assignee)):'<span class="who none">?</span>')+'<select data-cardwho="'+is.id+'" aria-label="Assignee for '+ikey(is)+'">'+teamOptions(is.assignee)+'</select></span>'+
+          '</div></article>';
       });
       if(!shown.length&&items.length)h+='<div class="empty">No bids match your filters.</div>';
       h+='</div>'+(!canAct()?'':ui.qc&&ui.qc.where==="col"&&ui.qc.key===s.id?qcHTML("card"):'<button class="add" data-add="'+s.id+'" data-qcopen title="Create bid" aria-label="Create bid in '+esc(s.name)+'">+</button>')+'</section>';
@@ -2265,6 +2284,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
     if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
+    if(t.closest(".cpick"))return;
     if((el=t.closest("[data-open]"))){
       var id=el.getAttribute("data-open");
       if($("ov-issue").classList.contains("open")&&$("ov-issue").contains(el)){ui.issueId=id;ui.draft="";ui.editC=null;ui.actTab="all";renderIssue()}
@@ -2426,6 +2446,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
+    if((v=el.getAttribute("data-cardpri"))){var cpi=byId(v);if(cpi)setField(cpi,"priority",el.value);return}
+    if((v=el.getAttribute("data-cardwho"))){var cwi=byId(v);if(cwi)setField(cwi,"assignee",el.value);return}
     if(ui.qc&&el.hasAttribute("data-qctype")){ui.qc.type=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcwho")){ui.qc.assignee=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcdue")){ui.qc.due=el.value;render();return}
