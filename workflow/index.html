@@ -1302,9 +1302,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var ft=followedTpl(p);
     h+='<section class="panel"><h3>Workflow</h3>'+
       '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
-        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select>'+
-      '<p class="fine" style="margin:8px 0 0">'+p.statuses.map(function(s){return esc(s.name)}).join(" → ")+'</p>'+
-      '<p class="fine" style="margin:6px 0 0">Workflows are created and edited in <b>Settings</b> at the bottom of the sidebar.</p></section>';
+        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select></section>';
     h+=automationsHTML(p);
     h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section></div>';
     return h;
