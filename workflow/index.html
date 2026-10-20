@@ -288,6 +288,12 @@ td.over{color:var(--high);font-weight:600}
 .jc .jt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jc .who{width:18px;height:18px;font-size:8px;color:#fff;flex:0 0 auto}
 .jday .more{padding:4px 2px 0}
+.jday{position:relative}
+.jpop{position:fixed;z-index:50;width:280px;max-height:70vh;overflow:auto;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 10px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
+.jph{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px}
+.jph b{font-size:14px}
+.jph button{background:none;border:0;border-radius:6px;width:26px;height:26px;font-size:20px;line-height:1;color:var(--muted)}
+.jph button:hover{background:var(--chip);color:var(--ink)}
 .unsch{margin:0 16px 12px}
 .unsch .unrow{margin-top:4px}
 .daypanel h3,.panel h3{font:600 16px var(--head);margin:0 0 10px}
@@ -1132,6 +1138,17 @@ img.who{object-fit:cover;background:var(--chip)}
     return '<button class="jc'+(done?' fin':'')+(overdue(is)?' over':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+
       tiHTML(is.type)+'<span class="jk">'+ikey(is)+'</span><span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
   }
+  var MONTHNAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  function closeCalPop(){ui.calPop=null;var pe=document.querySelector(".jpop");if(pe)pe.remove()}
+  // place the pop-up over its day, kept inside the window
+  function placeCalPop(){
+    var pe=document.querySelector(".jpop");if(!pe)return;
+    var r=pe.parentNode.getBoundingClientRect(),w=Math.max(r.width+12,280);
+    pe.style.width=w+"px";
+    var x=Math.min(Math.max(8,r.left-6),window.innerWidth-w-8),y=Math.max(8,r.top-6);
+    y=Math.min(y,window.innerHeight-pe.offsetHeight-8);
+    pe.style.left=x+"px";pe.style.top=Math.max(8,y)+"px";
+  }
   function setCalMode(cmode){
     state.calMode=cmode;
     if(cmode==="week"&&state.calSel.slice(0,7)!==state.calMonth){var T0=today();state.calSel=T0.slice(0,7)===state.calMonth?T0:state.calMonth+"-01"}
@@ -1179,7 +1196,9 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<div class="jday'+(out?' out':'')+(s===T?' today':'')+'" data-day="'+s+'" aria-label="'+d.toDateString()+', '+list.length+' bids">'+
         '<div class="jdn"><span>'+label+'</span>'+(canAct()?'<button class="jadd" data-add-due="'+s+'" title="Create bid due this day" aria-label="Create bid due '+d.toDateString()+'">+</button>':'')+'</div>'+
         shown.map(calChip).join("")+
-        (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+'</div>';
+        (list.length>shown.length?'<button class="more" data-more="'+s+'">'+(list.length-shown.length)+' more</button>':'')+
+        // "N more" opens this: every bid due that day, floating over the day
+        (ui.calPop===s?'<div class="jpop" role="dialog" aria-label="Bids due '+d.toDateString()+'"><div class="jph"><b>'+MONTHNAMES[d.getMonth()]+' '+d.getDate()+'</b><button data-calpopclose aria-label="Close">&times;</button></div>'+list.map(calChip).join("")+'</div>':'')+'</div>';
     });
     return h+'</div>';
   }
@@ -1553,10 +1572,12 @@ img.who{object-fit:cover;background:var(--chip)}
     else if(v==="division")html=divisionHTML(d);
     else if(!p)html=noSpaceHTML(d);
     else html=v==="list"?listHTML():v==="calendar"?calHTML():v==="reports"?reportsHTML():v==="settings"?settingsHTML():boardHTML();
+    if(v!=="calendar")ui.calPop=null;
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
     $("view").innerHTML=html;
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
+    placeCalPop();
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
   // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
@@ -1594,6 +1615,7 @@ img.who{object-fit:cover;background:var(--chip)}
     openOv("ov-day");
   }
   function closeTop(){
+    if(ui.calPop){closeCalPop();return}
     var ids=["ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
@@ -1834,7 +1856,8 @@ img.who{object-fit:cover;background:var(--chip)}
       else{closeOv("ov-day");openIssue(id)}
       return;
     }
-    if((el=t.closest("[data-more]"))){openDay(el.getAttribute("data-more"));return}
+    if((el=t.closest("[data-more]"))){ui.calPop=el.getAttribute("data-more");render();return}
+    if(t.closest("[data-calpopclose]")){closeCalPop();return}
     if((el=t.closest("[data-schedule]"))){var si=byId(el.getAttribute("data-schedule"));if(si)setField(si,"due",state.calSel);return}
     if((el=t.closest("[data-calmode]"))){setCalMode(el.getAttribute("data-calmode"));return}
     if(t.closest("[data-unsch]")){ui.unsch=!ui.unsch;render();return}
@@ -2027,6 +2050,11 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   /* drag and drop on the board */
   var view=$("view");
+  window.addEventListener("scroll",function(e){if(ui.calPop&&!(e.target.nodeType===1&&e.target.closest(".jpop")))closeCalPop()},true);
+  window.addEventListener("resize",placeCalPop);
+  document.addEventListener("mousedown",function(e){
+    if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
+  });
   view.addEventListener("dragstart",function(e){
     var th=e.target.closest("[data-lcol]");
     if(th){ui.dragCol=th.getAttribute("data-lcol");try{e.dataTransfer.setData("text/plain",ui.dragCol);e.dataTransfer.effectAllowed="move"}catch(x){}return}
