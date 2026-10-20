@@ -443,7 +443,8 @@ textarea{min-height:90px;resize:vertical}
 .dropz.busy{cursor:progress}
 textarea.bare{width:100%;min-height:44px;border:1px solid transparent!important;background:transparent!important;border-radius:6px;padding:6px 8px;margin-left:-8px;resize:vertical;font-size:14px}
 textarea.bare:hover,textarea.bare:focus{border-color:var(--line)!important;background:var(--bg)!important}
-.istat{margin-bottom:12px}
+.istat{margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.istat .addsub{width:34px;height:34px;font-size:20px;line-height:1;color:var(--ink)}
 select.lzb{width:auto!important;font-weight:700;font-size:14px;padding:6px 10px!important;border-radius:6px!important;cursor:pointer}
 select.lzb.cat-todo{background:var(--chip)!important;color:var(--ink);border-color:var(--line2)!important}
 select.lzb.cat-doing{background:color-mix(in srgb,var(--c1) 18%,var(--surface))!important;color:var(--c1);border-color:var(--c1)!important}
@@ -1847,7 +1848,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- issue modal ---------- */
   function openIssue(id){
-    ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";
+    ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";ui.addSub=false;
     renderIssue();openOv("ov-issue");
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
@@ -1870,9 +1871,9 @@ img.who{object-fit:cover;background:var(--chip)}
       (HAS_FILES?'<div class="isec" id="i-att">'+attachHTML(is)+'</div>':'');
     if(is.type!=="Subtask"){
       var done=kids.filter(isDone).length;
-      h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
+      if(kids.length||ui.addSub)h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
         (kids.length?'<div class="prog" style="margin:0 0 6px"><span class="track"><span class="fill" style="width:'+pct(done,kids.length)+'%;background:var(--low)"></span></span></div>'+kidRows(kids):'')+
-        quickAddHTML(is.id,"subtask")+'</div>';
+        (ui.addSub?quickAddHTML(is.id,"subtask"):'')+'</div>';
     }
     return h;
   }
@@ -1954,7 +1955,8 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function issueSideHTML(is){
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
-    var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></div>';
+    var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
+      (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">+</button>')+'</div>';
     var rowsF={
       due:frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
         (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',"due"),
@@ -2043,7 +2045,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var par=byId(parentId);
     createIssue({type:"Subtask",title:title,parent:par.id,priority:"Medium"});
     par.updated=Date.now();save();render();
-    if(ui.issueId){renderIssue()}
+    if(ui.issueId){renderIssue();var qn=document.querySelector('[data-quick="'+parentId+'"]');if(qn)qn.focus()}
     toast("Added");
   }
 
@@ -2245,6 +2247,12 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-delrep]"))){state.reports.splice(parseInt(el.getAttribute("data-delrep"),10),1);save();render();return}
     
     if((el=t.closest("[data-quickadd]"))){quickAdd(el.getAttribute("data-quickadd"));return}
+    if(t.closest("[data-addsub]")){
+      var asi=byId(ui.issueId);if(!asi)return;
+      ui.addSub=true;$("i-top").innerHTML=issueTopHTML(asi);
+      var qi=document.querySelector('[data-quick="'+asi.id+'"]');if(qi){qi.focus();qi.scrollIntoView({block:"nearest"})}
+      return;
+    }
     if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
     if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
@@ -2416,6 +2424,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
   });
   document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"&&t.getAttribute&&t.getAttribute("data-quick")&&ui.addSub){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
     if(e.key==="Escape"){closeTop();return}
     var t=e.target;
     var day=t.closest&&t.closest("[data-day]");
