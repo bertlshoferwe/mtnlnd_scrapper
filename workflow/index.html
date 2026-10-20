@@ -35,15 +35,19 @@
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;min-height:100vh}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;min-height:calc(100vh / var(--z))}
+/* Default size: computers show the board at 80% (like browser zoom at 80%); phones stay at 100%.
+   Full-height sizes divide by --z so they still fill the window. */
+:root{--z:1}
+@media (min-width:900px){:root{--z:.8}body{zoom:var(--z)}}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* layout */
-.app{display:flex;min-height:100vh}
+.app{display:flex;min-height:calc(100vh / var(--z))}
 .main{flex:1 1 auto;min-width:0}
-.side{width:248px;flex:0 0 248px;background:var(--side-bg);color:var(--side-ink);padding:18px 12px 20px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;align-self:flex-start;overflow-y:auto}
+.side{width:248px;flex:0 0 248px;background:var(--side-bg);color:var(--side-ink);padding:18px 12px 20px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:calc(100vh / var(--z));align-self:flex-start;overflow-y:auto}
 .brand{font:700 20px var(--head);letter-spacing:-.01em;padding:4px 10px 14px}
 .sl{font-size:12px;color:var(--side-mute);padding:6px 10px;font-weight:600}
 .proj{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-radius:8px;padding:8px 10px;color:inherit;text-align:left}
@@ -158,7 +162,7 @@ table.list tr:last-child td{border-bottom:0}
 table.list select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:13px}
 /* Jira-style list */
 .tablewrap.jl{border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:none}
-.jl .tscroll{overflow:auto;max-height:calc(100vh - 230px)}
+.jl .tscroll{overflow:auto;max-height:calc(100vh / var(--z) - 230px)}
 .jl table.list{min-width:1180px}
 .jl table.list th{position:sticky;top:0;z-index:1;background:var(--surface);font-size:12px;font-weight:700;white-space:nowrap;border-right:1px solid var(--line)}
 .jl table.list th button{padding:9px 10px}
@@ -289,7 +293,7 @@ td.over{color:var(--high);font-weight:600}
 .jc .who{width:18px;height:18px;font-size:8px;color:#fff;flex:0 0 auto}
 .jday .more{padding:4px 2px 0}
 .jday{position:relative}
-.jpop{position:fixed;z-index:50;width:280px;max-height:70vh;overflow:auto;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 10px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
+.jpop{position:fixed;z-index:50;width:280px;max-height:calc(70vh / var(--z));overflow:auto;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 10px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
 .jph{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px}
 .jph b{font-size:14px}
 .jph button{background:none;border:0;border-radius:6px;width:26px;height:26px;font-size:20px;line-height:1;color:var(--muted)}
@@ -364,7 +368,7 @@ td.over{color:var(--high);font-weight:600}
 @media (min-width:760px){
   .overlay{align-items:center}
   .sheet{border-radius:16px}
-  .sheet.issue{width:min(960px,96%);height:auto;max-height:92vh;border-radius:16px;padding-top:20px}
+  .sheet.issue{width:min(960px,96%);height:auto;max-height:calc(92vh / var(--z));border-radius:16px;padding-top:20px}
 }
 .sheet h3{font:700 20px var(--head);margin:0 0 14px}
 .sheet.wide{width:min(760px,100%)}
@@ -1143,11 +1147,13 @@ img.who{object-fit:cover;background:var(--chip)}
   // place the pop-up over its day, kept inside the window
   function placeCalPop(){
     var pe=document.querySelector(".jpop");if(!pe)return;
-    var r=pe.parentNode.getBoundingClientRect(),w=Math.max(r.width+12,280);
-    pe.style.width=w+"px";
+    // measured in screen pixels, then divided by the page zoom (80% on computers) to place it
+    var Z=parseFloat(getComputedStyle(document.body).zoom)||1;
+    var r=pe.parentNode.getBoundingClientRect(),w=Math.max(r.width+12,280*Z);
+    pe.style.width=(w/Z)+"px";
     var x=Math.min(Math.max(8,r.left-6),window.innerWidth-w-8),y=Math.max(8,r.top-6);
-    y=Math.min(y,window.innerHeight-pe.offsetHeight-8);
-    pe.style.left=x+"px";pe.style.top=Math.max(8,y)+"px";
+    y=Math.min(y,window.innerHeight-pe.offsetHeight*Z-8);
+    pe.style.left=(x/Z)+"px";pe.style.top=(Math.max(8,y)/Z)+"px";
   }
   function setCalMode(cmode){
     state.calMode=cmode;
