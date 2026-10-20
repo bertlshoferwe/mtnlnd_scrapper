@@ -30,8 +30,9 @@
     --success-soft: #e3f1e8;
     --warning: #b26b00;
     --warning-soft: #f4ecd9;
-    --radius: 6px;
-    --radius-sm: 4px;
+    /* Same shapes as the bid board (/workflow/): rounder corners, flat outlined cards. */
+    --radius: 12px;
+    --radius-sm: 8px;
     --shadow-sm: 0 1px 2px rgba(16,22,46,.07), 0 1px 3px rgba(16,22,46,.05);
     --shadow-md: 0 8px 24px rgba(16,22,46,.13);
     --shadow-lg: 0 24px 64px rgba(16,22,46,.32);
@@ -140,9 +141,8 @@
     border-radius: var(--radius);
     padding: 20px 22px;
     margin-bottom: 20px;
-    box-shadow: var(--shadow-sm);
   }
-  .card h2 { font-size: 13px; font-weight: 700; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card h2 { font-size: 15px; font-weight: 800; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.08em; }
   .card .desc { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   input[type=text], input[type=url], input[type=number], input[type=file] {
@@ -530,34 +530,29 @@
   .site-tab .rtab-count { margin-left: 6px; font-weight: 500; opacity: .55; font-size: 12px; }
   .site-tab.active .rtab-count { opacity: .85; }
 
-  /* Folder-style tabs: each tab is a rounded-top box sitting on the
-     baseline; the active one's bottom border is painted the same color as
-     the card so it visually merges into the content below, like a raised
-     folder tab. */
+  /* To Review / Jira / Not a Fit: pills, same as the bid board's view switcher. */
   .view-tabs {
-    display: flex; gap: 6px; margin-bottom: 16px;
-    border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px;
   }
   .view-tab {
     font-family: inherit; cursor: pointer;
-    padding: 9px 18px; margin-bottom: -1px;
-    font-size: 13px; font-weight: 700; color: var(--muted);
-    background: var(--surface-2); border: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    border-radius: 10px 10px 0 0;
-    transition: color .12s, background .12s;
+    padding: 6px 14px;
+    font-size: 13.5px; font-weight: 600; color: var(--muted);
+    background: transparent; border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    transition: color .12s, background .12s, border-color .12s;
   }
-  .view-tab:hover { color: var(--text); }
+  .view-tab:hover { color: var(--text); border-color: var(--accent); }
   .view-tab .vt-count { margin-left: 6px; font-weight: 500; opacity: .6; font-size: 12px; }
   .view-tab.active {
-    color: var(--text); background: var(--card);
-    border-color: var(--border); border-bottom-color: var(--card);
+    color: var(--accent-contrast); background: var(--accent); border-color: var(--accent);
   }
+  .view-tab.active .vt-count { opacity: .8; }
   /* Unlabeled stats toggle, parked at the far end of the tab bar — not a
      feature anyone needs to find, just there for whoever already knows. */
   .stats-peek {
     margin-left: auto; align-self: center;
-    width: 10px; height: 10px; padding: 0; margin-bottom: -1px;
+    width: 10px; height: 10px; padding: 0;
     border: none; border-radius: 50%; background: var(--muted);
     opacity: .1; cursor: pointer; transition: opacity .15s;
   }
