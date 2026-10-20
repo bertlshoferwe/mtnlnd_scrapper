@@ -408,6 +408,8 @@ td.over{color:var(--high);font-weight:600}
 .sethead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
 .sethead h3{margin:0}
 .sethead .icon{font-size:22px;line-height:1;color:var(--ink)}
+.settabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 14px;overflow-x:auto}
+.settabs .tab{white-space:nowrap}
 .sheet .srow input{width:auto}
 .sheet .srow select{width:auto;flex:0 0 auto}
 .tplrow .tplname{flex:1 1 auto;min-width:0;font-weight:600}
@@ -581,7 +583,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <!-- day -->
 <div class="overlay" id="ov-settings" role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <div class="sheet wide">
-    <div class="sethead"><h3 id="setTitle">Settings</h3><button class="icon" data-newtpl title="New workflow template" aria-label="New workflow template">+</button></div>
+    <div class="sethead"><h3 id="setTitle">Settings</h3><button class="icon" id="setNewTpl" data-newtpl title="New workflow template" aria-label="New workflow template">+</button></div>
     <div id="orgSetBody"></div>
     <div class="actions"><span class="spacer"></span><button class="btn" data-close="ov-settings">Close</button></div>
   </div>
@@ -668,7 +670,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var PCOLOR={Highest:"var(--high)",High:"var(--high)",Medium:"var(--med)",Low:"var(--low)"};
   var CATS=[["todo","To do"],["doing","In progress"],["done","Done"]];
   var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  var VIEWS=[["board","Board"],["list","List"],["calendar","Calendar"],["reports","Reports"],["settings","Settings"]];
+  var VIEWS=[["board","Board"],["list","List"],["calendar","Calendar"],["reports","Reports"]];
   var VICON={"board": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M9 4v16M15 4v16\"/></svg>", "list": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M3 15h18M9 10v10\"/></svg>", "calendar": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/></svg>", "reports": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 20V10M10 20V4M16 20v-7M22 20H2\"/></svg>", "settings": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1\"/></svg>"};
   var GROUPS=[["status","Status"],["type","Type"],["priority","Priority"],["assignee","Assignee"],["label","Label"],["due","Due month"],["created","Created week"],["completed","Completed week"]];
   var TIME={due:1,created:1,completed:1};
@@ -1620,17 +1622,16 @@ img.who{object-fit:cover;background:var(--chip)}
   function settingsHTML(){
     var p=proj(),tpls=D.config.templates,nBids=0;
     descendants(p.id).forEach(function(id){D.spaces.forEach(function(s){if(s.id===id)nBids+=s.issues.length})});
-    var h='<div class="rep"><section class="panel"><h3>Space details</h3><div class="ctrl"><div><label for="pname">Name</label><input id="pname" maxlength="40" value="'+esc(p.name)+'"></div>'+
+    var h='<section class="panel"><h3>Space details</h3><div class="ctrl"><div><label for="pname">Name</label><input id="pname" maxlength="40" value="'+esc(p.name)+'"></div>'+
       '<div><label>Key</label><div class="ro" style="padding:9px 0;font-weight:600">'+esc(p.key)+'</div></div></div>'+
       '<div style="margin-top:12px"><button class="btn small" data-newsub="'+p.id+'">Create sub-space</button></div></section>';
-    if(curDiv())h+=membersHTML(curDiv());
     // Columns are managed as org templates in Settings (gear, bottom of the sidebar); a space just picks one.
     var ft=followedTpl(p);
     h+='<section class="panel"><h3>Workflow</h3>'+
       '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
         tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select></section>';
     h+=automationsHTML(p);
-    h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section></div>';
+    h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section>';
     return h;
   }
 
@@ -1722,7 +1723,17 @@ img.who{object-fit:cover;background:var(--chip)}
     return h;
   }
   function orgSettingsHTML(){
-    var h=tplEditorHTML();
+    var p=proj(),d=curDiv(),tab=ui.setTab||"space";
+    if((tab==="space"&&!p)||(tab!=="workflows"&&(!d||isArchived(state.div))))tab="workflows";
+    var tabs=[];
+    if(p&&d&&!isArchived(state.div))tabs.push(["space","Space · "+p.name]);
+    if(d&&!isArchived(state.div))tabs.push(["division","Division · "+d.name]);
+    tabs.push(["workflows","Workflows"]);
+    var nt=$("setNewTpl");if(nt)nt.style.display=tab==="workflows"?"":"none";
+    var h='<div class="settabs" role="tablist">'+tabs.map(function(x){return '<button class="tab" role="tab" data-settab="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+esc(x[1])+'</button>'}).join("")+'</div>';
+    if(tab==="space")return h+settingsHTML();
+    if(tab==="division")return h+membersHTML(d);
+    h+=tplEditorHTML();
     if(D.archived.length){
       h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
       D.archived.forEach(function(a){
@@ -1775,7 +1786,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function render(){
     var v=state.view,d=curDiv(),p=proj();
     var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
-    if(v==="settings"&&d&&!isDivAdmin(d))v=state.view="board";
+    if(v==="settings")v=state.view="board";   // space settings live in the Settings window now
     if(v==="division"||orgView(v))v=state.view="board";   // members live in a space's Settings; org settings is a window
     renderSide();renderDivTabs();
     if(v==="division"&&d){$("pkey").textContent=d.name;$("ptitle").textContent="Division settings"}
@@ -2088,6 +2099,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
     if(t.closest("[data-orgsettings]")){openOrgSettings();return}
+    if((el=t.closest("[data-settab]"))){ui.setTab=el.getAttribute("data-settab");ui.armP=false;ui.armTm=null;render();return}
     if((el=t.closest("[data-colfold]"))){
       var cfp=proj().id,cfs=el.getAttribute("data-colfold");
       state.colFold=state.colFold||{};state.colFold[cfp]=state.colFold[cfp]||{};
@@ -2349,6 +2361,7 @@ img.who{object-fit:cover;background:var(--chip)}
       D.spaces=D.spaces.filter(function(x){return gone.indexOf(x.id)<0});
       ui.armP=false;state.cur="";state.view="board";
       var rest=spaceTree(state.div);if(rest.length)state.cur=rest[0].sp.id;
+      if($("ov-settings").classList.contains("open"))closeOv("ov-settings");
       save();render();toast("Space deleted");return;
     }
   });
