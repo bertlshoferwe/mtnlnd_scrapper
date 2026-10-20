@@ -436,8 +436,20 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .iph .chev{width:12px;color:var(--muted);font-size:12px}
 .frow{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:10px;min-height:38px}
 .frow .fl{font-size:13px;font-weight:600;color:var(--ink)}
+.frow{position:relative}
+.fgrip{position:absolute;left:-13px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:12px;height:22px;color:var(--muted);cursor:grab;opacity:0}
+.frow:hover .fgrip{opacity:1}
+@media (hover:none){.fgrip{display:none}}
+.frow.fb{box-shadow:inset 0 2px 0 var(--c1)}
+.frow.fa{box-shadow:inset 0 -2px 0 var(--c1)}
 .frow .fv{min-width:0}
 .dt{display:flex;gap:6px;min-width:0}
+.tmrow{border-top:1px solid var(--line);padding:6px 0 8px}
+.tmpeople{display:flex;flex-wrap:wrap;gap:6px}
+.tmp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;background:none;padding:3px 10px 3px 3px;font-size:13px;color:var(--muted)}
+.tmp .who{width:22px;height:22px;font-size:9px;color:#fff;opacity:.5}
+.tmp.on{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 12%,var(--surface))}
+.tmp.on .who{opacity:1}
 .dt input[type=date]{flex:1 1 auto;min-width:0}
 .dt input[type=time]{flex:0 0 120px;min-width:0}
 .frow .pv{display:flex;align-items:center;gap:8px;min-width:0}
@@ -645,7 +657,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false;
+  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false;
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -697,12 +709,13 @@ img.who{object-fit:cover;background:var(--chip)}
     if(type!=="Subtask")return [];
     return proj().issues.filter(function(i){return i.id!==selfId&&i.type!=="Subtask"});
   }
-  var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"]];
+  var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"],["team","Team"]];
   // the custom fields a space's bids have: those of the workflow template it follows
   function spaceFields(p){var t=HAS_FIELDS&&p?followedTpl(p):null;return t?(t.fields||[]):[]}
   function cfShow(fd,v){
     if(!v)return "None";
     if(fd.type==="person")return nameOf(v);
+    if(fd.type==="team"){var tmm=(D.teams||[]).filter(function(x){return x.id===v})[0];return tmm?tmm.name:"None"}
     if(fd.type==="date")return shortDate(v);
     if(fd.type==="money")return "$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     return String(v);
@@ -721,6 +734,7 @@ img.who{object-fit:cover;background:var(--chip)}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
     else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
+    else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None");is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
     else if(f==="type"){
       if(v===is.type)return false;logH(is,"Type",is.type,v);is.type=v;
@@ -826,6 +840,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var m={};
     m["org/config"]={templates:D.config.templates};
     D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name}});
+    (D.teams||[]).forEach(function(t){m["teams/"+t.id]={divisionId:t.divisionId,name:t.name,members:t.members||[]}});
     D.spaces.forEach(function(sp){
       m["spaces/"+sp.id]=stripSpace(sp);
       sp.issues.forEach(function(is){m["bids/"+is.id]=strip(is)});
@@ -836,12 +851,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=path.split("/");
     if(p[0]==="org")raw.config=data;
     else if(p[0]==="people")raw.people[p[1]]=data;
+    else if(p[0]==="teams")raw.teams[p[1]]=data;
     else if(p[0]==="spaces")raw.spaces[p[1]]=data;
     else if(p[0]==="bids")raw.bids[p[1]]=data;
   }
   function rawDel(path){
     var p=path.split("/");
     if(p[0]==="people")delete raw.people[p[1]];
+    else if(p[0]==="teams")delete raw.teams[p[1]];
     else if(p[0]==="spaces")delete raw.spaces[p[1]];
     else if(p[0]==="bids")delete raw.bids[p[1]];
   }
@@ -864,10 +881,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if(p[0]==="spaces")r=await sb.from("wf_spaces").upsert(spaceToRow(id,data));
     else if(p[0]==="bids")r=await sb.from("wf_bids").upsert(bidToRow(id,data));
     else if(p[0]==="people")r=await sb.from("wf_people").upsert({id:id,division_id:data.divisionId,name:data.name});
+    else if(p[0]==="teams")r=await sb.from("wf_teams").upsert({id:id,division_id:data.divisionId,name:data.name,members:data.members||[]});
     if(r&&r.error)throw r.error;
   }
   async function deleteDoc(path){
-    var p=path.split("/"),t={people:"wf_people",spaces:"wf_spaces",bids:"wf_bids"}[p[0]];
+    var p=path.split("/"),t={people:"wf_people",teams:"wf_teams",spaces:"wf_spaces",bids:"wf_bids"}[p[0]];
     if(!t)return;
     var r=await sb.from(t).delete().eq("id",p[1]);
     if(r.error)throw r.error;
@@ -907,10 +925,12 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from(dt).select("*"),sb.from("wf_people").select("*"),sb.from("wf_templates").select("*").order("created_at"),
       sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
       sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1),
-      sb.from("wf_bids").select("due_time").limit(1)]);
+      sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*")]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
+    HAS_TEAMS=!rs[9].error;   // teams need workflow/sql/005_teams.sql
+    raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[]}});
     // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
     HAS_FIELDS=!rs[6].error&&!rs[7].error;
     HAS_DUETIME=!rs[8].error;   // the optional due time needs workflow/sql/004_due_time.sql
@@ -926,7 +946,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function listen(){
     try{
       var ch=sb.channel("wf-changes");
-      ["wf_spaces","wf_bids","wf_people","wf_templates"].forEach(function(t){ch.on("postgres_changes",{event:"*",schema:"public",table:t},scheduleReload)});
+      ["wf_spaces","wf_bids","wf_people","wf_templates","wf_teams"].forEach(function(t){ch.on("postgres_changes",{event:"*",schema:"public",table:t},scheduleReload)});
       ch.subscribe();
     }catch(e){console.warn("realtime unavailable, polling instead",e)}
     setInterval(function(){if(!document.hidden&&!flushing&&!pendingLocal)scheduleReload()},30000);
@@ -954,6 +974,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function rebuild(){
     D.config={templates:clone((raw.config&&raw.config.templates)||[])};
     D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name}}).sort(byName);
+    D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[])}}).sort(byName);
     D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
     D.divs=Object.keys(raw.divs).map(function(id){return {id:id,name:raw.divs[id].name,members:[],admins:[]}}).sort(byName);
     var seenIds={};
@@ -1187,7 +1208,7 @@ img.who{object-fit:cover;background:var(--chip)}
       '<button class="lt" data-open="'+is.id+'" title="'+esc(is.title)+'">'+esc(is.title)+'</button></span></td>';
     if(k==="due")return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):''):'<span class="none">None</span>')+'</td>';
     if(k==="assignee"){var an=is.assignee?nameOf(is.assignee):"";return '<td><span class="kc">'+nameAv(an)+'<span class="tr">'+(an?esc(an):'<span class="none">Unassigned</span>')+'</span></span></td>'}
-    if(k==="reporter")return '<td><span class="kc">'+nameAv(is.reporter)+'<span class="tr">'+(is.reporter?esc(is.reporter):'<span class="none">None</span>')+'</span></span></td>';
+    if(k==="reporter"){var rn=is.reporter?nameOf(is.reporter):"";return '<td><span class="kc">'+nameAv(rn)+'<span class="tr">'+(rn?esc(rn):'<span class="none">None</span>')+'</span></span></td>'}
     if(k==="priority")return '<td><span class="kc">'+prHTML(is.priority)+' '+is.priority+'</span></td>';
     if(k==="status"){var st=stat(p,is.status);return '<td><select class="lz cat-'+st.cat+'" data-status="'+is.id+'" aria-label="Status for '+ikey(is)+'">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></td>'}
     if(k==="resolution")return '<td>'+(done?'Done':'Unresolved')+'</td>';
@@ -1659,7 +1680,23 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
     });
     if(!ids.length)h+='<p class="fine">No one yet. Add the people who work on this division’s bids so you can assign them.</p>';
-    return h+'<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section>';
+    h+='<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section>';
+    return h+teamsHTML(d,ids);
+  }
+  // Teams (e.g. regions): named groups of this division's members; a bid's Team field picks one
+  function divTeams(d){return d?(D.teams||[]).filter(function(t){return t.divisionId===d.id}):[]}
+  function teamsHTML(d,ids){
+    if(!HAS_TEAMS)return "";
+    var h='<section class="panel"><h3>Teams</h3><p class="fine" style="margin:0 0 8px">Group this division’s members, for example by region. Click a name to add or remove them.</p>';
+    divTeams(d).forEach(function(t){
+      h+='<div class="tmrow"><div class="srow" style="border:0;padding:4px 0"><input data-tmname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Team name" maxlength="40">'+
+        '<span class="cnt">'+t.members.length+' member'+(t.members.length===1?'':'s')+'</span>'+
+        '<button class="btn small danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Remove')+'</button></div><div class="tmpeople">'+
+        (ids.length?ids.map(function(pid){var on=t.members.indexOf(pid)>-1;return '<button class="tmp'+(on?' on':'')+'" data-tmtoggle="'+t.id+':'+esc(pid)+'" aria-pressed="'+on+'">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</button>'}).join(""):'<span class="fine" style="margin:0">Add members above first.</span>')+
+        '</div></div>';
+    });
+    if(!divTeams(d).length)h+='<p class="fine">No teams yet.</p>';
+    return h+'<div class="srow"><input id="newteam" placeholder="Add a team, e.g. Northern Utah" maxlength="40" aria-label="Team name"><button class="btn small primary" data-addteam>Add</button></div></section>';
   }
   function divisionHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
@@ -1777,10 +1814,32 @@ img.who{object-fit:cover;background:var(--chip)}
     return h;
   }
   // a label / value row in the side panels; inputs look like plain text until hovered
-  function frow(label,ctl){return '<div class="frow"><span class="fl">'+label+'</span><div class="fv">'+ctl+'</div></div>'}
+  function frow(label,ctl,key){
+    return '<div class="frow"'+(key?' data-fkey="'+esc(key)+'"':'')+'>'+(key?'<span class="fgrip" draggable="true" data-fdrag="'+esc(key)+'" title="Drag to reorder" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+
+      '<span class="fl">'+label+'</span><div class="fv">'+ctl+'</div></div>';
+  }
+  // the Fields panel's row order, arranged by dragging; kept per browser, one order per workflow
+  function fieldOrderKey(p){var t=followedTpl(p);return t?t.id:"none"}
+  function fieldOrder(p){
+    var keys=["due","assignee","reporter"].concat(spaceFields(p).map(function(f){return "cf:"+f.id}));
+    var saved=((state.fOrder||{})[fieldOrderKey(p)]||[]).filter(function(k){return keys.indexOf(k)>-1});
+    keys.forEach(function(k){if(saved.indexOf(k)<0)saved.push(k)});
+    return saved;
+  }
+  function moveFieldRow(from,to,before){
+    var p=proj(),o=fieldOrder(p).filter(function(k){return k!==from}),j=o.indexOf(to);if(j<0)return;
+    o.splice(before?j:j+1,0,from);
+    state.fOrder=state.fOrder||{};state.fOrder[fieldOrderKey(p)]=o;savePrefs();
+    var is=byId(ui.issueId);if(is)$("i-side").innerHTML=issueSideHTML(is);
+  }
   function cfInput(fd,is){
     var v=(is.fields||{})[fd.id]||"",a=' data-f="cf:'+fd.id+'" aria-label="'+esc(fd.name)+'"';
     if(fd.type==="person")return '<select class="bare"'+a+'>'+teamOptions(v).replace('>Unassigned<','>None<')+'</select>';
+    if(fd.type==="team"){
+      var tl=divTeams(curDiv());
+      if(v&&!tl.some(function(x){return x.id===v}))tl=tl.concat([{id:v,name:cfShow(fd,v)}]);
+      return '<select class="bare"'+a+'>'+opt("","None",v)+tl.map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>';
+    }
     if(fd.type==="date")return '<input class="bare'+(v?'':' empty')+'" type="date"'+a+' value="'+esc(v)+'">';
     if(fd.type==="number"||fd.type==="money")return '<input class="bare" type="number" step="any" inputmode="decimal"'+a+' value="'+esc(v)+'" placeholder="'+(fd.type==="money"?'Add amount':'Add number')+'">';
     return '<input class="bare"'+a+' value="'+esc(v)+'" maxlength="200" placeholder="Add text">';
@@ -1788,13 +1847,14 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueSideHTML(is){
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
     var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></div>';
-    h+='<div class="ipanel"><div class="iph">Fields</div>'+
-      frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
-        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>')+
-      frow("Assignee",'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>')+
-      frow("Reporter",'<span class="pv">'+nameAv(is.reporter)+'<span>'+esc(is.reporter||"Unknown")+'</span></span>');
-    spaceFields(p).forEach(function(fd){h+=frow(esc(fd.name),cfInput(fd,is))});
-    h+='</div>';
+    var rowsF={
+      due:frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
+        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',"due"),
+      assignee:frow("Assignee",'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>',"assignee"),
+      reporter:frow("Reporter",'<span class="pv">'+(is.reporter?nameAv(nameOf(is.reporter)):'')+'<select id="i-rep" class="bare" data-f="reporter" aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select></span>',"reporter")
+    };
+    spaceFields(p).forEach(function(fd){rowsF["cf:"+fd.id]=frow(esc(fd.name),cfInput(fd,is),"cf:"+fd.id)});
+    h+='<div class="ipanel" id="i-fields"><div class="iph">Fields</div>'+fieldOrder(p).map(function(k){return rowsF[k]}).join("")+'</div>';
     var open=!!ui.detOpen;
     h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?'&#9662;':'&#9656;')+'</span>Details <span class="fine" style="margin:0;font-weight:400">Priority, Type, Labels'+(isSub?', Parent':'')+'</span></button>';
     if(open){
@@ -1932,9 +1992,26 @@ img.who{object-fit:cover;background:var(--chip)}
       D.people.push({id:uid("p"),divisionId:state.div,name:pnm});
       save();render();return;
     }
+    if(t.closest("[data-addteam]")){
+      var tin2=$("newteam"),tnm2=tin2?tin2.value.trim():"";
+      if(!tnm2){if(tin2)tin2.focus();return}
+      D.teams=D.teams||[];D.teams.push({id:uid("tm"),divisionId:state.div,name:tnm2,members:[]});
+      save();render();return;
+    }
+    if((el=t.closest("[data-tmtoggle]"))){
+      var tg=el.getAttribute("data-tmtoggle"),tgi=tg.indexOf(":"),tgt=(D.teams||[]).filter(function(x){return x.id===tg.slice(0,tgi)})[0],tgp=tg.slice(tgi+1);
+      if(tgt){var ti=tgt.members.indexOf(tgp);if(ti>-1)tgt.members.splice(ti,1);else tgt.members.push(tgp);save();render()}
+      return;
+    }
+    if((el=t.closest("[data-tmdel]"))){
+      var tdid=el.getAttribute("data-tmdel");
+      if(ui.armTm!==tdid){ui.armTm=tdid;render();return}
+      D.teams=D.teams.filter(function(x){return x.id!==tdid});ui.armTm=null;save();render();return;
+    }
     if((el=t.closest("[data-rmperson]"))){
       var rpid=el.getAttribute("data-rmperson");
       D.people=D.people.filter(function(x){return x.id!==rpid});
+      (D.teams||[]).forEach(function(tm){tm.members=tm.members.filter(function(x){return x!==rpid})});
       D.spaces.forEach(function(sp){sp.issues.forEach(function(is){if(is.assignee===rpid)is.assignee=""})});
       save();render();return;
     }
@@ -1942,6 +2019,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var pgid=el.getAttribute("data-purgediv");
       if(ui.armD!==pgid){ui.armD=pgid;render();return}
       D.people=D.people.filter(function(x){return x.divisionId!==pgid});
+      D.teams=(D.teams||[]).filter(function(x){return x.divisionId!==pgid});
       D.spaces=D.spaces.filter(function(x){return x.divisionId!==pgid});
       ui.armD=false;save();
       if(sb)Promise.resolve(sb.from("wf_division_names").delete().eq("division_id",pgid)).then(function(){},function(){});
@@ -2180,6 +2258,10 @@ img.who{object-fit:cover;background:var(--chip)}
       if(t2&&t2.statuses[+pr[1]]){if(cv){t2.statuses[+pr[1]].name=cv;save()}else el.value=t2.statuses[+pr[1]].name}
       return;
     }
+    if((v=el.getAttribute("data-tmname"))){
+      var tmr=(D.teams||[]).filter(function(x){return x.id===v})[0],tmv=el.value.trim();
+      if(tmr&&tmv){tmr.name=tmv;save()}else if(tmr)el.value=tmr.name;return;
+    }
     if((v=el.getAttribute("data-tfname"))||(v=el.getAttribute("data-tftype"))){
       var fk=v.split(":"),ft=D.config.templates.filter(function(x){return x.id===fk[0]})[0],ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
       if(!ff)return;
@@ -2196,7 +2278,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var cur=byId(ui.issueId);if(!cur)return;
       var changed=setField(cur,v,el.value);
       if(v==="title"&&!changed)el.value=cur.title;
-      if(changed&&(v==="assignee"||v==="due"||v==="dueTime"||v.indexOf("cf:")===0))$("i-side").innerHTML=issueSideHTML(cur);
+      if(changed&&(v==="assignee"||v==="reporter"||v==="due"||v==="dueTime"||v.indexOf("cf:")===0))$("i-side").innerHTML=issueSideHTML(cur);
       if(changed&&(v==="status"||v==="priority"||v==="type"||v==="parent")){
         $("i-side").innerHTML=issueSideHTML(cur);
         renderIssueHead(cur);
@@ -2231,6 +2313,27 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
+  (function(){
+    var box=$("ov-issue"),dragF=null;
+    function clearF(){Array.prototype.forEach.call(box.querySelectorAll(".frow.fb,.frow.fa"),function(x){x.classList.remove("fb","fa")})}
+    box.addEventListener("dragstart",function(e){
+      var g=e.target.closest&&e.target.closest("[data-fdrag]");if(!g)return;
+      dragF=g.getAttribute("data-fdrag");var row=g.closest(".frow");
+      try{e.dataTransfer.setData("text/plain",dragF);e.dataTransfer.effectAllowed="move";if(row)e.dataTransfer.setDragImage(row,10,10)}catch(x){}
+    });
+    box.addEventListener("dragover",function(e){
+      if(!dragF)return;var r=e.target.closest(".frow[data-fkey]");if(!r)return;
+      e.preventDefault();clearF();
+      var rc=r.getBoundingClientRect();r.classList.add(e.clientY<rc.top+rc.height/2?"fb":"fa");
+    });
+    box.addEventListener("drop",function(e){
+      if(!dragF)return;var r=e.target.closest(".frow[data-fkey]"),from=dragF;dragF=null;
+      if(!r){clearF();return}
+      e.preventDefault();var before=r.classList.contains("fb");clearF();
+      if(r.getAttribute("data-fkey")!==from)moveFieldRow(from,r.getAttribute("data-fkey"),before);
+    });
+    box.addEventListener("dragend",function(){dragF=null;clearF()});
+  })();
   view.addEventListener("dragstart",function(e){
     var rg=e.target.closest&&e.target.closest("[data-rowdrag]");
     if(rg){ui.dragRow=rg.getAttribute("data-rowdrag");var rtr=rg.closest("tr");if(rtr)rtr.classList.add("dragging");
