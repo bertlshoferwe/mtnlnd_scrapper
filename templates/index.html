@@ -3763,7 +3763,7 @@ async function addProjectToJira() {
       body: JSON.stringify({ project_key: p.key, summary: p.project, due_date: p.bid_date }),
     });
     if (res.workflow_error) {
-      alert('Added to Jira, but it couldn\'t be added to the bid board. Add it there by hand for now.');
+      alert('Added to Jira, but it couldn\'t be added to the bid board. Add it there by hand for now.\n\nReason: ' + res.workflow_error);
     }
     p.jira_key = res.jira_key;
     p.jira_url = res.jira_url;
