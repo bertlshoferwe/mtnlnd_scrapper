@@ -1181,7 +1181,88 @@ def create_workflow_bid(division_id, project_key, title, due=None, source_url=No
         "p_due": due,
         "p_source_url": source_url,
     }).execute()
-    return res.data
+    bid_id = res.data
+    try:
+        _fill_workflow_bid(bid_id, project_key, load_project_bid_times(division_id).get(project_key))
+    except Exception as e:
+        print(f"  ! couldn't fill in time/site on bid for {project_key} ({e})")
+    return bid_id
+
+
+def bid_time_hm(text):
+    """'10:00am MT' / '2:00 PM' / '14:00' -> 'HH:MM' (24-hour), else None —
+    the board's due-time box takes a plain time."""
+    m = re.search(r"(\d{1,2}):(\d{2})\s*(?:([ap])\.?\s*m\b\.?)?", text or "", re.I)
+    if not m:
+        return None
+    h, mn, ap = int(m.group(1)), int(m.group(2)), (m.group(3) or "").lower()
+    if ap == "p" and h < 12:
+        h += 12
+    elif ap == "a" and h == 12:
+        h = 0
+    return f"{h:02d}:{mn:02d}" if h < 24 and mn < 60 else None
+
+
+def _fill_workflow_bid(bid_id, project_key, bid_time):
+    """Fill a new bid's blank due time (from the project's bid time) and its
+    "Original RFQ" field (the site Bid Scout found it on). Never overwrites
+    something already there. The field is found by name on the template the
+    bid's space follows, since field ids differ between templates."""
+    sb = get_client()
+    bid = sb.table("wf_bids").select("space_id,due,due_time,fields").eq("id", bid_id).limit(1).execute().data
+    if not bid:
+        return
+    bid = bid[0]
+    patch = {}
+    hm = bid_time_hm(bid_time)
+    if hm and bid.get("due") and not bid.get("due_time"):
+        patch["due_time"] = hm
+    site, _ = _split_site(project_key)
+    fields = dict(bid.get("fields") or {})
+    space = sb.table("wf_spaces").select("statuses").eq("id", bid["space_id"]).limit(1).execute().data
+    tpl_id = ((space[0].get("statuses") or [{}])[0] or {}).get("tpl") if space else None
+    if site and tpl_id:
+        tpl = sb.table("wf_templates").select("fields").eq("id", tpl_id).limit(1).execute().data
+        rfq = next((f["id"] for f in ((tpl[0].get("fields") or []) if tpl else [])
+                    if (f.get("name") or "").strip().lower() == "original rfq"), None)
+        if rfq and not fields.get(rfq):
+            fields[rfq] = site
+            patch["fields"] = fields
+    if patch:
+        sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
+
+
+def load_project_files(division_id, project_key):
+    """[{"filename", "url", "status", "keywords"}] — one project's documents,
+    newest row per filename (shown without the leading "<project> - "), for
+    the bid board's Bid Docs tab. Paged, since a ConstructConnect project can
+    have hundreds of files."""
+    rows, start, step = [], 0, 1000
+    while True:
+        res = (
+            get_client().table("scan_results")
+            .select("filename,document_url,status,matched_keywords,run_date")
+            .eq("division_id", division_id).eq("site", project_key)
+            .order("run_date", desc=True).range(start, start + step - 1).execute()
+        )
+        rows.extend(res.data)
+        if len(res.data) < step:
+            break
+        start += step
+    _, project = _split_site(project_key)
+    seen, out = set(), []
+    for r in rows:
+        fn = r.get("filename") or ""
+        if not fn or fn in seen or not r.get("document_url"):
+            continue
+        seen.add(fn)
+        # Filenames are stored as "<project> - <path>"; the bid already says which project.
+        name = fn[len(project) + 3:] if project and fn.startswith(project + " - ") else fn
+        out.append({
+            "filename": name, "url": r["document_url"], "status": r.get("status") or "",
+            "keywords": [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()],
+        })
+    return out
 
 
 def fit_training_stats(division_id):

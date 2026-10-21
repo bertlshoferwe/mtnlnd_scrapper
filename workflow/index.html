@@ -490,6 +490,23 @@ textarea{min-height:90px;resize:vertical}
 .dropz{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px;border:1.5px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:14px;cursor:pointer;padding:10px}
 .dropz:hover,.dropz.over{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 6%,transparent)}
 .dropz.busy{cursor:progress}
+.ftabs{margin:0 0 10px}
+.ftabs .pt{font-weight:500;color:var(--muted);margin-left:4px}
+.fnote{color:var(--muted);font-size:13.5px;margin:4px 0 10px}
+.att a.attn{text-decoration:none}
+.att a.attn:hover{text-decoration:underline}
+.akw{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--low)}
+.morebtn{display:block;margin:2px 0 10px;font-size:13px}
+.phwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.phl{width:100%;border-collapse:collapse;font-size:13px}
+.phl th{text-align:left;font-weight:700;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.phl td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.phl tr:last-child td{border-bottom:0}
+.phl .phc{font-weight:600}
+.phl .phs{color:var(--muted);font-size:12px}
+.phl{min-width:640px}
+.phl .phc{min-width:150px}
+.phl a,.phl .nw{color:inherit;white-space:nowrap}
 textarea.bare{width:100%;min-height:44px;border:1px solid transparent!important;background:transparent!important;border-radius:6px;padding:6px 8px;margin-left:-8px;resize:vertical;font-size:14px}
 textarea.bare:hover,textarea.bare:focus{border-color:var(--line)!important;background:var(--bg)!important}
 .istat{margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -748,7 +765,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{}};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"all",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},fileTab:"docs"};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -2033,6 +2050,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- issue modal ---------- */
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";ui.addSub=false;
+    ui.fileTab="docs";ui.docsAll=false;delete ui.bs[id];
     renderIssue();openOv("ov-issue");
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
@@ -2042,6 +2060,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("i-top").innerHTML=issueTopHTML(is);
     $("i-side").innerHTML=issueSideHTML(is);
     renderIssueAct();
+    bsLoad(is);
   }
   function renderIssueHead(is){
     var par=is.parent?byId(is.parent):null;
@@ -2052,7 +2071,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var kids=children(is);
     var h='<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
       '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>'+
-      (HAS_FILES?'<div class="isec" id="i-att">'+attachHTML(is)+'</div>':'');
+      '<div class="isec" id="i-att">'+attachHTML(is)+'</div>';
     if(is.type!=="Subtask"){
       var done=kids.filter(isDone).length;
       if(kids.length||ui.addSub)h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
@@ -2063,21 +2082,103 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   /* ---------- attachments: files in the private "bid-files" storage bucket, listed on the bid ---------- */
   function fsize(n){return n<1024?n+" B":n<1048576?Math.round(n/1024)+" KB":(n/1048576).toFixed(1)+" MB"}
+  // Three tabs where Attachments used to be. Bid Docs = the Bid Scout project's own documents
+  // (opened through Bid Scout's viewer, so they stay current) plus any extra uploads marked
+  // kind "doc"; Attachments = other uploads; Plan Holders = the project's list from Bid Scout.
+  var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+  function attRow(f){
+    return '<div class="att">'+FILE_IC+'<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(f.name)+'</button>'+
+      '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
+      '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
+  }
+  function dropzHTML(kind,label){
+    if(!HAS_FILES)return '';
+    return '<label class="dropz'+(ui.uploading?' busy':'')+'" data-dropz="'+kind+'">'+
+      (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files here or <u>'+label+'</u></span>')+
+      '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
+  }
+  function bsState(is){
+    var b=ui.bs[is.id];
+    if(!is.sourceProjectId)return {none:true};
+    return b||{state:"loading"};
+  }
   function attachHTML(is){
-    var A=is.attachments||[];
-    var h='<h4>Attachments'+(A.length?' <span class="pt">'+A.length+'</span>':'')+'</h4>';
-    A.forEach(function(f){
-      h+='<div class="att"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(f.name)+'</button>'+
-        '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
-        '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
-    });
-    h+='<label class="dropz'+(ui.uploading?' busy':'')+'" data-dropz>'+
-      (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files here or <u>add attachment</u></span>')+
-      '<input type="file" multiple data-attinput hidden></label>';
+    var A=is.attachments||[],docs=A.filter(function(f){return f.kind==="doc"}),atts=A.filter(function(f){return f.kind!=="doc"});
+    var b=bsState(is),d=b.state==="ok"?b.data:null,src=d?(d.files||[]):[],hold=d?d.holders:null;
+    var tab=ui.fileTab||"docs";
+    var tabs=[["docs","Bid Docs",src.length+docs.length],["att","Attachments",atts.length],["ph","Plan Holders",hold?hold.length:0]];
+    var h='<div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
+      return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
+    }).join("")+'</div>';
+    if(tab==="docs"){
+      if(b.state==="loading")h+='<p class="fnote">Loading the documents from Bid Scout…</p>';
+      else if(b.state==="err")h+='<p class="fnote">Couldn’t load the documents from Bid Scout. Close the bid and open it again to retry.</p>';
+      else if(d){
+        var list=src.slice().sort(function(x,y){return (y.keywords.length?1:0)-(x.keywords.length?1:0)||x.filename.localeCompare(y.filename,undefined,{numeric:true})});
+        var cap=ui.docsAll?list.length:25;
+        list.slice(0,cap).forEach(function(f){
+          var href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
+          h+='<div class="att">'+FILE_IC+'<a class="attn" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(f.filename)+'</a>'+
+            (f.keywords.length?'<span class="atm akw" title="Matched: '+esc(f.keywords.join(", "))+'">'+esc(f.keywords.join(", "))+'</span>':'')+'</div>';
+        });
+        if(list.length>cap)h+='<button class="linkbtn morebtn" data-docsall>Show all '+list.length+' documents</button>';
+        if(!list.length&&!docs.length)h+='<p class="fnote">Bid Scout has no documents for this project.</p>';
+      }
+      docs.forEach(function(f){h+=attRow(f)});
+      h+=dropzHTML("doc","add a document");
+    }else if(tab==="att"){
+      atts.forEach(function(f){h+=attRow(f)});
+      if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No attachments.</p>';
+      h+=dropzHTML("att","add attachment");
+    }else{
+      if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they only show on bids added from Bid Scout.</p>';
+      else if(b.state==="loading")h+='<p class="fnote">Loading plan holders from Bid Scout…</p>';
+      else if(b.state==="err")h+='<p class="fnote">Couldn’t load the plan holders from Bid Scout. Close the bid and open it again to retry.</p>';
+      else if(!hold)h+='<p class="fnote">No plan holders list for this project yet. If the bid site publishes one, it shows up here after Bid Scout’s next daily check.</p>';
+      else if(!hold.length)h+='<p class="fnote">No companies have picked up plans for this project yet.</p>';
+      else h+=holdersHTML(hold);
+    }
     return h;
   }
+  function holderRank(x){
+    var r=(x.role||"").toLowerCase();
+    if(r==="plan room")return 3;
+    if(/prime|^bidder$|general contractor/.test(r))return 0;
+    if(/sub|supplier|planholder/.test(r))return 1;
+    return 2;
+  }
+  function holdersHTML(hold){
+    var L=hold.slice().sort(function(a,b){return holderRank(a)-holderRank(b)||(a.company||"").localeCompare(b.company||"",undefined,{numeric:true})});
+    var has=function(fn){return L.some(fn)};
+    var cols=[["Company",function(x){return '<div class="phc">'+esc(x.company)+'</div>'+(x.cert?'<div class="phs">'+esc(x.cert)+'</div>':'')}]];
+    if(has(function(x){return x.role}))cols.push(["Role",function(x){return esc(x.role||"")}]);
+    if(has(function(x){return x.contact}))cols.push(["Contact",function(x){return esc(x.contact||"")+(x.title?'<div class="phs">'+esc(x.title)+'</div>':'')}]);
+    if(has(function(x){return (x.emails||[]).length}))cols.push(["Email",function(x){return (x.emails||[]).map(function(e){return '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>'}).join("<br>")}]);
+    if(has(function(x){return x.phone}))cols.push(["Phone",function(x){return x.phone?'<a href="tel:'+esc(x.phone.replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':''}]);
+    if(has(function(x){return x.city||x.state}))cols.push(["City / State",function(x){return '<span class="nw">'+esc([x.city,x.state].filter(Boolean).join(", "))+'</span>'}]);
+    return '<div class="phwrap"><table class="phl"><thead><tr>'+cols.map(function(c){return '<th scope="col">'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
+      L.map(function(x){return '<tr>'+cols.map(function(c){return '<td>'+c[1](x)+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>';
+  }
+  // Fetch the Bid Scout project behind a bid, then fill in its blank due time and
+  // "Original RFQ" (the site it was found on). Never overwrites what's there.
+  function bsLoad(is){
+    if(!is||!is.sourceProjectId||ui.bs[is.id])return;
+    var id=is.id;ui.bs[id]={state:"loading"};
+    fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/bid-info?key="+encodeURIComponent(is.sourceProjectId))
+      .then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})
+      .then(function(d){ui.bs[id]={state:"ok",data:d};if(ui.issueId===id){bsFill(byId(id),d);renderAttach()}})
+      .catch(function(){ui.bs[id]={state:"err"};if(ui.issueId===id)renderAttach()});
+  }
+  function bsFill(is,d){
+    if(!is)return;
+    var ch=false;
+    if(HAS_DUETIME&&d.due_time&&is.due&&is.due===d.bid_date&&!is.dueTime)ch=setField(is,"dueTime",d.due_time)||ch;
+    var rfq=spaceFields(proj()).filter(function(x){return (x.name||"").trim().toLowerCase()==="original rfq"})[0];
+    if(rfq&&d.site&&!(is.fields||{})[rfq.id])ch=setField(is,"cf:"+rfq.id,d.site)||ch;
+    if(ch){renderIssueSideOnly();renderIssueAct()}
+  }
   function renderAttach(){var is=byId(ui.issueId),el=$("i-att");if(is&&el)el.innerHTML=attachHTML(is)}
-  async function uploadFiles(files){
+  async function uploadFiles(files,kind){
     var is=byId(ui.issueId);if(!is||!sb||!files||!files.length)return;
     files=Array.prototype.slice.call(files);
     ui.uploading=(ui.uploading||0)+files.length;renderAttach();
@@ -2087,8 +2188,9 @@ img.who{object-fit:cover;background:var(--chip)}
         var r=await sb.storage.from(FILE_BUCKET).upload(path,f,{contentType:f.type||undefined});
         if(r.error)throw r.error;
         var cur=byId(is.id);if(!cur)continue;
-        cur.attachments=(cur.attachments||[]).concat([{id:id,name:f.name,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME}]);
-        logH(cur,"Attachment","",f.name);cur.updated=Date.now();save();
+        var rec={id:id,name:f.name,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME};if(kind==="doc")rec.kind="doc";
+        cur.attachments=(cur.attachments||[]).concat([rec]);
+        logH(cur,kind==="doc"?"Bid doc":"Attachment","",f.name);cur.updated=Date.now();save();
       }catch(err){toast("Couldn’t upload "+f.name+": "+((err&&err.message)||"unknown error"))}
       ui.uploading--;renderAttach();renderIssueAct();
     }
@@ -2445,6 +2547,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
+    if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");renderAttach();return}
+    if(t.closest("[data-docsall]")){ui.docsAll=true;renderAttach();return}
     if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
     if((el=t.closest("[data-attdel]"))){
       var adi=byId(ui.issueId),aid=el.getAttribute("data-attdel");if(!adi)return;
@@ -2654,7 +2758,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
   document.addEventListener("change",function(e){
-    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=e.target.files;uploadFiles(fl);e.target.value=""}
+    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=e.target.files;uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
   });
   (function(){
     var box=$("ov-issue");
@@ -2665,7 +2769,7 @@ img.who{object-fit:cover;background:var(--chip)}
     box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz]");if(z)z.classList.remove("over")});
     box.addEventListener("drop",function(e){
       var z=e.target.closest&&e.target.closest("[data-dropz]");
-      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");uploadFiles(e.dataTransfer.files)}
+      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");uploadFiles(e.dataTransfer.files,z.getAttribute("data-dropz"))}
     });
   })();
   (function(){

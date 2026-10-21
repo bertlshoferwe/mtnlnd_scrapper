@@ -34,6 +34,7 @@ Routes:
   POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
   POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars), and as a bid on the workflow board
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
+  GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
   GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
@@ -899,6 +900,29 @@ def api_save_settings(division_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"settings": saved, "fit_training": supabase_store.fit_training_stats(division_id)})
+
+
+@app.route("/api/<division_id>/projects/bid-info", methods=["GET"])
+def api_project_bid_info(division_id):
+    """What the bid board's bid window shows from the Bid Scout project it
+    came from. ?key=<project_key>. Returns {"site", "bid_date", "due_time"
+    ("HH:MM" or null), "files": [...], "holders", "holders_refreshed_at"} —
+    files open through /api/<division_id>/pdf, holders as in plan-holders."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+    site, _ = supabase_store._split_site(key)
+    holders, refreshed_at = supabase_store.load_project_plan_holders(division_id, key)
+    return jsonify({
+        "site": site,
+        "bid_date": supabase_store.load_project_bid_dates(division_id).get(key),
+        "due_time": supabase_store.bid_time_hm(supabase_store.load_project_bid_times(division_id).get(key)),
+        "files": supabase_store.load_project_files(division_id, key),
+        "holders": holders, "holders_refreshed_at": refreshed_at,
+    })
 
 
 @app.route("/api/<division_id>/projects/plan-holders", methods=["GET"])
