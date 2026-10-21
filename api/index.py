@@ -116,11 +116,13 @@ SCHEDULE_UTC_HM = _schedule_hm(DISPLAY_SCHEDULE_UTC)
 # a division can file somewhere else via its jira_project_key setting. New
 # issues land wherever the project's workflow puts a freshly-created issue
 # (its board's leftmost column) — nothing here sets status explicitly.
-JIRA_BASE_URL = (os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
-JIRA_EMAIL = os.environ.get("JIRA_EMAIL") or ""
-JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN") or ""
-JIRA_PROJECT_KEY = os.environ.get("JIRA_PROJECT_KEY") or ""
-JIRA_ISSUE_TYPE = os.environ.get("JIRA_ISSUE_TYPE") or "Task"
+# Stripped (and the key upper-cased) so stray spaces or "geo" in the env
+# file still work.
+JIRA_BASE_URL = (os.environ.get("JIRA_BASE_URL") or "").strip().rstrip("/")
+JIRA_EMAIL = (os.environ.get("JIRA_EMAIL") or "").strip()
+JIRA_API_TOKEN = (os.environ.get("JIRA_API_TOKEN") or "").strip()
+JIRA_PROJECT_KEY = (os.environ.get("JIRA_PROJECT_KEY") or "").strip().upper()
+JIRA_ISSUE_TYPE = (os.environ.get("JIRA_ISSUE_TYPE") or "").strip() or "Task"
 
 # The bid workflow board (workflow/index.html), served at /workflow/. Unlike
 # the dashboard it talks to Supabase straight from the browser, so it needs
