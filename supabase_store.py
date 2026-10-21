@@ -1232,6 +1232,64 @@ def _fill_workflow_bid(bid_id, project_key, bid_time):
         sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
 
 
+def _board_date(iso):
+    """'2026-10-23' -> 'Oct 23', as the board writes dates into a bid's history."""
+    try:
+        d = date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return "None"
+    return f"{d.strftime('%b')} {d.day}"
+
+
+def _board_time(hm):
+    """'14:00' -> '2:00 PM', as the board writes times into a bid's history."""
+    if not hm:
+        return "None"
+    h, m = (int(x) for x in hm[:5].split(":"))
+    return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+
+
+def sync_workflow_bid_due(division_id, dates=None, times=None):
+    """A scan saw a project's bid date ({project_key: 'YYYY-MM-DD'}) or bid
+    time ({project_key: 'HH:MM'}) change — move the due date/time of any
+    board bid made from that project to match, logged in the bid's history
+    as Bid Scout. Only called on a change, so a date set by hand on the
+    board stays until Bid Scout's own date moves again. Never fails a scan."""
+    dates, times = dates or {}, times or {}
+    keys = list(set(dates) | set(times))
+    try:
+        bids = (
+            get_client().table("wf_bids").select("id,source_project_id,due,due_time,history")
+            .eq("division_id", division_id).in_("source_project_id", keys).execute().data
+        )
+    except Exception as e:
+        print(f"  ! couldn't check board bids for date changes ({e})")
+        return
+    now = datetime.now(timezone.utc)
+    at = int(now.timestamp() * 1000)
+    for b in bids:
+        key = b["source_project_id"]
+        patch, hist = {}, []
+        if key in dates and dates[key] != b.get("due"):
+            patch["due"] = dates[key]
+            hist.append({"by": "Bid Scout", "at": at, "field": "Due date",
+                         "from": _board_date(b.get("due")), "to": _board_date(dates[key])})
+        cur = (b.get("due_time") or "")[:5]
+        if key in times and times[key] != cur:
+            patch["due_time"] = times[key]
+            hist.append({"by": "Bid Scout", "at": at, "field": "Due time",
+                         "from": _board_time(cur), "to": _board_time(times[key])})
+        if not patch:
+            continue
+        patch["history"] = (b.get("history") or []) + hist
+        patch["updated_at"] = now.isoformat()
+        try:
+            get_client().table("wf_bids").update(patch).eq("id", b["id"]).execute()
+            print(f"  · bid board: moved {key} due to {patch.get('due', b.get('due'))} {patch.get('due_time', cur)}")
+        except Exception as e:
+            print(f"  ! couldn't update board bid for {key} ({e})")
+
+
 def load_project_files(division_id, project_key):
     """[{"filename", "url", "status", "keywords"}] — one project's documents,
     newest row per filename (shown without the leading "<project> - "), for
@@ -1344,10 +1402,15 @@ def save_project_bid_dates(division_id, mapping):
     ]
     if not rows:
         return
+    old = load_project_bid_dates(division_id)
     try:
         get_client().table("project_flags").upsert(rows).execute()
     except Exception as e:
         print(f"  ! couldn't save bid dates ({e})")
+        return
+    changed = {k: v for k, v in mapping.items() if v and old.get(k) != v}
+    if changed:
+        sync_workflow_bid_due(division_id, dates=changed)
 
 
 def load_project_jira_keys(division_id):
@@ -1404,10 +1467,17 @@ def save_project_bid_times(division_id, mapping):
     ]
     if not rows:
         return
+    old = load_project_bid_times(division_id)
     try:
         get_client().table("project_flags").upsert(rows).execute()
     except Exception as e:
         print(f"  ! couldn't save bid times ({e})")
+        return
+    # Compared as clock times, so "2:00pm MT" -> "2:00 PM MT" isn't a change.
+    changed = {k: bid_time_hm(v) for k, v in mapping.items()
+               if bid_time_hm(v) and bid_time_hm(old.get(k)) != bid_time_hm(v)}
+    if changed:
+        sync_workflow_bid_due(division_id, times=changed)
 
 
 def save_project_plan_holders(division_id, mapping):
