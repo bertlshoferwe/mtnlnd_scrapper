@@ -1,6 +1,8 @@
 # The dashboard app. Long-running (gunicorn), unlike the old single-shot
 # Vercel serverless function — see api/index.py's module docstring.
 FROM python:3.12-slim
+# Print straight to docker logs instead of holding lines in a buffer.
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
