@@ -112,7 +112,8 @@ SCHEDULE_UTC_HM = _schedule_hm(DISPLAY_SCHEDULE_UTC)
 # API. JIRA_BASE_URL is the site root (e.g. https://yourteam.atlassian.net),
 # JIRA_EMAIL + JIRA_API_TOKEN are Basic-auth credentials for a Jira Cloud API
 # token (https://id.atlassian.com/manage-profile/security/api-tokens), and
-# JIRA_PROJECT_KEY is the target project's short key (e.g. "GEO"). New
+# JIRA_PROJECT_KEY is the default target project's short key (e.g. "GEO") —
+# a division can file somewhere else via its jira_project_key setting. New
 # issues land wherever the project's workflow puts a freshly-created issue
 # (its board's leftmost column) — nothing here sets status explicitly.
 JIRA_BASE_URL = (os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
@@ -879,12 +880,14 @@ def api_get_settings(division_id):
     if err:
         return err
     return jsonify({"settings": supabase_store.get_division_settings(division_id),
-                    "fit_training": supabase_store.fit_training_stats(division_id)})
+                    "fit_training": supabase_store.fit_training_stats(division_id),
+                    "jira_default_project": JIRA_PROJECT_KEY})
 
 
 @app.route("/api/<division_id>/settings", methods=["PATCH"])
 def api_save_settings(division_id):
-    """Body: any of {"fit_enabled", "fit_min_decisions", "fit_sure_at"}."""
+    """Body: any of {"fit_enabled", "fit_min_decisions", "fit_sure_at",
+    "jira_project_key"}."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -921,16 +924,21 @@ def api_add_project_to_jira(division_id):
     _, err = _require_division(division_id)
     if err:
         return err
-    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN and JIRA_PROJECT_KEY):
+    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN):
         return jsonify({"error": "Jira isn't configured — set JIRA_BASE_URL, "
-                                  "JIRA_EMAIL, JIRA_API_TOKEN and JIRA_PROJECT_KEY."}), 400
+                                  "JIRA_EMAIL and JIRA_API_TOKEN."}), 400
+    jira_project = (supabase_store.get_division_settings(division_id).get("jira_project_key")
+                    or JIRA_PROJECT_KEY)
+    if not jira_project:
+        return jsonify({"error": "No Jira project is picked for this tab yet — "
+                                  "set one in the settings window."}), 400
     data = request.get_json(force=True, silent=True) or {}
     key = (data.get("project_key") or "").strip()
     summary = (data.get("summary") or "").strip()
     if not key or not summary:
         return jsonify({"error": "project_key and summary are required"}), 400
     fields = {
-        "project": {"key": JIRA_PROJECT_KEY},
+        "project": {"key": jira_project},
         "summary": summary,
         "issuetype": {"name": JIRA_ISSUE_TYPE},
     }

@@ -218,6 +218,7 @@
   .set-toggle { justify-content: flex-start; cursor: pointer; }
   .set-input { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
   .set-input input { width: 72px; }
+  .set-input input.set-text { width: 96px; text-transform: uppercase; }
   .set-stats { margin-top: 12px; font-size: 12.5px; }
   /* AI fit suggestions */
   .p-fit {
@@ -1191,8 +1192,8 @@
   <div class="modal settings-modal">
     <div class="modal-header">
       <div>
-        <h2>Suggestion settings</h2>
-        <p class="desc">How the "Likely fit / Likely not a fit" suggestions behave for this division.</p>
+        <h2>Settings</h2>
+        <p class="desc">For this division only.</p>
       </div>
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
@@ -1210,6 +1211,10 @@
         <span class="set-input"><input type="number" id="setFitSure" min="0" max="100" step="5"> % sure</span>
       </label>
       <p class="desc set-stats" id="setFitStats"></p>
+      <label class="set-row">
+        <span><b>Jira project</b><span class="desc" id="setJiraDesc">The short code of the Jira project "Add to Jira" files into, like GEO.</span></span>
+        <span class="set-input"><input type="text" class="set-text" id="setJiraProject" maxlength="10" autocomplete="off" spellcheck="false"></span>
+      </label>
       <div class="row" style="gap:8px; margin-top:14px;">
         <button class="btn-primary" id="setSaveBtn" onclick="saveSettings()">Save</button>
         <button class="btn-ghost" onclick="closeModal()">Cancel</button>
@@ -3568,6 +3573,12 @@ async function openSettings() {
     document.getElementById('setFitMin').value = st.fit_min_decisions;
     document.getElementById('setFitSure').value = st.fit_sure_at;
     document.getElementById('setFitStats').textContent = fitStatsText(res.fit_training);
+    const jira = document.getElementById('setJiraProject');
+    jira.value = st.jira_project_key || '';
+    jira.placeholder = res.jira_default_project || 'GEO';
+    document.getElementById('setJiraDesc').textContent =
+      'The short code of the Jira project "Add to Jira" files into, like GEO.' +
+      (res.jira_default_project ? ' Leave blank to use ' + res.jira_default_project + '.' : '');
     openModal('settings');
   } catch (e) {
     alert(e.message);
@@ -3586,6 +3597,7 @@ async function saveSettings() {
         fit_enabled: document.getElementById('setFitEnabled').checked,
         fit_min_decisions: document.getElementById('setFitMin').value,
         fit_sure_at: document.getElementById('setFitSure').value,
+        jira_project_key: document.getElementById('setJiraProject').value,
       }),
     });
     renderFitTraining(res.fit_training);

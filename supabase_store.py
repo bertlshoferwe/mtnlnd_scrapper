@@ -94,6 +94,9 @@ DEFAULT_SETTINGS = {
     "fit_enabled": True,
     "fit_min_decisions": int(os.environ.get("FIT_MIN_DECISIONS") or "50"),
     "fit_sure_at": 60,
+    # Jira project "Add to Jira" files into for this division (its short key,
+    # e.g. "GEO"). Blank = the JIRA_PROJECT_KEY env var.
+    "jira_project_key": "",
 }
 _SETTING_LIMITS = {"fit_min_decisions": (5, 1000), "fit_sure_at": (0, 100)}
 
@@ -123,6 +126,11 @@ def save_division_settings(division_id, patch):
             continue
         if isinstance(DEFAULT_SETTINGS[k], bool):
             clean[k] = bool(v)
+        elif isinstance(DEFAULT_SETTINGS[k], str):
+            v = str(v or "").strip().upper()
+            if v and not re.fullmatch(r"[A-Z][A-Z0-9_]{0,9}", v):
+                raise ValueError(f"{v} doesn't look like a Jira project key (like GEO)")
+            clean[k] = v
         else:
             try:
                 v = int(v)
