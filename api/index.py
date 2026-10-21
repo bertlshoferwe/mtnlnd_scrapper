@@ -602,12 +602,12 @@ def api_cluster_keywords(division_id):
     try:
         resp = requests.post(f"{base}/cluster-keywords", json={"division_id": division_id}, timeout=200)
     except requests.RequestException as e:
-        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 502
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424
     if resp.status_code >= 300:
         detail = (resp.json().get("error")
                   if resp.headers.get("content-type", "").startswith("application/json")
                   else resp.text)
-        return jsonify({"error": f"Scan worker error: {detail}"}), 502
+        return jsonify({"error": f"Scan worker error: {detail}"}), 424
     return jsonify(resp.json())
 
 
@@ -721,13 +721,13 @@ def api_run_now(division_id):
     try:
         resp = requests.post(f"{base}/run-now", json={"division_id": division_id}, timeout=8)
     except requests.RequestException as e:
-        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 502
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424
 
     if resp.status_code < 300:
         return jsonify({"ok": True})
     if resp.status_code == 409:
         return jsonify({"error": "A scan is already running."}), 409
-    return jsonify({"error": f"Scan worker error {resp.status_code}: {resp.text}"}), 502
+    return jsonify({"error": f"Scan worker error {resp.status_code}: {resp.text}"}), 424
 
 
 @app.route("/api/<division_id>/cancel-scan", methods=["POST"])
@@ -953,7 +953,7 @@ def api_add_project_to_jira(division_id):
             timeout=15,
         )
     except requests.RequestException as e:
-        return jsonify({"error": f"couldn't reach Jira: {e}"}), 502
+        return jsonify({"error": f"couldn't reach Jira: {e}"}), 424
     if not resp.ok:
         detail = resp.text
         try:
@@ -961,7 +961,10 @@ def api_add_project_to_jira(division_id):
             detail = "; ".join(body.get("errorMessages") or []) or str(body.get("errors") or body)
         except Exception:
             pass
-        return jsonify({"error": f"Jira error: {detail}"}), 502
+        # 424, not 502: Cloudflare swaps a 502 for its own page, dropping
+        # this message — the dashboard would only say "Request failed (502)".
+        print(f"  ! Jira refused {key} ({resp.status_code}): {detail}")
+        return jsonify({"error": f"Jira error: {detail}"}), 424
     issue_key = resp.json().get("key")
     try:
         supabase_store.set_project_jira_key(division_id, key, issue_key)
