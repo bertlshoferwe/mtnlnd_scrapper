@@ -495,8 +495,18 @@ textarea{min-height:90px;resize:vertical}
 .fnote{color:var(--muted);font-size:13.5px;margin:4px 0 10px}
 .att a.attn{text-decoration:none}
 .att a.attn:hover{text-decoration:underline}
-.akw{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--low)}
-.morebtn{display:block;margin:2px 0 10px;font-size:13px}
+.dtree{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;padding:4px 0}
+.dtn{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:4px 10px 4px calc(10px + var(--d,0) * 18px);background:none;border:0;text-align:left;justify-content:flex-start;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--ink);font-size:14px}
+.dtn:hover{background:var(--chip)}
+.dtn .tchev{flex:0 0 auto;color:var(--muted);transition:transform .15s}
+.dtn[aria-expanded="true"] .tchev{transform:rotate(90deg)}
+.dtn .tnm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtn.dir .tnm{font-weight:600}
+.dtn a.tnm{color:var(--ink);text-decoration:none}
+.dtn a.tnm:hover{text-decoration:underline}
+.dtn .tct{flex:0 0 auto;font-size:12px;color:var(--muted)}
+.dtn .tic{flex:0 0 auto;color:var(--muted)}
+.dtn .tsp{flex:0 0 14px}
 .phwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
 .phl{width:100%;border-collapse:collapse;font-size:13px}
 .phl th{text-align:left;font-weight:700;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -2050,7 +2060,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- issue modal ---------- */
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="all";ui.addSub=false;
-    ui.fileTab="docs";ui.docsAll=false;delete ui.bs[id];
+    ui.fileTab="docs";ui.docOpen={};delete ui.bs[id];
     renderIssue();openOv("ov-issue");
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
@@ -2114,15 +2124,8 @@ img.who{object-fit:cover;background:var(--chip)}
       if(b.state==="loading")h+='<p class="fnote">Loading the documents from Bid Scout…</p>';
       else if(b.state==="err")h+='<p class="fnote">Couldn’t load the documents from Bid Scout. Close the bid and open it again to retry.</p>';
       else if(d){
-        var list=src.slice().sort(function(x,y){return (y.keywords.length?1:0)-(x.keywords.length?1:0)||x.filename.localeCompare(y.filename,undefined,{numeric:true})});
-        var cap=ui.docsAll?list.length:25;
-        list.slice(0,cap).forEach(function(f){
-          var href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
-          h+='<div class="att">'+FILE_IC+'<a class="attn" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(f.filename)+'</a>'+
-            (f.keywords.length?'<span class="atm akw" title="Matched: '+esc(f.keywords.join(", "))+'">'+esc(f.keywords.join(", "))+'</span>':'')+'</div>';
-        });
-        if(list.length>cap)h+='<button class="linkbtn morebtn" data-docsall>Show all '+list.length+' documents</button>';
-        if(!list.length&&!docs.length)h+='<p class="fnote">Bid Scout has no documents for this project.</p>';
+        if(src.length)h+='<div class="dtree" role="tree">'+treeHTML(docTree(src),"",0,is)+'</div>';
+        else if(!docs.length)h+='<p class="fnote">Bid Scout has no documents for this project.</p>';
       }
       docs.forEach(function(f){h+=attRow(f)});
       h+=dropzHTML("doc","add a document");
@@ -2138,6 +2141,40 @@ img.who{object-fit:cover;background:var(--chip)}
       else if(!hold.length)h+='<p class="fnote">No companies have picked up plans for this project yet.</p>';
       else h+=holdersHTML(hold);
     }
+    return h;
+  }
+  // Bid Docs as a folder tree built from the file paths ("plans/Civil/C-101.pdf").
+  // Folders start closed and show how many files they hold.
+  function docTree(files){
+    var root={dirs:{},files:[],n:0};
+    files.forEach(function(f){
+      var parts=f.filename.split("/"),node=root;
+      root.n++;
+      for(var i=0;i<parts.length-1;i++){
+        var k=parts[i].trim()||"(no folder)";
+        node=node.dirs[k]=node.dirs[k]||{dirs:{},files:[],n:0};
+        node.n++;
+      }
+      node.files.push({name:parts[parts.length-1],f:f});
+    });
+    return root;
+  }
+  var CHEV='<svg class="tchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  var DIR_IC='<svg class="tic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  var DOC_IC='<svg class="tic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+  function treeHTML(node,path,depth,is){
+    var open=ui.docOpen||{},h="",nat=function(a,b){return a.localeCompare(b,undefined,{numeric:true})};
+    Object.keys(node.dirs).sort(nat).forEach(function(k){
+      var c=node.dirs[k],p=path+"/"+k,o=!!open[p];
+      h+='<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
+        '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>';
+      if(o)h+=treeHTML(c,p,depth+1,is);
+    });
+    node.files.slice().sort(function(a,b){return nat(a.name,b.name)}).forEach(function(x){
+      var f=x.f,href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
+      h+='<div class="dtn" style="--d:'+depth+'" role="treeitem"><span class="tsp"></span>'+DOC_IC+
+        '<a class="tnm" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(x.name)+'</a>'+'</div>';
+    });
     return h;
   }
   function holderRank(x){
@@ -2548,7 +2585,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");renderAttach();return}
-    if(t.closest("[data-docsall]")){ui.docsAll=true;renderAttach();return}
+    if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
     if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
     if((el=t.closest("[data-attdel]"))){
       var adi=byId(ui.issueId),aid=el.getAttribute("data-attdel");if(!adi)return;
