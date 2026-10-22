@@ -622,6 +622,17 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .ilinks{margin-top:8px}
 .imeta{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:12px;color:var(--muted);padding:2px 4px}
 .imeta .danger{color:var(--high);font-size:12px}
+.wflow{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.warr{display:inline-flex;color:var(--muted)}
+.fchip{display:inline-flex;align-items:baseline;gap:5px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;background:var(--chip);color:var(--ink)}
+.fchip small{font-weight:400;color:var(--muted);font-size:11px}
+.sheet.wsheet{width:min(1100px,100%)}
+.wedit{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 10px;align-items:stretch}
+.wcol{flex:0 0 190px;display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.wcol input,.wcol select{width:100%;margin:0}
+.wbtns{display:flex;gap:4px}
+.wbtns .danger{margin-left:auto}
+.wcol.wnew{border-style:dashed}
 .tplsub{font-weight:700;font-size:13px;margin:14px 0 2px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 #i-top{grid-area:top;min-width:0}
 #i-side{grid-area:side;min-width:0}
@@ -836,6 +847,14 @@ img.who{object-fit:cover;background:var(--chip)}
     <h3 id="autoTitle">New automation</h3>
     <div id="autoBody"></div>
     <div class="actions" id="autoActs"></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-tpl" role="dialog" aria-modal="true" aria-labelledby="tplTitle">
+  <div class="sheet">
+    <h3 id="tplTitle"></h3>
+    <div id="tplBody"></div>
+    <div class="actions" id="tplActs"></div>
   </div>
 </div>
 
@@ -2106,39 +2125,73 @@ img.who{object-fit:cover;background:var(--chip)}
     return isDivAdmin(d)?emptyHTML("No spaces yet","A space is a board of bids. You can nest sub-spaces inside it later.",'<button class="btn primary" data-newspace>Create space</button>')
       :emptyHTML("No spaces yet","Ask a division admin to create the first space.");
   }
+  // Workflows tab: template cards (columns left to right) and field cards; the pencil edits in a window
+  var PEN_SVG='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+  function tplUsers(t){return D.spaces.filter(function(sp){var f=followedTpl(sp);return f&&f.id===t.id}).length}
   function tplEditorHTML(){
     var T=D.config.templates;
-    var h='<section class="panel"><h3>Workflow templates</h3><p class="fine" style="margin:0 0 8px">Spaces pick one of these as their workflow, and update when it changes.</p>';
-    T.forEach(function(t){
-      // collapsed: just the name, with a pencil (on hover) that opens the editor
-      if(ui.editTpl!==t.id){
-        h+='<div class="srow tplrow"><span class="tplname">'+esc(t.name)+'</span><button class="icon pen" data-edittpl="'+t.id+'" aria-label="Edit '+esc(t.name)+'" title="Edit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></div>';
-        return;
-      }
-      h+='<div class="tpl"><div class="srow"><input data-tname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Template name" maxlength="40"><button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete')+'</button><button class="btn small primary" data-edittpl="'+t.id+'">Done</button></div>';
-      t.statuses.forEach(function(s,i){
-        var k=t.id+":"+i;
-        h+='<div class="srow"><input data-tcname="'+k+'" value="'+esc(s.name)+'" aria-label="Column name" maxlength="30"><select data-tccat="'+k+'" aria-label="Category">'+CATS.map(function(c){return opt(c[0],c[1],s.cat)}).join("")+'</select>'+
-          '<button class="btn small" data-tup="'+k+'" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tdown="'+k+'" aria-label="Move down"'+(i===t.statuses.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
-          '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div>';
+    var h='<section class="panel"><div class="phead"><h3>Workflow templates</h3>'+(ORG?'<button class="addbtn" data-newtpl aria-label="New workflow template" title="New workflow template">'+ic("plus",16)+'</button>':'')+'</div>'+
+      '<p class="fine" style="margin:0 0 10px">Spaces pick one of these as their workflow, and update when it changes.</p>';
+    if(T.length){
+      h+='<div class="cards wide">';
+      T.forEach(function(t){
+        var n=tplUsers(t);
+        h+='<div class="mcard"><div class="tname">'+esc(t.name)+'</div>'+
+          '<button class="editbtn" data-edittpl="'+t.id+'" data-tplmode="cols" aria-label="Edit '+esc(t.name)+'" title="Edit workflow">'+PEN_SVG+'</button>'+
+          '<div class="wflow">'+t.statuses.map(function(st,i){return (i?'<span class="warr" aria-hidden="true">'+ic("chevR",12)+'</span>':'')+'<span class="sbadge cat-'+st.cat+'">'+esc(st.name)+'</span>'}).join("")+'</div>'+
+          '<div class="foot"><span class="cnt">'+t.statuses.length+' column'+(t.statuses.length===1?'':'s')+' · used by '+n+' space'+(n===1?'':'s')+'</span></div></div>';
       });
-      h+='<div class="srow"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name"><select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select><button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div>';
-      if(HAS_FIELDS){
-        var F=t.fields||[];
-        h+='<div class="tplsub">Fields <span class="fine" style="margin:0;font-weight:400">shown on every bid in spaces using this workflow</span></div>';
-        F.forEach(function(fd,i){
-          var k=t.id+":"+i;
-          h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
-            '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
-            '<button class="btn small danger" data-tfdel="'+k+'">Remove</button></div>';
-        });
-        h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
-      }
       h+='</div>';
-    });
-    if(!T.length)h+='<p class="fine">No templates yet.</p>';
+    }else h+='<p class="fine">No templates yet. Use + to add one.</p>';
     h+='</section>';
+    if(HAS_FIELDS&&T.length){
+      h+='<section class="panel"><h3>Fields</h3><p class="fine" style="margin:0 0 10px">Shown on every bid in spaces using that workflow.</p><div class="cards wide">';
+      T.forEach(function(t){
+        var F=t.fields||[];
+        h+='<div class="mcard"><div class="tname">'+esc(t.name)+'</div>'+
+          '<button class="editbtn" data-edittpl="'+t.id+'" data-tplmode="fields" aria-label="Edit fields for '+esc(t.name)+'" title="Edit fields">'+PEN_SVG+'</button>'+
+          '<div class="wflow">'+(F.length?F.map(function(fd){var ty=(FTYPES.filter(function(x){return x[0]===fd.type})[0]||["",""])[1];return '<span class="fchip">'+esc(fd.name)+'<small>'+esc(ty)+'</small></span>'}).join(""):'<span class="fine" style="margin:0">No fields yet.</span>')+'</div>'+
+          '<div class="foot"><span class="cnt">'+F.length+' field'+(F.length===1?'':'s')+'</span></div></div>';
+      });
+      h+='</div></section>';
+    }
     return h;
+  }
+  function renderTplModal(){
+    var t=D.config.templates.filter(function(x){return x.id===ui.editTpl})[0];
+    if(!t){closeOv("ov-tpl");return}
+    var cols=ui.tplMode!=="fields",h='';
+    $("ov-tpl").querySelector(".sheet").classList.toggle("wsheet",cols);
+    $("tplTitle").textContent=cols?"Edit workflow":"Fields · "+t.name;
+    if(cols){
+      h+='<label for="tpl-name">Name</label><input id="tpl-name" data-tname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
+        '<label>Columns <span class="fine" style="margin:0;font-weight:400">left to right, as they show on the board</span></label><div class="wedit">';
+      t.statuses.forEach(function(st,i){
+        var k=t.id+":"+i;
+        h+='<div class="wcol"><input data-tcname="'+k+'" value="'+esc(st.name)+'" aria-label="Column name" maxlength="30">'+
+          '<select data-tccat="'+k+'" aria-label="Category">'+CATS.map(function(c){return opt(c[0],c[1],st.cat)}).join("")+'</select>'+
+          '<div class="wbtns"><button class="btn small" data-tup="'+k+'" aria-label="Move left" title="Move left"'+(i===0?' disabled':'')+'>'+ic("arrowL",14)+'</button>'+
+          '<button class="btn small" data-tdown="'+k+'" aria-label="Move right" title="Move right"'+(i===t.statuses.length-1?' disabled':'')+'>'+ic("arrowR",14)+'</button>'+
+          '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div></div>';
+      });
+      h+='<div class="wcol wnew"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name">'+
+        '<select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select>'+
+        '<button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div></div>';
+      $("tplActs").innerHTML=(ORG?'<button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete workflow')+'</button>':'')+
+        '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
+    }else{
+      var F=t.fields||[];
+      F.forEach(function(fd,i){
+        var k=t.id+":"+i;
+        h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
+          '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
+          '<button class="btn small danger" data-tfdel="'+k+'">Remove</button></div>';
+      });
+      if(!F.length)h+='<p class="fine">No fields yet.</p>';
+      h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
+      $("tplActs").innerHTML='<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
+    }
+    $("tplBody").innerHTML=h;
   }
   function orgSettingsHTML(){
     var p=proj(),d=curDiv(),tab=ui.setTab||"space";
@@ -2147,7 +2200,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(p&&d&&!isArchived(state.div))tabs.push(["space","Space · "+p.name]);
     if(d&&!isArchived(state.div))tabs.push(["division","Division · "+d.name]);
     tabs.push(["workflows","Workflows"]);
-    var nt=$("setNewTpl");if(nt)nt.style.display=tab==="workflows"?"":"none";
+    var nt=$("setNewTpl");if(nt)nt.style.display="none";   // the + lives on the Workflow templates panel now
     var h='<div class="settabs" role="tablist">'+tabs.map(function(x){return '<button class="tab" role="tab" data-settab="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+esc(x[1])+'</button>'}).join("")+'</div>';
     if(tab==="space")return h+settingsHTML();
     if(tab==="division")return h+membersHTML(d);
@@ -2302,6 +2355,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(nbd&&osl){nbd.style.scrollSnapType="none";nbd.scrollLeft=osl;requestAnimationFrame(function(){nbd.style.scrollSnapType=""})}
     $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
+    if($("ov-tpl").classList.contains("open"))renderTplModal();
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
     maybeAskMe(loading);
@@ -2334,7 +2388,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -2344,7 +2398,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeTop(){
     if(ui.calPop){closeCalPop();return}
-    var ids=["ov-me","ov-auto","ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
+    var ids=["ov-me","ov-auto","ov-tpl","ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
@@ -2868,14 +2922,15 @@ img.who{object-fit:cover;background:var(--chip)}
       if(dp){dp.rules=(dp.rules||[]).filter(function(x){return x.id!==did});closeOv("ov-auto");save();render();toast("Automation deleted")}
       return;
     }
-    if((el=t.closest("[data-edittpl]"))){var etid=el.getAttribute("data-edittpl");ui.editTpl=ui.editTpl===etid?null:etid;ui.armDT=null;render();return}
+    if((el=t.closest("[data-edittpl]"))){ui.editTpl=el.getAttribute("data-edittpl");ui.tplMode=el.getAttribute("data-tplmode")||"cols";ui.armDT=null;renderTplModal();openOv("ov-tpl");return}
     if(t.closest("[data-newtpl]")){
       if(!ORG)return;
       // "+" in the Settings window: a new template, opened for editing with its name selected
       var tnm="New workflow",tno=2;
       while(D.config.templates.some(function(x){return x.name===tnm}))tnm="New workflow "+(tno++);
-      var ntp={id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)};D.config.templates.push(ntp);ui.editTpl=ntp.id;save();render();
-      var nti=document.querySelector('[data-tname="'+ntp.id+'"]');if(nti){nti.focus();nti.select()}
+      var ntp={id:uid("t"),name:tnm,statuses:clone(TPL_DEFAULT)};D.config.templates.push(ntp);ui.editTpl=ntp.id;ui.tplMode="cols";save();render();
+      renderTplModal();openOv("ov-tpl");
+      var nti=$("tpl-name");if(nti){nti.focus();nti.select()}
       return;
     }
     if((el=t.closest("[data-tup]"))||(el=t.closest("[data-tdown]"))){
@@ -3078,7 +3133,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(!ORG)return;
       var dtid=el.getAttribute("data-deltpl");
       if(ui.armDT!==dtid){ui.armDT=dtid;render();return}
-      D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;ui.armDT=null;ui.editTpl=null;save();render();return;
+      D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;ui.armDT=null;closeOv("ov-tpl");save();render();return;
     }
     if(t.closest("[data-delspace]")){
       if(isDefaultSpace(proj()))return;
