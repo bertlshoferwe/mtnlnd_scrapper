@@ -15,6 +15,7 @@ import hashlib
 import os
 import re
 import uuid
+import requests
 from datetime import date, datetime, timedelta, timezone
 from supabase import create_client
 
@@ -1244,7 +1245,7 @@ def create_workflow_bid(division_id, project_key, title, due=None, source_url=No
         if not bid_id:
             raise
     try:
-        _fill_workflow_bid(bid_id, project_key, load_project_bid_times(division_id).get(project_key))
+        _fill_workflow_bid(division_id, bid_id, project_key, load_project_bid_times(division_id).get(project_key))
     except Exception as e:
         print(f"  ! couldn't fill in time/site on bid for {project_key} ({e})")
     return bid_id
@@ -1264,11 +1265,12 @@ def bid_time_hm(text):
     return f"{h:02d}:{mn:02d}" if h < 24 and mn < 60 else None
 
 
-def _fill_workflow_bid(bid_id, project_key, bid_time):
-    """Fill a new bid's blank due time (from the project's bid time) and its
-    "Original RFQ" field (the site Bid Scout found it on). Never overwrites
-    something already there. The field is found by name on the template the
-    bid's space follows, since field ids differ between templates."""
+def _fill_workflow_bid(division_id, bid_id, project_key, bid_time):
+    """Fill a new bid's blank due time (from the project's bid time), its
+    "Original RFQ" field (the site Bid Scout found it on) and its Team (the
+    project's state — see project_team_name). Never overwrites something
+    already there. Fields are found by name/type on the template the bid's
+    space follows, since field ids differ between templates."""
     sb = get_client()
     bid = sb.table("wf_bids").select("space_id,due,due_time,fields").eq("id", bid_id).limit(1).execute().data
     if not bid:
@@ -1284,11 +1286,17 @@ def _fill_workflow_bid(bid_id, project_key, bid_time):
     tpl_id = ((space[0].get("statuses") or [{}])[0] or {}).get("tpl") if space else None
     if site and tpl_id:
         tpl = sb.table("wf_templates").select("fields").eq("id", tpl_id).limit(1).execute().data
-        rfq = next((f["id"] for f in ((tpl[0].get("fields") or []) if tpl else [])
-                    if (f.get("name") or "").strip().lower() == "original rfq"), None)
+        tfields = (tpl[0].get("fields") or []) if tpl else []
+        rfq = next((f["id"] for f in tfields if (f.get("name") or "").strip().lower() == "original rfq"), None)
         if rfq and not fields.get(rfq):
             fields[rfq] = site
             patch["fields"] = fields
+        team_f = next((f["id"] for f in tfields if f.get("type") == "team"), None)
+        if team_f and not fields.get(team_f):
+            team_id = team_for_project(division_id, project_key)
+            if team_id:
+                fields[team_f] = team_id
+                patch["fields"] = fields
     if patch:
         sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
 
@@ -1370,6 +1378,108 @@ def download_bid_file(path):
     except Exception as e:
         print(f"  ! couldn't fetch bid file {path} ({e})")
         return None
+
+
+# Which state a site's projects are in, from its adapter / address / name.
+# ConstructConnect covers several states, so it isn't here — its projects
+# use their saved location instead.
+_SITE_STATES = (("udot", "Utah"), ("utah.gov", "Utah"), ("itd_", "Idaho"), ("idaho.gov", "Idaho"),
+                ("idot", "Idaho"), ("wydot", "Wyoming"), ("wyo", "Wyoming"), ("ndot", "Nevada"),
+                ("nv.gov", "Nevada"))
+_udot_regions = {"at": 0, "map": {}}
+_STATE_NAMES = {"UT": "Utah", "ID": "Idaho", "NV": "Nevada", "WY": "Wyoming", "AZ": "Arizona",
+                "CO": "Colorado", "MT": "Montana", "NM": "New Mexico", "OR": "Oregon",
+                "WA": "Washington", "CA": "California", "TX": "Texas"}
+# Utah County ZIPs in the 846xx range (the rest of 846xx is Juab, Sanpete
+# and Millard — Southern Utah).
+_UTAH_COUNTY_846 = {"84601", "84602", "84603", "84604", "84605", "84606", "84626", "84633",
+                    "84651", "84653", "84655", "84660", "84663", "84664"}
+
+
+def _utah_zip_is_north(zipcode):
+    """Utah County and north = Northern Utah. By ZIP: 840/841/843/844 are the
+    Wasatch Front, Cache, Box Elder, Summit, Wasatch, Tooele and the Uintah
+    Basin; 845 (Price, Moab, San Juan) and 847 (St. George, Cedar City,
+    Richfield) are south; 846 splits — Utah County north, the rest south."""
+    p = zipcode[:3]
+    if p in ("840", "841", "843", "844"):
+        return True
+    if p == "846":
+        return zipcode in _UTAH_COUNTY_846
+    return False
+
+
+def _udot_region(project_name):
+    """UDOT's region number (1-4) for an advertised project, from Contractor
+    Zone's public list (cached 10 minutes), or None."""
+    import time
+    if time.time() - _udot_regions["at"] > 600:
+        try:
+            r = requests.get("https://contractorzone.udot.utah.gov/advertisements/projects",
+                             params={"section": "advertisements"}, timeout=15,
+                             headers={"User-Agent": "Mozilla/5.0 (compatible; BidScoutBot/1.0)"})
+            r.raise_for_status()
+            m = {}
+            for p in r.json().get("result") or []:
+                num = re.search(r"\d+", p.get("region") or "")
+                if num:
+                    for k in (p.get("project_name"), p.get("project_number")):
+                        if k:
+                            m[k.strip().lower()] = int(num.group())
+            _udot_regions.update(at=time.time(), map=m)
+        except Exception as e:
+            print(f"  ! couldn't read UDOT regions ({e})")
+    return _udot_regions["map"].get((project_name or "").strip().lower())
+
+
+def project_team_name(division_id, project_key):
+    """The bid board team a project belongs to: its state, with Utah split at
+    the south edge of Utah County. Uses the project's saved location when
+    there is one (ConstructConnect: state + ZIP), else the site's state —
+    UDOT Regions 1-3 are "Northern Utah", Region 4 "Southern Utah" (plain
+    "Utah" when the region isn't known). None when the state isn't known."""
+    site, project = _split_site(project_key)
+    try:
+        rows = (get_client().table("sites").select("name,adapter,url")
+                .eq("division_id", division_id).eq("name", site).limit(1).execute().data)
+    except Exception:
+        rows = []
+    hay = " ".join(str(rows[0].get(k) or "") for k in ("adapter", "url", "name")).lower() if rows else site.lower()
+    loc = None
+    try:
+        fr = (get_client().table("project_flags").select("location")
+              .eq("division_id", division_id).eq("project_key", project_key).limit(1).execute().data)
+        loc = fr[0].get("location") if fr else None
+    except Exception:
+        pass
+    m = re.search(r",\s*([A-Z]{2})\s+(\d{5})", loc or "")
+    if m:
+        state = _STATE_NAMES.get(m.group(1))
+        if state != "Utah":
+            return state
+        return "Northern Utah" if _utah_zip_is_north(m.group(2)) else "Southern Utah"
+    state = next((st for needle, st in _SITE_STATES if needle in hay), None)
+    if state != "Utah":
+        return state
+    region = _udot_region(project) if "udot" in hay else None
+    if region in (1, 2, 3):
+        return "Northern Utah"
+    if region == 4:
+        return "Southern Utah"
+    return "Utah"
+
+
+def team_for_project(division_id, project_key):
+    """The id of the division's bid board team named for the project's state
+    (see project_team_name), or None if there's no such team."""
+    name = project_team_name(division_id, project_key)
+    if not name:
+        return None
+    try:
+        teams = get_client().table("wf_teams").select("id,name").eq("division_id", division_id).execute().data
+    except Exception:
+        return None
+    return next((t["id"] for t in teams if (t.get("name") or "").strip().lower() == name.lower()), None)
 
 
 def load_project_files(division_id, project_key):
@@ -1580,6 +1690,20 @@ def save_project_plan_holders(division_id, mapping):
         get_client().table("project_flags").upsert(rows).execute()
     except Exception as e:
         print(f"  ! couldn't save plan holders ({e})")
+
+
+def save_project_locations(division_id, mapping):
+    """Upsert {project_key: "City, ST 12345"} from a scan. Only touches
+    location. No-ops if the column is missing."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [{"division_id": division_id, "project_key": k, "location": v, "updated_at": now}
+            for k, v in mapping.items() if v]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save project locations ({e})")
 
 
 def load_project_plan_holders(division_id, project_key):

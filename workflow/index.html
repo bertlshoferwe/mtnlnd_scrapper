@@ -2337,8 +2337,8 @@ img.who{object-fit:cover;background:var(--chip)}
     return '<div class="phwrap"><table class="phl"><thead><tr>'+cols.map(function(c){return '<th scope="col">'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
       L.map(function(x){return '<tr>'+cols.map(function(c){return '<td>'+c[1](x)+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>';
   }
-  // Fetch the Bid Scout project behind a bid, then fill in its blank due time and
-  // "Original RFQ" (the site it was found on). Never overwrites what's there.
+  // Fetch the Bid Scout project behind a bid, then fill in its blank due time,
+  // "Original RFQ" (the site it was found on) and Team (its state). Never overwrites what's there.
   function bsLoad(is){
     if(!is||!is.sourceProjectId||ui.bs[is.id])return;
     var id=is.id;ui.bs[id]={state:"loading"};
@@ -2353,6 +2353,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if(HAS_DUETIME&&d.due_time&&is.due&&is.due===d.bid_date&&!is.dueTime)ch=setField(is,"dueTime",d.due_time)||ch;
     var rfq=spaceFields(proj()).filter(function(x){return (x.name||"").trim().toLowerCase()==="original rfq"})[0];
     if(rfq&&d.site&&!(is.fields||{})[rfq.id])ch=setField(is,"cf:"+rfq.id,d.site)||ch;
+    var tmf=spaceFields(proj()).filter(function(x){return x.type==="team"})[0];
+    if(tmf&&d.team&&!(is.fields||{})[tmf.id]){
+      var tm=(D.teams||[]).filter(function(x){return x.divisionId===is.divisionId&&(x.name||"").trim().toLowerCase()===d.team.toLowerCase()})[0];
+      if(tm)ch=setField(is,"cf:"+tmf.id,tm.id)||ch;
+    }
     if(ch){renderIssueSideOnly();renderIssueAct()}
   }
   function renderAttach(){var is=byId(ui.issueId),el=$("i-att");if(is&&el)el.innerHTML=attachHTML(is)}

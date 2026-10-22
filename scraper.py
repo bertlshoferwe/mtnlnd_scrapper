@@ -533,6 +533,15 @@ def _site_login(site):
     }
 
 
+def _save_locations(site, adapter):
+    """Persist the project locations the adapter picked up (so far only
+    ConstructConnect), keyed like bid dates ("SiteName — label")."""
+    locs = getattr(adapter, "locations", None) or {}
+    if locs:
+        supabase_store.save_project_locations(site["division_id"], {
+            f"{site['name']} — {lbl}" if lbl else site["name"]: v for lbl, v in locs.items()})
+
+
 def _save_plan_holders(site, adapter):
     """Persist whatever plan-holder lists the adapter picked up while finding
     documents, keyed the same way as bid dates ("SiteName — label"). Every
@@ -586,6 +595,7 @@ def scan_site(site, ai_client):
             if current_updated:
                 supabase_store.save_project_last_updated(division_id, current_updated)
             _save_plan_holders(site, adapter)
+            _save_locations(site, adapter)
             return doc_links, {}, login_result
         print(f"  Adapter: {adapter.label}")
         found = adapter.find_documents(site)

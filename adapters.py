@@ -93,6 +93,9 @@ class SiteAdapter:
         # tuples use. scraper.scan_site() saves it per project after the
         # adapter runs. Empty for an adapter that doesn't support it.
         self.plan_holders = {}
+        # {label: "City, ST 12345"} — where a project is, for portals that
+        # show it per project (ConstructConnect). Saved like plan_holders.
+        self.locations = {}
 
     @classmethod
     def matches_url(cls, url):
@@ -1089,6 +1092,9 @@ class ConstructConnectAdapter(SiteAdapter):
 
         project_url = page.url
         bid_date, bid_time = self._extract_bid_info(page)
+        loc = self._extract_location(page)
+        if loc:
+            self.locations[label] = loc
         out = []
         doc_page = None
         try:
@@ -1270,6 +1276,28 @@ class ConstructConnectAdapter(SiteAdapter):
     # separate day/month block (EventItem_date — no year at all) and a
     # title/time block (EventItem_details).
     BID_EVENT_ROW_SELECTOR = '[class*="EventItem_item"]'
+
+    def _extract_location(self, page):
+        """The project's location from the line under its title, next to the
+        map pin — e.g. "Multiple Locations, Apache Junction, AZ 85120"
+        (confirmed via user screenshot 2026-10-21) — or None. It's the first
+        short element on the page ending in ", ST 12345"; the Events panel's
+        addresses (meetings, bid opening) come later in the page."""
+        try:
+            text = page.evaluate("""() => {
+                const re = /,\\s*[A-Z]{2}\\s+\\d{5}(-\\d{4})?\\s*$/;
+                for (const el of document.querySelectorAll('a, span, div, p')) {
+                    const t = (el.innerText || '').trim();
+                    if (t && t.length < 160 && !t.includes('\\n') && re.test(t)) return t;
+                }
+                return null;
+            }""")
+        except Exception:
+            text = None
+        if not text and not getattr(self, "_saved_location_debug", False):
+            self._saved_location_debug = True
+            self._save_debug_screenshot(page, "location_not_found")
+        return text
 
     def _extract_bid_info(self, page):
         """Reads the project page's "Events" section for the "Bid Date" row

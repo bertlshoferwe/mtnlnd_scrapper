@@ -907,7 +907,8 @@ def api_save_settings(division_id):
 def api_project_bid_info(division_id):
     """What the bid board's bid window shows from the Bid Scout project it
     came from. ?key=<project_key>. Returns {"site", "bid_date", "due_time"
-    ("HH:MM" or null), "files": [...], "holders", "holders_refreshed_at"} —
+    ("HH:MM" or null), "team" (team name or null), "files": [...], "holders",
+    "holders_refreshed_at"} —
     files open through /api/<division_id>/pdf, holders as in plan-holders."""
     _, err = _require_division(division_id)
     if err:
@@ -921,6 +922,7 @@ def api_project_bid_info(division_id):
         "site": site,
         "bid_date": supabase_store.load_project_bid_dates(division_id).get(key),
         "due_time": supabase_store.bid_time_hm(supabase_store.load_project_bid_times(division_id).get(key)),
+        "team": supabase_store.project_team_name(division_id, key),
         "files": supabase_store.load_project_files(division_id, key),
         "holders": holders, "holders_refreshed_at": refreshed_at,
     })

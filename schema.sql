@@ -154,6 +154,10 @@ create table if not exists project_flags (
   -- scraper._save_plan_holders). NULL = never fetched for this project.
   plan_holders jsonb,
   plan_holders_at timestamptz,
+  -- Where the project is, as the portal shows it (ConstructConnect's header
+  -- line, e.g. "Apache Junction, AZ 85120"). Picks the bid board Team — see
+  -- supabase_store.project_team_name. NULL = not captured.
+  location text,
   -- Which results tab the project is in: 'jira' (added to Jira), 'not_fit'
   -- (passed on, with one of the one-click reasons in
   -- supabase_store.NOT_FIT_REASONS + an optional note), or NULL (To Review).
@@ -186,6 +190,7 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists jira_key text;
 --   alter table project_flags add column if not exists plan_holders jsonb;
 --   alter table project_flags add column if not exists plan_holders_at timestamptz;
+--   alter table project_flags add column if not exists location text;
 --   alter table project_flags add column if not exists decision text;
 --   alter table project_flags add column if not exists decision_reason text;
 --   alter table project_flags add column if not exists decision_note text;
