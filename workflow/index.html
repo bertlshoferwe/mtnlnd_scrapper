@@ -557,6 +557,9 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .mcard .foot{display:flex;align-items:center;gap:8px}
 .mcard .cnt{flex:1;font-size:12px;color:var(--muted)}
 .mcard .linkbtn.danger{font-size:12px;color:var(--high)}
+.mcard .pinfo{flex:1;min-width:0}
+.mcard .pinfo .tname{padding-right:30px}
+.mcard .pmail{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mcard{position:relative}
 .mcard .tname{font-weight:700;font-size:14px;padding-right:30px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mcard .editbtn{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;border-radius:7px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);opacity:0;transition:opacity .12s}
@@ -763,6 +766,15 @@ img.who{object-fit:cover;background:var(--chip)}
   </div>
 </div>
 
+<!-- new / edit person (Settings → Division → Members) -->
+<div class="overlay" id="ov-person" role="dialog" aria-modal="true" aria-labelledby="psTitle">
+  <div class="sheet">
+    <h3 id="psTitle"></h3>
+    <div id="personBody"></div>
+    <div class="actions" id="psActs"></div>
+  </div>
+</div>
+
 <!-- edit team (opened from a team card in Settings) -->
 <div class="overlay" id="ov-team" role="dialog" aria-modal="true" aria-labelledby="tmTitle">
   <div class="sheet">
@@ -810,7 +822,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,FILE_BUCKET="bid-files";
+  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,HAS_PDETAILS=false,FILE_BUCKET="bid-files";
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -1002,7 +1014,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function allDocs(){
     var m={};
     m["org/config"]={templates:D.config.templates};
-    D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name}});
+    D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||""}});
     (D.teams||[]).forEach(function(t){m["teams/"+t.id]={divisionId:t.divisionId,name:t.name,members:t.members||[]}});
     D.spaces.forEach(function(sp){
       m["spaces/"+sp.id]=stripSpace(sp);
@@ -1043,7 +1055,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(p[0]==="org")return writeTemplates(data.templates);
     if(p[0]==="spaces")r=await sb.from("wf_spaces").upsert(spaceToRow(id,data));
     else if(p[0]==="bids")r=await sb.from("wf_bids").upsert(bidToRow(id,data));
-    else if(p[0]==="people")r=await sb.from("wf_people").upsert({id:id,division_id:data.divisionId,name:data.name});
+    else if(p[0]==="people"){var prow={id:id,division_id:data.divisionId,name:data.name};if(HAS_PDETAILS){prow.first_name=data.first||null;prow.last_name=data.last||null;prow.email=data.email||null}r=await sb.from("wf_people").upsert(prow)}
     else if(p[0]==="teams")r=await sb.from("wf_teams").upsert({id:id,division_id:data.divisionId,name:data.name,members:data.members||[]});
     if(r&&r.error)throw r.error;
   }
@@ -1089,10 +1101,11 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
       sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1),
       sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*"),
-      sb.from("wf_bids").select("attachments").limit(1)]);
+      sb.from("wf_bids").select("attachments").limit(1),sb.from("wf_people").select("email").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
-    raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name}});
+    HAS_PDETAILS=!rs[11].error;   // first/last name + email need workflow/sql/007_people_details.sql
+    raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name,first:r.first_name||"",last:r.last_name||"",email:r.email||""}});
     HAS_TEAMS=!rs[9].error;
     HAS_FILES=!rs[10].error;   // attachments need workflow/sql/006_attachments.sql   // teams need workflow/sql/005_teams.sql
     raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[]}});
@@ -1138,7 +1151,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function rebuild(){
     D.config={templates:clone((raw.config&&raw.config.templates)||[])};
-    D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name}}).sort(byName);
+    D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||""}}).sort(byName);
     D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[])}}).sort(byName);
     D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
     D.divs=Object.keys(raw.divs).map(function(id){return {id:id,name:raw.divs[id].name,members:[],admins:[]}}).sort(byName);
@@ -1995,18 +2008,44 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function membersHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
-    var h='<section class="panel"><div class="phead"><h3>Members</h3><button class="addbtn" data-showadd="person" aria-expanded="'+(ui.adding==="person")+'" aria-label="Add a person" title="Add a person">'+ic("plus",16)+'</button></div>'+
+    var h='<section class="panel"><div class="phead"><h3>Members</h3><button class="addbtn" data-pnew aria-label="Add a person" title="Add a person">'+ic("plus",16)+'</button></div>'+
       '<p class="fine" style="margin:0 0 10px">The people bids can be assigned to. Shared by every space in '+esc(d.name)+'.</p>';
-    if(ui.adding==="person")h+='<div class="addrow"><input id="newperson" placeholder="Name" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button><button class="btn small" data-showadd="">Cancel</button></div>';
     if(ids.length){
       h+='<div class="cards">';
       ids.forEach(function(id){
-        h+='<div class="mcard"><div class="mtop">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40">'+
-          '<button class="linkbtn danger" data-rmperson="'+esc(id)+'">'+(ui.armPer===id?'Tap to confirm':'Remove')+'</button></div></div>';
+        var pp=D.people.filter(function(x){return x.id===id})[0]||{};
+        h+='<div class="mcard"><div class="mtop">'+avHTML(id)+'<div class="pinfo"><div class="tname">'+esc(nameOf(id))+'</div><div class="pmail">'+(pp.email?esc(pp.email):'No email yet')+'</div></div></div>'+
+          '<button class="editbtn" data-pedit="'+esc(id)+'" aria-label="Edit '+esc(nameOf(id))+'" title="Edit person">'+PENCIL+'</button></div>';
       });
       h+='</div>';
     }else h+='<p class="fine">No one yet. Use + to add the people who work on this division’s bids so you can assign them.</p>';
     return h+'</section>'+teamsHTML(d,ids);
+  }
+  var PENCIL='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+  // The person window: a new person (ui.editPerson==="new") or an existing one. First name,
+  // last name and email are all required; name is kept as "First Last" for display everywhere.
+  function renderPersonModal(){
+    var isNew=ui.editPerson==="new",pp=isNew?{first:"",last:"",email:""}:D.people.filter(function(x){return x.id===ui.editPerson})[0];
+    if(!pp){closeOv("ov-person");return}
+    var first=pp.first,last=pp.last;
+    if(!isNew&&!first&&!last){var sp=(pp.name||"").trim().split(/\s+/);first=sp.shift()||"";last=sp.join(" ")}
+    $("psTitle").textContent=isNew?"New person":"Edit person";
+    $("personBody").innerHTML='<label for="ps-first">First name</label><input id="ps-first" maxlength="40" autocomplete="off" value="'+esc(first)+'">'+
+      '<label for="ps-last">Last name</label><input id="ps-last" maxlength="40" autocomplete="off" value="'+esc(last)+'">'+
+      '<label for="ps-email">Email</label><input id="ps-email" type="email" maxlength="120" autocomplete="off" value="'+esc(pp.email||"")+'">'+
+      '<p class="fine" id="ps-err" style="color:var(--high)"></p>';
+    $("psActs").innerHTML=(isNew?'':'<button class="btn small danger" data-rmperson="'+esc(pp.id)+'">'+(ui.armPer===pp.id?'Tap to confirm':'Remove person')+'</button>')+
+      '<span class="spacer"></span><button class="btn" data-close="ov-person">Cancel</button><button class="btn primary" data-psave>'+(isNew?'Add person':'Save')+'</button>';
+  }
+  function savePerson(){
+    var f=$("ps-first").value.trim(),l=$("ps-last").value.trim(),em=$("ps-email").value.trim(),err=$("ps-err");
+    if(!f||!l||!em){err.textContent="First name, last name and email are all required.";(!f?$("ps-first"):!l?$("ps-last"):$("ps-email")).focus();return}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){err.textContent="That email doesn’t look right.";$("ps-email").focus();return}
+    if(!HAS_PDETAILS){err.textContent="The bid board’s database needs a quick update before it can store names and emails. Ask whoever manages it to run workflow/sql/007_people_details.sql.";return}
+    var nm=f+" "+l;
+    if(ui.editPerson==="new"){var nid=uid("p");D.people.push({id:nid,divisionId:state.div,name:nm,first:f,last:l,email:em});PROF[nid]={name:nm,avatarUrl:""}}
+    else{var pp=D.people.filter(function(x){return x.id===ui.editPerson})[0];if(pp){pp.name=nm;pp.first=f;pp.last=l;pp.email=em;PROF[pp.id]={name:nm,avatarUrl:""}}}
+    closeOv("ov-person");save();render();
   }
   // Teams (e.g. regions): named groups of this division's members; a bid's Team field picks one
   function divTeams(d){return d?(D.teams||[]).filter(function(t){return t.divisionId===d.id}):[]}
@@ -2044,15 +2083,7 @@ img.who{object-fit:cover;background:var(--chip)}
       :'<button class="btn small danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Delete team')+'</button><span class="spacer"></span><button class="btn primary" data-close="ov-team">Done</button>';
   }
   function divisionHTML(d){
-    var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
-    var h='<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>';
-    h+='<section class="panel"><h3>Members</h3>';
-    ids.forEach(function(id){
-      h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
-    });
-    if(!ids.length)h+='<p class="fine">No one yet. Add the people who work on this division’s bids so you can assign them.</p>';
-    h+='<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section></div>';
-    return h;
+    return '<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>'+membersHTML(d)+'</div>';
   }
   function render(){
     var v=state.view,d=curDiv(),p=proj();
@@ -2114,7 +2145,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -2124,7 +2155,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeTop(){
     if(ui.calPop){closeCalPop();return}
-    var ids=["ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
+    var ids=["ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
@@ -2519,7 +2550,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
     if(t.closest("[data-orgsettings]")){openOrgSettings();return}
-    if((el=t.closest("[data-settab]"))){ui.setTab=el.getAttribute("data-settab");ui.armP=false;ui.armTm=null;ui.armPer=null;ui.adding="";render();return}
+    if((el=t.closest("[data-settab]"))){ui.setTab=el.getAttribute("data-settab");ui.armP=false;ui.armTm=null;ui.armPer=null;render();return}
     if((el=t.closest("[data-colfold]"))){
       var cfp=proj().id,cfs=el.getAttribute("data-colfold");
       state.colFold=state.colFold||{};state.colFold[cfp]=state.colFold[cfp]||{};
@@ -2528,17 +2559,9 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(t.closest("[data-newspace]")){closeDrawer();openSpace("");return}
     if((el=t.closest("[data-newsub]"))){openSpace(el.getAttribute("data-newsub"));return}
-    if((el=t.closest("[data-showadd]"))){
-      var sa=el.getAttribute("data-showadd");ui.adding=(sa&&ui.adding!==sa)?sa:"";render();
-      var ai=$("newperson");if(ui.adding&&ai)ai.focus();
-      return;
-    }
-    if(t.closest("[data-addperson]")){
-      var pin=$("newperson"),pnm=pin?pin.value.trim():"";
-      if(!pnm){if(pin)pin.focus();return}
-      D.people.push({id:uid("p"),divisionId:state.div,name:pnm});
-      save();render();var np=$("newperson");if(np)np.focus();return;
-    }
+    if(t.closest("[data-pnew]")){ui.editPerson="new";ui.armPer=null;renderPersonModal();openOv("ov-person");$("ps-first").focus();return}
+    if((el=t.closest("[data-pedit]"))){ui.editPerson=el.getAttribute("data-pedit");ui.armPer=null;renderPersonModal();openOv("ov-person");$("ps-first").focus();return}
+    if(t.closest("[data-psave]")){savePerson();return}
     if(t.closest("[data-tmnew]")){ui.editTeam="new";ui.draftTeam={name:"",members:[]};renderTeamModal();openOv("ov-team");var tnn=$("tm-name");if(tnn)tnn.focus();return}
     if((el=t.closest("[data-tmdraft]"))){
       var dpid=el.getAttribute("data-tmdraft"),dm=ui.draftTeam.members,di=dm.indexOf(dpid);
@@ -2563,8 +2586,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-rmperson]"))){
       var rpid=el.getAttribute("data-rmperson");
-      if(ui.armPer!==rpid){ui.armPer=rpid;render();return}
-      ui.armPer=null;
+      if(ui.armPer!==rpid){ui.armPer=rpid;renderPersonModal();return}
+      ui.armPer=null;closeOv("ov-person");
       D.people=D.people.filter(function(x){return x.id!==rpid});
       (D.teams||[]).forEach(function(tm){tm.members=tm.members.filter(function(x){return x!==rpid})});
       D.spaces.forEach(function(sp){sp.issues.forEach(function(is){if(is.assignee===rpid)is.assignee=""})});
@@ -2833,11 +2856,6 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(el.id==="pname"){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";render();return}
-    if((v=el.getAttribute("data-pname"))){
-      var pp=D.people.filter(function(x){return x.id===v})[0],pv=el.value.trim();
-      if(pp&&pv){pp.name=pv;PROF[pp.id]={name:pv,avatarUrl:""};save()}else if(pp)el.value=pp.name;
-      return;
-    }
     if((v=el.getAttribute("data-tname"))){
       var tt=D.config.templates.filter(function(x){return x.id===v})[0],tv=el.value.trim();
       if(tt&&tv){tt.name=tv;save()}else if(tt)el.value=tt.name;return;
@@ -2897,7 +2915,6 @@ img.who{object-fit:cover;background:var(--chip)}
       if(e.key==="Escape"){e.preventDefault();closeQC();return}
     }
     if(e.key==="Escape"&&ui.addSub&&e.target.getAttribute&&e.target.getAttribute("data-quick")){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
-    if(e.key==="Escape"&&ui.adding&&e.target.id&&e.target.id==="newperson"){e.preventDefault();ui.adding="";render();return}
     if(e.key==="Escape"){closeTop();return}
     var t=e.target;
     var day=t.closest&&t.closest("[data-day]");
@@ -2905,7 +2922,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(e.key==="Enter"&&t.getAttribute&&t.getAttribute("data-quick")){e.preventDefault();quickAdd(t.getAttribute("data-quick"));return}
     if(e.key==="Enter"&&t.id==="ns"){e.preventDefault();var b=document.querySelector("[data-addstatus]");if(b)b.click()}
     if(e.key==="Enter"&&(t.id==="c-title"||t.id==="p-name"||t.id==="p-key")){e.preventDefault();if(t.id==="c-title")submitCreate();else submitSpace()}
-    if(e.key==="Enter"&&t.id==="newperson"){e.preventDefault();var ab=document.querySelector("[data-addperson]");if(ab)ab.click()}
+    if(e.key==="Enter"&&/^ps-/.test(t.id||"")){e.preventDefault();savePerson()}
     if(e.key==="Enter"&&t.id==="tm-name"&&ui.editTeam==="new"){e.preventDefault();var ctb=document.querySelector("[data-tmcreate]");if(ctb)ctb.click()}
   });
   /* drag and drop on the board */
