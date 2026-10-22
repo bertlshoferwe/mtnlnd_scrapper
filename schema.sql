@@ -168,6 +168,10 @@ create table if not exists project_flags (
   decision_reason text,
   decision_note text,
   decided_at timestamptz,
+  -- decision 'duplicate': the same job found on another site. Shown under
+  -- Not a Fit (reason "Duplicate"), never used as a fit example; this is the
+  -- original project's key, which then lists the duplicate's files/holders.
+  duplicate_of text,
   -- AI suggestion for a project still in To Review (see fit_predictor.py):
   -- verdict 'fit' / 'not_fit', the likely Not-a-fit reason, 0-100
   -- confidence, one plain sentence, when it was made and how many past
@@ -195,6 +199,7 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists decision_reason text;
 --   alter table project_flags add column if not exists decision_note text;
 --   alter table project_flags add column if not exists decided_at timestamptz;
+--   alter table project_flags add column if not exists duplicate_of text;
 --   alter table project_flags add column if not exists fit_verdict text;
 --   alter table project_flags add column if not exists fit_reason text;
 --   alter table project_flags add column if not exists fit_confidence int;

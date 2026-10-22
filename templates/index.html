@@ -263,12 +263,22 @@
   }
   .nf-reason:hover { border-color: var(--accent); }
   .nf-reason.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
-  .not-fit-panel textarea {
+  .not-fit-panel textarea, .not-fit-panel input[type=search] {
     width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; resize: vertical;
     padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
     background: var(--surface); color: var(--text);
   }
   .nf-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .dup-list { display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow: auto; }
+  .dup-list .desc { margin: 4px 0; }
+  .dup-opt {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .dup-opt:hover { border-color: var(--accent); }
+  .dup-opt.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .dup-opt .dup-name { font-weight: 600; font-size: 13.5px; }
+  .dup-opt .dup-sub { font-size: 12px; color: var(--muted); }
 
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li {
@@ -1297,6 +1307,7 @@
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Project page</a>
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Board</span></button>
         <button type="button" id="projectNotFitBtn" class="done-btn notfit-btn" onclick="openNotFitPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg><span>Not a fit</span></button>
+        <button type="button" id="projectDupBtn" class="done-btn notfit-btn" onclick="openDupPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>Duplicate</span></button>
       </div>
       <div class="fit-suggestion" id="fitSuggestion" hidden></div>
       <div class="decision-bar" id="decisionBar" hidden>
@@ -1310,6 +1321,15 @@
         <div class="nf-actions">
           <button type="button" class="btn-primary" id="notFitSaveBtn" onclick="saveNotFit()" disabled>Save</button>
           <button type="button" class="btn-ghost" onclick="closeNotFitPanel()">Cancel</button>
+        </div>
+      </div>
+      <div class="not-fit-panel" id="dupPanel" hidden>
+        <div class="nf-title">Which project is this a duplicate of?</div>
+        <input type="search" id="dupSearch" placeholder="Search projects" autocomplete="off" oninput="renderDupCandidates()">
+        <div class="dup-list" id="dupList" role="listbox" aria-label="Projects"></div>
+        <div class="nf-actions">
+          <button type="button" class="btn-primary" id="dupSaveBtn" onclick="saveDuplicate()" disabled>Mark as duplicate</button>
+          <button type="button" class="btn-ghost" onclick="closeDupPanel()">Cancel</button>
         </div>
       </div>
       <div class="site-tabs project-tabs" role="tablist">
@@ -2879,7 +2899,8 @@ async function loadProjects() {
     const subParts = [];
     if (p.source_prefix) subParts.push(p.source_prefix);
     if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
-    if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
+    if (p.decision === 'duplicate') subParts.push('Duplicate of ' + (p.duplicate_of_site || p.duplicate_of_name || ''));
+    else if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
     const fitLab = p.bucket === 'review' ? fitLabel(p.fit) : null;
     if (fitLab && fitLab.cls !== 'unsure') {
       const ft = document.createElement('span');
@@ -3051,6 +3072,9 @@ function openProjectModal(i) {
   if (p.updated) {
     meta.push((p.new_file_count || 0) + ' new document' + ((p.new_file_count === 1) ? '' : 's'));
   }
+  if (p.duplicates && p.duplicates.length) {
+    meta.push('also listed on ' + p.duplicates.map(function(d) { return d.source_prefix || d.project; }).join(', '));
+  }
   document.getElementById('projectModalMeta').textContent = meta.join('  ·  ');
 
   const stats = [p.file_count + (p.file_count === 1 ? ' file' : ' files') + ' scanned'];
@@ -3064,6 +3088,7 @@ function openProjectModal(i) {
   else { link.style.display = 'none'; }
 
   closeNotFitPanel();
+  closeDupPanel();
   renderDecision(p);
   renderFitSuggestion(p);
   renderProjectJiraBtn(p);
@@ -3273,6 +3298,11 @@ function renderProjectFiles() {
 const DOC_FOLDER_NAMES = { 'project-files': 'Project Files', 'addendum': 'Addenda' };
 
 function docTreePath(p, f) {
+  // A duplicate's documents, listed on its original, go under "From <site>".
+  if (f.from_site) {
+    const sub = docTreePath({ project: f.from_project }, Object.assign({}, f, { from_site: null }));
+    return { folders: ['From ' + f.from_site].concat(sub.folders), name: sub.name };
+  }
   let name = f.filename || '(document)';
   const prefix = (p.project || '') + ' - ';
   if (p.project && name.indexOf(prefix) === 0 && name.indexOf('/', prefix.length) > 0) {
@@ -3615,13 +3645,17 @@ async function saveSettings() {
 // will learn "worth bidding vs. just information" from.
 function renderDecision(p) {
   const nf = document.getElementById('projectNotFitBtn');
-  nf.classList.toggle('is-notfit', p.bucket === 'not_fit' && !p.auto_not_fit);
+  nf.classList.toggle('is-notfit', p.bucket === 'not_fit' && !p.auto_not_fit && p.decision !== 'duplicate');
+  document.getElementById('projectDupBtn').classList.toggle('is-notfit', p.decision === 'duplicate');
   const bar = document.getElementById('decisionBar');
   const text = document.getElementById('decisionText');
   const undo = document.getElementById('decisionUndoBtn');
   const when = p.decided_at ? ' on ' + new Date(p.decided_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
   let msg = '';
-  if (p.auto_not_fit) {
+  if (p.decision === 'duplicate') {
+    msg = 'Marked as a duplicate' + when + ' of ' + (p.duplicate_of_name || p.duplicate_of)
+      + (p.duplicate_of_site ? ' (' + p.duplicate_of_site + ')' : '') + '.';
+  } else if (p.auto_not_fit) {
     msg = p.decision_reason + ' — filed under Not a Fit automatically. It moves to To Review on its own if a matching document turns up.';
   } else if (p.bucket === 'not_fit') {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' — ' + p.decision_reason : '')
@@ -3643,6 +3677,7 @@ function openNotFitPanel() {
   if (!p) return;
   const panel = document.getElementById('notFitPanel');
   if (!panel.hidden) { closeNotFitPanel(); return; }
+  closeDupPanel();
   const box = document.getElementById('notFitReasons');
   box.innerHTML = '';
   const current = p.bucket === 'not_fit' ? p.decision_reason : null;
@@ -3667,14 +3702,101 @@ function closeNotFitPanel() {
   document.getElementById('notFitPanel').hidden = true;
 }
 
-async function sendDecision(p, decision, reason, note) {
+// "Duplicate": the same job found on another site. Pick the original; this
+// one files under Not a Fit, and the original picks up its documents and
+// plan holders. Never used to teach the fit suggestions.
+let dupPick = null, dupCands = null;
+
+function openDupPanel() {
+  const p = currentProject;
+  if (!p) return;
+  const panel = document.getElementById('dupPanel');
+  if (!panel.hidden) { closeDupPanel(); return; }
+  closeNotFitPanel();
+  dupPick = p.decision === 'duplicate' ? p.duplicate_of : null;
+  dupCands = null;
+  document.getElementById('dupSearch').value = '';
+  document.getElementById('dupSaveBtn').disabled = !dupPick;
+  document.getElementById('dupList').innerHTML = '<p class="desc">Looking for similar projects…</p>';
+  panel.hidden = false;
+  document.getElementById('dupSearch').focus();
+  api('/api/' + currentDivision + '/projects/duplicate-candidates?key=' + encodeURIComponent(p.key))
+    .then(function(res) {
+      if (currentProject !== p) return;
+      dupCands = res.projects;
+      renderDupCandidates();
+    })
+    .catch(function(e) {
+      document.getElementById('dupList').innerHTML = '<p class="desc">' + escapeHtml(e.message) + '</p>';
+    });
+}
+
+function closeDupPanel() {
+  document.getElementById('dupPanel').hidden = true;
+}
+
+// Most similar names first; typing narrows by name or site.
+function renderDupCandidates() {
+  if (!dupCands) return;
+  const q = document.getElementById('dupSearch').value.trim().toLowerCase();
+  const list = document.getElementById('dupList');
+  const shown = (q ? dupCands.filter(function(c) {
+    return c.project.toLowerCase().indexOf(q) > -1 || (c.source_prefix || '').toLowerCase().indexOf(q) > -1;
+  }) : dupCands).slice(0, q ? 25 : 8);
+  list.innerHTML = '';
+  if (!shown.length) {
+    list.innerHTML = '<p class="desc">No projects match that search.</p>';
+    return;
+  }
+  const tabs = { review: 'To Review', jira: 'On the board', not_fit: 'Not a Fit' };
+  shown.forEach(function(c) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dup-opt' + (c.key === dupPick ? ' selected' : '');
+    b.setAttribute('role', 'option');
+    const sub = [c.source_prefix, c.bid_date ? 'bids open ' + new Date(c.bid_date + 'T00:00').toLocaleDateString([], { month: 'short', day: 'numeric' }) : '', tabs[c.bucket]]
+      .filter(Boolean).join('  ·  ');
+    b.innerHTML = '<span class="dup-name">' + escapeHtml(c.project) + '</span><span class="dup-sub">' + escapeHtml(sub) + '</span>';
+    b.onclick = function() {
+      list.querySelectorAll('.dup-opt').forEach(function(x) { x.classList.remove('selected'); });
+      b.classList.add('selected');
+      dupPick = c.key;
+      document.getElementById('dupSaveBtn').disabled = false;
+    };
+    list.appendChild(b);
+  });
+}
+
+async function saveDuplicate() {
+  const p = currentProject;
+  if (!p || !dupPick) return;
+  const btn = document.getElementById('dupSaveBtn');
+  btn.disabled = true;
+  try {
+    await sendDecision(p, 'duplicate', null, null, dupPick);
+    closeDupPanel();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function sendDecision(p, decision, reason, note, duplicateOf) {
   await api('/api/' + currentDivision + '/projects/decision', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ project_key: p.key, decision: decision, reason: reason || null, note: note || null }),
+    body: JSON.stringify({ project_key: p.key, decision: decision, reason: reason || null, note: note || null,
+                           duplicate_of: duplicateOf || null }),
   });
   p.decision = decision === 'review' ? null : decision;
-  p.bucket = decision;
-  p.decision_reason = decision === 'not_fit' ? reason : null;
+  p.bucket = decision === 'duplicate' ? 'not_fit' : decision;
+  p.decision_reason = decision === 'not_fit' ? reason : decision === 'duplicate' ? 'Duplicate' : null;
+  p.duplicate_of = decision === 'duplicate' ? duplicateOf : null;
+  if (decision === 'duplicate') {
+    const parts = duplicateOf.split(' — ');
+    p.duplicate_of_site = parts.length > 1 ? parts[0] : '';
+    p.duplicate_of_name = parts.length > 1 ? parts.slice(1).join(' — ') : duplicateOf;
+  }
   p.decision_note = decision === 'review' ? null : (note || null);
   p.decided_at = decision === 'review' ? null : new Date().toISOString();
   p.reopened = false;

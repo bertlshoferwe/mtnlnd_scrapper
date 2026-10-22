@@ -911,6 +911,10 @@ NOT_FIT_REASONS = (
 )
 LEGACY_REASON = "Unknown (from before)"
 DECISIONS = ("jira", "not_fit")
+# "duplicate" is a third saved decision: filed under Not a Fit (reason
+# DUPLICATE_REASON) with duplicate_of = the original project's key. It's left
+# out of the fit suggestions' examples — a duplicate says nothing about fit.
+DUPLICATE_REASON = "Duplicate"
 
 
 def load_project_decisions(division_id):
@@ -919,17 +923,19 @@ def load_project_decisions(division_id):
     exist, falls back to the old flags: a Jira key -> "jira", done -> "not_fit"
     (the same mapping the migration applies), so nothing jumps tabs in
     between deploying and running the SQL."""
-    try:
-        res = (
-            get_client().table("project_flags")
-            .select("project_key,decision,decision_reason,decision_note,decided_at")
-            .eq("division_id", division_id).not_.is_("decision", "null").execute()
-        )
-        return {r["project_key"]: {"decision": r["decision"], "reason": r.get("decision_reason"),
-                                   "note": r.get("decision_note"), "decided_at": r.get("decided_at")}
-                for r in res.data}
-    except Exception:
-        pass
+    for cols in ("project_key,decision,decision_reason,decision_note,decided_at,duplicate_of",
+                 "project_key,decision,decision_reason,decision_note,decided_at"):
+        try:
+            res = (
+                get_client().table("project_flags").select(cols)
+                .eq("division_id", division_id).not_.is_("decision", "null").execute()
+            )
+            return {r["project_key"]: {"decision": r["decision"], "reason": r.get("decision_reason"),
+                                       "note": r.get("decision_note"), "decided_at": r.get("decided_at"),
+                                       "duplicate_of": r.get("duplicate_of")}
+                    for r in res.data}
+        except Exception:
+            pass
     try:
         res = (
             get_client().table("project_flags").select("project_key,done,jira_key")
@@ -948,7 +954,7 @@ def load_project_decisions(division_id):
 
 
 def set_project_decision(division_id, project_key, decision, reason=None, note=None,
-                         source="user"):
+                         source="user", duplicate_of=None):
     """Record a decision on a project: "jira", "not_fit", or None (back to
     review). Deciding also acknowledges every document seen so far
     (docs_ack_through = now) — a "Not a fit" project only comes back to
@@ -964,9 +970,11 @@ def set_project_decision(division_id, project_key, decision, reason=None, note=N
         "division_id": division_id,
         "project_key": project_key,
         "decision": decision,
-        "decision_reason": reason if decision == "not_fit" else None,
+        "decision_reason": (reason if decision == "not_fit"
+                            else DUPLICATE_REASON if decision == "duplicate" else None),
         "decision_note": (note or None) if decision else None,
         "decided_at": now if decision else None,
+        "duplicate_of": duplicate_of if decision == "duplicate" else None,
         # Kept in step for anything still reading the old flag.
         "done": decision is not None,
         "updated_at": now,
@@ -976,9 +984,18 @@ def set_project_decision(division_id, project_key, decision, reason=None, note=N
     try:
         get_client().table("project_flags").upsert(payload).execute()
     except Exception as e:
-        raise ValueError(
-            "couldn't save — add the decision columns from schema.sql"
-        ) from e
+        if decision == "duplicate":
+            raise ValueError(
+                "couldn't save — add the duplicate_of column from schema.sql"
+            ) from e
+        # Before the duplicate_of column exists every other decision still saves.
+        payload.pop("duplicate_of")
+        try:
+            get_client().table("project_flags").upsert(payload).execute()
+        except Exception as e2:
+            raise ValueError(
+                "couldn't save — add the decision columns from schema.sql"
+            ) from e2
     try:
         get_client().table("project_decisions").insert({
             "division_id": division_id,
@@ -1482,11 +1499,28 @@ def team_for_project(division_id, project_key):
     return next((t["id"] for t in teams if (t.get("name") or "").strip().lower() == name.lower()), None)
 
 
-def load_project_files(division_id, project_key):
+def duplicate_keys(division_id, project_key):
+    """Keys of the projects marked as duplicates of this one."""
+    return [k for k, d in load_project_decisions(division_id).items()
+            if d.get("decision") == "duplicate" and d.get("duplicate_of") == project_key]
+
+
+def load_project_files(division_id, project_key, with_duplicates=True):
     """[{"filename", "url", "status", "keywords"}] — one project's documents,
     newest row per filename (shown without the leading "<project> - "), for
     the bid board's Bid Docs tab. Paged, since a ConstructConnect project can
-    have hundreds of files."""
+    have hundreds of files. Projects marked as its duplicates add theirs
+    under a "From <site>/" folder."""
+    out = _load_project_files(division_id, project_key)
+    if with_duplicates:
+        for dk in duplicate_keys(division_id, project_key):
+            site, name = _split_site(dk)
+            for f in _load_project_files(division_id, dk):
+                out.append(dict(f, filename=f"From {site or name}/{f['filename']}"))
+    return out
+
+
+def _load_project_files(division_id, project_key):
     rows, start, step = [], 0, 1000
     while True:
         res = (
@@ -1706,10 +1740,26 @@ def save_project_locations(division_id, mapping):
         print(f"  ! couldn't save project locations ({e})")
 
 
-def load_project_plan_holders(division_id, project_key):
+def load_project_plan_holders(division_id, project_key, with_duplicates=True):
     """(holders_list_or_None, refreshed_at_iso_or_None) for one project.
     None = never fetched (or the site doesn't publish one / the column isn't
-    there yet), as opposed to [] = fetched and the list was empty."""
+    there yet), as opposed to [] = fetched and the list was empty. Holders
+    from projects marked as its duplicates are added (same company once)."""
+    holders, at = _load_project_plan_holders(division_id, project_key)
+    if not with_duplicates:
+        return holders, at
+    for dk in duplicate_keys(division_id, project_key):
+        more, more_at = _load_project_plan_holders(division_id, dk)
+        if more is None:
+            continue
+        have = {(h.get("company") or "").strip().lower() for h in holders or []}
+        holders = (holders or []) + [h for h in more
+                                     if (h.get("company") or "").strip().lower() not in have]
+        at = max(filter(None, [at, more_at]), default=None)
+    return holders, at
+
+
+def _load_project_plan_holders(division_id, project_key):
     try:
         res = (
             get_client().table("project_flags").select("plan_holders,plan_holders_at")
@@ -1919,7 +1969,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         # until someone decides again rather than drifting back by itself.
         d = decisions.get(site_key) or {}
         decision = d.get("decision")
-        bucket = decision if decision in DECISIONS else "review"
+        bucket = (decision if decision in DECISIONS
+                  else "not_fit" if decision == "duplicate" else "review")
         reopened = False
         if decision == "not_fit" and any(
             f["filename"] and f["run_date"] and f["status"].startswith("Matched")
@@ -1956,6 +2007,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "decision_reason": auto_reason or d.get("reason"), "decision_note": d.get("note"),
             "auto_not_fit": bool(auto_reason),
             "decided_at": d.get("decided_at"),
+            "duplicate_of": d.get("duplicate_of") if decision == "duplicate" else None,
+            "duplicates": [],
             "fit": fits.get(site_key),
             "updated": is_updated, "new_file_count": new_file_count,
             "reopened": reopened,
@@ -1966,6 +2019,22 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
+
+    # Duplicates and their originals point at each other, and the original
+    # also lists the duplicate's documents (in a "From <site>" folder).
+    by_key = {p["key"]: p for p in projects}
+    for p in projects:
+        orig = by_key.get(p["duplicate_of"]) if p["duplicate_of"] else None
+        if p["duplicate_of"]:
+            o_site, o_name = _split_site(p["duplicate_of"])
+            p["duplicate_of_name"] = o_name
+            p["duplicate_of_site"] = o_site
+        if not orig or orig is p:
+            continue
+        orig["duplicates"].append({"key": p["key"], "project": p["project"],
+                                   "source_prefix": p["source_prefix"], "source_url": p["source_url"]})
+        orig["files"] = orig["files"] + [dict(f, from_site=p["source_prefix"] or p["project"],
+                                              from_project=p["project"]) for f in p["files"]]
 
     # Closed projects are out of the picture entirely unless asked for — so
     # they don't inflate the per-site tab counts either.
@@ -2068,7 +2137,10 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     total = len(projects)
     page = max(1, page)
-    page_size = max(1, min(page_size, 50))
+    if page_size is None:   # every project, for server-side lookups (duplicate picker)
+        page, page_size = 1, max(1, len(projects))
+    else:
+        page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
     return (projects[start:start + page_size], total, site_tabs, updated_total, new_total,
             view_counts)

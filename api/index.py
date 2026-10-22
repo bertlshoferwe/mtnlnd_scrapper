@@ -48,6 +48,7 @@ not here.
 
 import os
 import io
+import difflib
 import json
 import re
 import requests
@@ -849,10 +850,11 @@ def api_get_results_grouped(division_id):
 @app.route("/api/<division_id>/projects/decision", methods=["POST"])
 def api_set_project_decision(division_id):
     """Move a project between tabs. Body: {"project_key", "decision":
-    "not_fit" | "review" | "jira", "reason", "note"}. "not_fit" needs one of
-    the one-click reasons; "jira" is only for a project that already has a
-    Jira issue (filing a new one goes through /projects/jira, which sets
-    this itself); "review" clears the decision."""
+    "not_fit" | "review" | "jira" | "duplicate", "reason", "note",
+    "duplicate_of"}. "not_fit" needs one of the one-click reasons; "jira" is
+    only for a project that already has a Jira issue (filing a new one goes
+    through /projects/jira, which sets this itself); "duplicate" needs
+    duplicate_of, the original project's key; "review" clears the decision."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -863,18 +865,50 @@ def api_set_project_decision(division_id):
     note = (data.get("note") or "").strip()[:1000] or None
     if not key:
         return jsonify({"error": "project_key is required"}), 400
-    if decision not in ("not_fit", "review", "jira"):
-        return jsonify({"error": "decision must be not_fit, review or jira"}), 400
+    duplicate_of = (data.get("duplicate_of") or "").strip() or None
+    if decision not in ("not_fit", "review", "jira", "duplicate"):
+        return jsonify({"error": "decision must be not_fit, review, jira or duplicate"}), 400
+    if decision == "duplicate" and (not duplicate_of or duplicate_of == key):
+        return jsonify({"error": "pick the project this one duplicates"}), 400
     if decision == "not_fit" and reason not in supabase_store.NOT_FIT_REASONS:
         return jsonify({"error": "pick a reason"}), 400
     if decision == "jira" and not supabase_store.load_project_jira_keys(division_id).get(key):
         return jsonify({"error": "this project hasn't been added to Jira"}), 400
     try:
         supabase_store.set_project_decision(
-            division_id, key, None if decision == "review" else decision, reason, note)
+            division_id, key, None if decision == "review" else decision, reason, note,
+            duplicate_of=duplicate_of)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/projects/duplicate-candidates", methods=["GET"])
+def api_duplicate_candidates(division_id):
+    """Projects that ?key= might be a duplicate of, most similar name first:
+    {"projects": [{"key", "project", "source_prefix", "bid_date", "bucket"}]}
+    — every one, small, so the picker searches them in the browser. Skips
+    the project itself and other duplicates."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+    projects = supabase_store.get_results_grouped(division_id, page_size=None)[0]
+    _, name = supabase_store._split_site(key)
+    name = name.lower()
+    out = []
+    for p in projects:
+        if p["key"] == key or p.get("duplicate_of"):
+            continue
+        score = difflib.SequenceMatcher(None, name, p["project"].lower()).ratio()
+        out.append((score, p))
+    out.sort(key=lambda x: -x[0])
+    return jsonify({"projects": [
+        {"key": p["key"], "project": p["project"], "source_prefix": p["source_prefix"],
+         "bid_date": p["bid_date"], "bucket": p["bucket"]}
+        for _, p in out]})
 
 
 @app.route("/api/<division_id>/settings", methods=["GET"])
