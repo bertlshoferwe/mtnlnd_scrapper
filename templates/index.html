@@ -1203,7 +1203,7 @@
         <span><b>Show suggestions</b><span class="desc">Turn off to hide them everywhere and stop making new ones.</span></span>
       </label>
       <label class="set-row">
-        <span><b>Start after</b><span class="desc">How many of your decisions (Add to Jira or Not a fit) before suggestions begin.</span></span>
+        <span><b>Start after</b><span class="desc">How many of your decisions (Add to Board or Not a fit) before suggestions begin.</span></span>
         <span class="set-input"><input type="number" id="setFitMin" min="5" max="1000" step="1"> decisions</span>
       </label>
       <label class="set-row">
@@ -1212,7 +1212,7 @@
       </label>
       <p class="desc set-stats" id="setFitStats"></p>
       <label class="set-row">
-        <span><b>Jira project</b><span class="desc" id="setJiraDesc">The short code of the Jira project "Add to Jira" files into, like GEO.</span></span>
+        <span><b>Jira project</b><span class="desc" id="setJiraDesc">The short code of the Jira project "Add to Board" files into, like GEO.</span></span>
         <span class="set-input"><input type="text" class="set-text" id="setJiraProject" maxlength="10" autocomplete="off" spellcheck="false"></span>
       </label>
       <div class="row" style="gap:8px; margin-top:14px;">
@@ -1295,7 +1295,7 @@
     <div class="modal-body">
       <div class="row project-actions-row" style="margin-bottom:16px;">
         <a id="projectModalLink" class="ext-link" style="margin:0;" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Project page</a>
-        <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Jira</span></button>
+        <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Board</span></button>
         <button type="button" id="projectNotFitBtn" class="done-btn notfit-btn" onclick="openNotFitPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg><span>Not a fit</span></button>
       </div>
       <div class="fit-suggestion" id="fitSuggestion" hidden></div>
@@ -3535,7 +3535,7 @@ function renderFitTraining(t) {
   }
   if (!t || !fitEnabled || currentResultsView !== 'review') { el.hidden = true; return; }
   if (!t.active) {
-    el.textContent = 'Suggestions start after ' + t.needed + ' decisions (Add to Jira or Not a fit) — '
+    el.textContent = 'Suggestions start after ' + t.needed + ' decisions (Add to Board or Not a fit) — '
       + t.decisions + ' so far.';
   } else if (t.compared) {
     el.textContent = 'Suggestions agreed with your call on ' + t.agreed + ' of ' + t.compared + ' projects so far.';
@@ -3577,7 +3577,7 @@ async function openSettings() {
     jira.value = st.jira_project_key || '';
     jira.placeholder = res.jira_default_project || 'GEO';
     document.getElementById('setJiraDesc').textContent =
-      'The short code of the Jira project "Add to Jira" files into, like GEO.' +
+      'The short code of the Jira project "Add to Board" files into, like GEO.' +
       (res.jira_default_project ? ' Leave blank to use ' + res.jira_default_project + '.' : '');
     openModal('settings');
   } catch (e) {
@@ -3722,7 +3722,7 @@ function renderProjectJiraBtn(p) {
   const btn = document.getElementById('projectJiraBtn');
   const label = document.getElementById('projectJiraLabel');
   btn.classList.toggle('is-linked', !!p.jira_key);
-  label.textContent = p.jira_key ? 'View in Jira (' + p.jira_key + ')' : 'Add to Jira';
+  label.textContent = p.jira_key ? 'View in Jira (' + p.jira_key + ')' : 'Add to Board';
 }
 
 // Called every time a project's modal opens, if it has a stored jira_key —
