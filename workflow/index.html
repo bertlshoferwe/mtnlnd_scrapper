@@ -830,6 +830,14 @@ img.who{object-fit:cover;background:var(--chip)}
 </div>
 
 <!-- edit team (opened from a team card in Settings) -->
+<div class="overlay" id="ov-auto" role="dialog" aria-modal="true" aria-labelledby="autoTitle">
+  <div class="sheet">
+    <h3 id="autoTitle">New automation</h3>
+    <div id="autoBody"></div>
+    <div class="actions" id="autoActs"></div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-team" role="dialog" aria-modal="true" aria-labelledby="tmTitle">
   <div class="sheet">
     <h3 id="tmTitle"></h3>
@@ -1302,8 +1310,9 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function childSpaces(sp){return D.spaces.filter(function(s){return s.parentId===sp.id})}
   function automationsHTML(p){
-    var kids=childSpaces(p),rules=p.rules||[];
-    var h='<section class="panel"><h3>Automations</h3><p class="fine" style="margin:0 0 8px">Add a copy of a bid to a sub-space when it reaches a column. The original stays here. The copy is made once, and the two bids don’t stay in sync afterward.</p>';
+    var rules=p.rules||[];
+    var h='<section class="panel"><div class="phead"><h3>Automations</h3><button class="addbtn" data-arnew aria-label="Add an automation" title="Add an automation">'+ic("plus",16)+'</button></div>'+
+      '<p class="fine" style="margin:0 0 8px">Add a copy of a bid to a sub-space when it reaches a column. The original stays here. The copy is made once, and the two bids don’t stay in sync afterward.</p>';
     rules.forEach(function(r){
       var t=D.spaces.filter(function(x){return x.id===r.to})[0];
       var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
@@ -1312,17 +1321,23 @@ img.who{object-fit:cover;background:var(--chip)}
         (warn?'<div class="fine" style="color:var(--high);margin:2px 0 0">'+warn+'</div>':'')+'</div><button class="btn small danger" data-delrule="'+esc(r.id)+'">Remove</button></div>';
     });
     if(!rules.length)h+='<p class="fine">No automations yet.</p>';
+    return h+'</section>';
+  }
+  // New automation modal (the + on the Automations panel)
+  function renderAutoModal(){
+    var p=proj();if(!p){closeOv("ov-auto");return}
+    var kids=childSpaces(p),body;
     if(!kids.length){
-      h+='<p class="fine">Create a sub-space first (see Space details above), then you can send bids to it.</p>';
+      body='<p class="fine">Create a sub-space first (Space details → Create sub-space), then you can send bids to it.</p>';
+      $("autoActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-auto">Close</button>';
     }else{
       var f=ui.ar,tgt=kids.filter(function(k){return k.id===f.to})[0]||kids[0];
-      h+='<div class="ctrl" style="margin-top:10px">'+
-        '<div><label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,f.status||p.statuses[0].name)}).join("")+'</select></div>'+
-        '<div><label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select></div>'+
-        '<div><label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select></div></div>'+
-        '<div style="margin-top:10px"><button class="btn small primary" data-addrule>Add automation</button></div>';
+      body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,f.status||p.statuses[0].name)}).join("")+'</select>'+
+        '<label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select>'+
+        '<label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select>';
+      $("autoActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-auto">Cancel</button><button class="btn primary" data-addrule>Add automation</button>';
     }
-    return h+'</section>';
+    $("autoBody").innerHTML=body;
   }
   function srcLinkHTML(is){
     return /^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="_blank" rel="noopener">Open the project</a></div>':'';
@@ -2318,7 +2333,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeTop(){
     if(ui.calPop){closeCalPop();return}
-    var ids=["ov-me","ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
+    var ids=["ov-me","ov-auto","ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
@@ -2827,8 +2842,9 @@ img.who{object-fit:cover;background:var(--chip)}
       rp.rules=rp.rules||[];
       if(rp.rules.some(function(x){return x.status===rs&&x.to===rt.id&&(x.col||"")===rc})){toast("That automation already exists.");return}
       rp.rules.push({id:uid("r"),status:rs,to:rt.id,col:rc});
-      ui.ar={status:"",to:"",col:""};save();render();toast("Automation added");return;
+      ui.ar={status:"",to:"",col:""};closeOv("ov-auto");save();render();toast("Automation added");return;
     }
+    if(t.closest("[data-arnew]")){ui.ar={status:"",to:"",col:""};renderAutoModal();openOv("ov-auto");return}
     if((el=t.closest("[data-delrule]"))){
       var dp=proj(),did=el.getAttribute("data-delrule");
       if(dp){dp.rules=(dp.rules||[]).filter(function(x){return x.id!==did});save();render()}
@@ -3090,7 +3106,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(nm&&nm!==s2.name){unfollow(proj());s2.name=nm;save();render()}else el.value=s2.name;return;
     }
     if(el.id==="pname"){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
-    if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";render();return}
+    if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";renderAutoModal();return}
     if((v=el.getAttribute("data-tname"))){
       var tt=D.config.templates.filter(function(x){return x.id===v})[0],tv=el.value.trim();
       if(tt&&tv){tt.name=tv;save()}else if(tt)el.value=tt.name;return;
