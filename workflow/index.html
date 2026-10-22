@@ -700,6 +700,17 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 /* view switcher: icon + name; the selected view is highlighted and underlined (like Jira) */
 .tabs{gap:4px;padding:6px 12px 0;border-bottom:1px solid var(--line);align-items:flex-end}
 .tab{display:inline-flex;align-items:center;gap:6px;border:0;border-bottom:2px solid transparent;border-radius:0;padding:8px 10px;margin:0 0 -1px;font-size:14px;font-weight:500;color:var(--muted);background:none}
+/* ⋯ sits over the tab's icon and shows on hover, like Jira */
+.tabw{position:relative;display:inline-flex}
+.tabw .tico{display:inline-flex}
+.tmore{position:absolute;left:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:24px;height:24px;margin-top:-1px;border:0;border-radius:6px;background:var(--surface);color:var(--ink);opacity:0;pointer-events:none}
+.tabw:hover .tmore,.tmore:focus-visible,.tmore[aria-expanded="true"]{opacity:1;pointer-events:auto}
+.tabw:hover .tico,.tabw:has(.tmore[aria-expanded="true"]) .tico{visibility:hidden}
+.tmore:hover,.tmore[aria-expanded="true"]{background:var(--chip)}
+@media (hover:none){.tmore{display:none}}
+#vmenu{display:none;z-index:60}
+.fmenu button:disabled{opacity:.45;cursor:default}
+.fmenu button:disabled:hover{background:none}
 .tab:hover{color:var(--ink)}
 .tab[aria-selected="true"]{color:var(--c1);border-bottom-color:var(--c1);font-weight:600}
 .tab svg{flex:0 0 auto}
@@ -923,6 +934,25 @@ img.who{object-fit:cover;background:var(--chip)}
   var CATS=[["todo","To do"],["doing","In progress"],["done","Done"]];
   var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var VIEWS=[["board","Board"],["list","List"],["calendar","Calendar"],["reports","Reports"]];
+  // the view tabs in this browser's order (⋯ on a tab: Set as default, Move left, Move right)
+  function viewOrder(){
+    var o=(state.viewOrder||[]).map(function(k){return VIEWS.filter(function(x){return x[0]===k})[0]}).filter(Boolean);
+    VIEWS.forEach(function(x){if(o.indexOf(x)<0)o.push(x)});
+    return o;
+  }
+  function defaultView(){var dv=state.defaultView;return VIEWS.some(function(x){return x[0]===dv})?dv:"board"}
+  // the tab menu lives on <body>: the tab strip scrolls sideways, which would clip it
+  function renderViewMenu(){
+    var m=$("vmenu");
+    if(!m){m=document.createElement("div");m.id="vmenu";m.className="fmenu";m.setAttribute("role","menu");document.body.appendChild(m)}
+    var b=ui.vmenu&&document.querySelector('[data-vmenu="'+ui.vmenu+'"]');
+    if(!b){m.style.display="none";return}
+    var o=viewOrder(),i=o.findIndex(function(x){return x[0]===ui.vmenu}),r=b.getBoundingClientRect(),isDef=defaultView()===ui.vmenu;
+    m.innerHTML='<button type="button" role="menuitem" data-vact="default"'+(isDef?' disabled':'')+'>'+ic("task",15)+(isDef?'Default view':'Set as default')+'</button>'+
+      '<button type="button" role="menuitem" data-vact="left"'+(i<=0?' disabled':'')+'>'+ic("arrowL",15)+'Move left</button>'+
+      '<button type="button" role="menuitem" data-vact="right"'+(i>=o.length-1?' disabled':'')+'>'+ic("arrowR",15)+'Move right</button>';
+    m.style.cssText="display:block;position:fixed;top:"+(r.bottom+6)+"px;left:"+r.left+"px;right:auto";
+  }
   var VICON={"board": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M9 4v16M15 4v16\"/></svg>", "list": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M3 15h18M9 10v10\"/></svg>", "calendar": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/></svg>", "reports": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 20V10M10 20V4M16 20v-7M22 20H2\"/></svg>", "settings": "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1\"/></svg>"};
   var GROUPS=[["status","Status"],["type","Type"],["priority","Priority"],["assignee","Assignee"],["label","Label"],["due","Due month"],["created","Created week"],["completed","Completed week"]];
   var TIME={due:1,created:1,completed:1};
@@ -2395,7 +2425,12 @@ img.who{object-fit:cover;background:var(--chip)}
     var spaceView=["board","list","calendar","reports","settings"].indexOf(v)>-1;
     var showTabs=spaceView&&!!p&&!loading&&!DENIED&&!!d;
     $("tabs").style.display=showTabs?"":"none";
-    $("tabs").innerHTML=VIEWS.filter(function(x){return x[0]!=="settings"||isDivAdmin(d)}).map(function(x){return '<button class="tab" role="tab" data-view="'+x[0]+'" aria-selected="'+(v===x[0])+'"'+(x[0]==="settings"?' title="Settings" aria-label="Settings">'+VICON[x[0]]:'>'+VICON[x[0]]+x[1])+'</button>'}).join("");
+    var vord=viewOrder();
+    $("tabs").innerHTML=vord.map(function(x,i){
+      return '<span class="tabw"><button class="tab" role="tab" data-view="'+x[0]+'" aria-selected="'+(v===x[0])+'"><span class="tico">'+VICON[x[0]]+'</span>'+x[1]+'</button>'+
+        '<button class="tmore" data-vmenu="'+x[0]+'" title="More actions" aria-label="More actions for '+x[1]+'" aria-haspopup="menu" aria-expanded="'+(ui.vmenu===x[0])+'">'+ic("more",15)+'</button></span>';
+    }).join("");
+    renderViewMenu();
     var showF=showTabs&&["board","list","calendar"].indexOf(v)>-1;
     $("filters").style.display=showF?"":"none";
     if(showF)renderFsel();
@@ -2432,11 +2467,13 @@ img.who{object-fit:cover;background:var(--chip)}
   function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
   function resetFilters(){ui.f={q:"",type:"",who:"",pri:"",teams:[]};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
   function switchSpace(id){
-    state.cur=id;if(state.view==="division"||orgView(state.view))state.view="board";
+    state.cur=id;
+    if(state.defaultView)state.view=defaultView();
+    else if(state.view==="division"||orgView(state.view))state.view="board";
     resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();save();render();
   }
   function switchDiv(id){
-    state.div=id;state.cur="";state.view="board";
+    state.div=id;state.cur="";state.view=defaultView();
     state.cur=defaultSpace(id);
     resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();ensureScope();save();render();
   }
@@ -3071,6 +3108,14 @@ img.who{object-fit:cover;background:var(--chip)}
       if(cin){cin.scrollIntoView({block:"nearest",inline:"end"});cin.focus();cin.select()}
       return;
     }
+    if((el=t.closest("[data-vmenu]"))){var vk=el.getAttribute("data-vmenu");ui.vmenu=ui.vmenu===vk?null:vk;render();return}
+    if((el=t.closest("[data-vact]"))){
+      var va=el.getAttribute("data-vact"),vk2=ui.vmenu,vo=viewOrder().map(function(x){return x[0]}),vi=vo.indexOf(vk2);
+      if(va==="default"){state.defaultView=vk2;toast(VIEWS.filter(function(x){return x[0]===vk2})[0][1]+" is now the default view")}
+      else{var vj=vi+(va==="left"?-1:1);if(vi<0||vj<0||vj>=vo.length)return;vo.splice(vi,1);vo.splice(vj,0,vk2);state.viewOrder=vo}
+      if(va==="default")ui.vmenu=null;
+      savePrefs();render();return;
+    }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
     if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
     if(t.closest(".cpick"))return;
@@ -3453,6 +3498,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(mpk){e.preventDefault();pickMention(mpk.getAttribute("data-mpick"));return}
     if(ui.mq&&e.target!==ui.mq.el)closeMention();
     if(ui.colSortOpen&&!e.target.closest(".csort")){ui.colSortOpen=null;var csp2=document.querySelector(".cspop");if(csp2)csp2.remove()}
+    if(ui.vmenu&&!e.target.closest("#vmenu,[data-vmenu]")){ui.vmenu=null;renderViewMenu();var vb=document.querySelector('[data-vmenu][aria-expanded="true"]');if(vb)vb.setAttribute("aria-expanded","false")}
     if(ui.gOpen&&!e.target.closest(".gwrap")){ui.gOpen=false;var gp=document.querySelector(".gpop");if(gp)gp.remove()}
     if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
@@ -3582,6 +3628,7 @@ img.who{object-fit:cover;background:var(--chip)}
   $("p-save").addEventListener("click",submitSpace);
 
   state=loadPrefs();
+  if(state.defaultView)state.view=defaultView();   // each visit opens on the default view
   ORG=true;CANWRITE=true;ME="Someone";
   // Same switch as Bid Scout (served from the same site, so same localStorage).
   try{var bt=localStorage.getItem("bidscout_theme");if(THEMES.indexOf(bt)>=0)state.theme=bt}catch(e){}
