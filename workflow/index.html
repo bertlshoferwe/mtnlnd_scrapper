@@ -682,7 +682,7 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .ev .when{font-size:12px;color:var(--muted);margin-left:6px;font-weight:400}
 .ev .txt{white-space:pre-wrap;margin-top:2px;overflow-wrap:anywhere}
 .ev .body{position:relative}
-.mention{color:var(--c1);font-weight:600;background:color-mix(in srgb,var(--c1) 12%,transparent);border-radius:4px;padding:0 3px}
+.mention{display:inline-block;color:var(--c1);font-weight:600;background:color-mix(in srgb,var(--c1) 16%,transparent);border-radius:10px;padding:0 7px;line-height:1.6}
 .mpop{position:absolute;left:0;z-index:30;min-width:220px;max-width:100%;max-height:220px;overflow:auto;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:4px}
 .mpop button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-radius:6px;padding:6px 8px;text-align:left;font-size:14px;color:var(--ink)}
 .mpop button[aria-selected="true"],.mpop button:hover{background:var(--chip)}
@@ -2864,8 +2864,10 @@ img.who{object-fit:cover;background:var(--chip)}
     var low=text.toLowerCase();
     return mentionPeople(is).filter(function(p){return low.indexOf("@"+p.name.toLowerCase())>-1}).map(function(p){return p.id});
   }
-  function mentionHTML(c){
-    var names=(c.mentions||[]).map(nameOf).filter(function(n){return n&&n!=="Someone"}).sort(function(a,b){return b.length-a.length});
+  function mentionHTML(c,is){
+    // tagged people, plus anyone in the division written as "@Full Name" (e.g. comments copied from Jira)
+    var names=(c.mentions||[]).map(nameOf).concat(mentionPeople(is).map(function(p){return p.name}))
+      .filter(function(n,i,a){return n&&n!=="Someone"&&a.indexOf(n)===i}).sort(function(a,b){return b.length-a.length});
     if(!names.length)return esc(c.text);
     var re=new RegExp("@("+names.map(function(n){return n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("|")+")","gi"),out="",last=0,m;
     while((m=re.exec(c.text))){out+=esc(c.text.slice(last,m.index))+'<span class="mention">'+esc(m[0])+'</span>';last=re.lastIndex}
@@ -2911,7 +2913,7 @@ img.who{object-fit:cover;background:var(--chip)}
         if(ui.editC===c.id){
           h+='<textarea id="c-edit" style="margin-top:6px">'+esc(c.text)+'</textarea><div class="actions" style="margin-top:8px"><button class="btn primary small" data-sc="'+c.id+'">Save</button><button class="btn small" data-cc>Cancel</button></div>';
         }else{
-          h+='<div class="txt">'+mentionHTML(c)+'</div><div class="tools2"><button data-ec="'+c.id+'">Edit</button><button data-dc="'+c.id+'">'+(ui.armC===c.id?'Tap to confirm':'Delete')+'</button></div>';
+          h+='<div class="txt">'+mentionHTML(c,is)+'</div><div class="tools2"><button data-ec="'+c.id+'">Edit</button><button data-dc="'+c.id+'">'+(ui.armC===c.id?'Tap to confirm':'Delete')+'</button></div>';
         }
         h+='</div></div>';
       }else{
