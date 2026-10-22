@@ -1848,6 +1848,7 @@ function switchDivision(id) {
   document.getElementById('filterKeywordOptions').innerHTML = '';
   document.getElementById('filterKeywordGroup').hidden = true;
   document.getElementById('statsRow').style.display = 'none';
+  clearResultsCounts('');
   renderDivisionTabs();
   updateUrl();
   loadAllForCurrentDivision();
@@ -2717,9 +2718,24 @@ const RESULT_VIEWS = ['review', 'jira', 'not_fit'];
 let notFitReasons = [];
 let currentResultsSort = 'bid';     // flagged | bid | keywords | recent | name
 
+// The "new projects" / "new docs" badges and the tab counts belong to one
+// division — blank them on a switch ('' = loading) and zero them when the
+// division has no scans, so the previous division's numbers never linger.
+function clearResultsCounts(v) {
+  ['updatesBadge', 'newBadge'].forEach(function(id) {
+    const b = document.getElementById(id);
+    if (b) b.style.display = 'none';
+  });
+  ['viewCountReview', 'viewCountJira', 'viewCountNotFit'].forEach(function(id) {
+    document.getElementById(id).textContent = v;
+  });
+}
+
 async function loadResultsInfo() {
   if (!currentDivision) return;
-  const info = await api('/api/' + currentDivision + '/results-info');
+  const div = currentDivision;
+  const info = await api('/api/' + div + '/results-info');
+  if (div !== currentDivision) return;
   const btn = document.getElementById('downloadBtn');
   const statsRow = document.getElementById('statsRow');
 
@@ -2735,6 +2751,7 @@ async function loadResultsInfo() {
     emptyEl.style.display = 'block';
     document.getElementById('resultsPageInfo').textContent = '';
     document.getElementById('resultsPager').innerHTML = '';
+    clearResultsCounts('0');
     return;
   }
 
@@ -2849,7 +2866,9 @@ async function loadProjects() {
   if (currentResultsSort && currentResultsSort !== 'bid') params.set('sort', currentResultsSort);
   saveFilterPrefs();
 
-  const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
+  const div = currentDivision;
+  const data = await api('/api/' + div + '/results-grouped?' + params.toString());
+  if (div !== currentDivision) return;  // switched tabs while this was loading
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
   renderUpdatesBadge(data.updated_total || 0);
