@@ -147,6 +147,10 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 
 /* board */
 .board{scrollbar-width:none}
+/* columns stop at the bottom of the window; their cards scroll inside (--colmax set by sizeColumns) */
+.board .col:not(.folded){display:flex;flex-direction:column;max-height:var(--colmax,none);box-sizing:border-box}
+.board .col>h2,.board .col>.add,.board .col>.qc{flex:none}
+.board .col .cards{flex:1 1 auto;min-height:24px;overflow-y:auto;overscroll-behavior:contain;margin:0 -4px;padding:2px 4px 4px;scrollbar-width:thin}
 .board::-webkit-scrollbar{display:none}
 .bmini{position:fixed;right:20px;bottom:20px;z-index:25;padding:5px;box-sizing:content-box;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:0 4px 14px rgba(16,22,46,.14);cursor:pointer;touch-action:none;user-select:none}
 .bmini[hidden]{display:none}
@@ -2512,6 +2516,7 @@ img.who{object-fit:cover;background:var(--chip)}
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
     maybeAskMe(loading);
+    sizeColumns();
     updateMinimap();
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
@@ -3528,14 +3533,27 @@ img.who{object-fit:cover;background:var(--chip)}
     v.style.left=(5+a-3).toFixed(1)+"px";v.style.width=(b-a+6).toFixed(1)+"px";
   }
   window.addEventListener("resize",updateMinimap);
+  // the tallest a column can be: from the board's top to the bottom of the window (page zoom included)
+  function docTop(el){var t=0;while(el){t+=el.offsetTop;el=el.offsetParent}return t}
+  function sizeColumns(){
+    var bd=document.querySelector("#view .board");
+    if(bd)bd.style.setProperty("--colmax","calc(100vh / var(--z) - "+(docTop(bd)+12+28+2)+"px)");
+    // the list: its rows scroll inside, with the footer (Create, count) kept on screen below
+    var ts=document.querySelector("#view .jl .tscroll");
+    if(ts){
+      var ft=ts.parentNode.querySelector(".lfoot"),fh=ft?ft.offsetHeight:0;
+      ts.style.maxHeight="calc(100vh / var(--z) - "+(docTop(ts)+fh+28+4)+"px)";
+    }
+  }
+  window.addEventListener("resize",sizeColumns);
   // A mouse wheel over the board scrolls it sideways (its scrollbar is hidden; the minimap shows where you are).
-  // A column taller than the screen still scrolls the page down first; trackpad side-swipes work as usual.
+  // Over a column whose cards overflow, the wheel scrolls that column first; trackpad side-swipes work as usual.
   document.addEventListener("wheel",function(e){
     var bd=e.target.closest&&e.target.closest("#view .board");
     if(!bd||e.ctrlKey||e.shiftKey||Math.abs(e.deltaX)>=Math.abs(e.deltaY)||bd.scrollWidth<=bd.clientWidth+4)return;
-    var col=e.target.closest(".col"),r=col&&col.getBoundingClientRect();
-    if(e.deltaY>0&&r&&r.bottom>window.innerHeight+2)return;
-    if(e.deltaY<0&&window.scrollY>0&&r&&r.top<0)return;
+    // over a column with more cards than fit: scroll its cards first
+    var cl=e.target.closest(".cards");
+    if(cl&&cl.scrollHeight>cl.clientHeight+1&&(e.deltaY>0?cl.scrollTop+cl.clientHeight<cl.scrollHeight-1:cl.scrollTop>0))return;
     var max=bd.scrollWidth-bd.clientWidth;
     if((e.deltaY<0&&bd.scrollLeft<=0)||(e.deltaY>0&&bd.scrollLeft>=max-1))return;
     e.preventDefault();
