@@ -2429,6 +2429,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function fieldOrderKey(p){var t=followedTpl(p);return t?t.id:"none"}
   // fields that start out in Details until someone pins them
   var UNPINNED=["priority","type","labels","parent"];
+  var LEAD_FIELDS=["ticket #","original rfq"];
   function isPinned(p,k){
     var o=(state.fPin||{})[fieldOrderKey(p)]||{};
     return k in o?!!o[k]:UNPINNED.indexOf(k)<0;
@@ -2442,7 +2443,11 @@ img.who{object-fit:cover;background:var(--chip)}
     var is=byId(ui.issueId);if(is)$("i-side").innerHTML=issueSideHTML(is);
   }
   function fieldOrder(p){
-    var keys=["due","assignee","reporter"].concat(spaceFields(p).map(function(f){return "cf:"+f.id}),UNPINNED);
+    // default: Ticket # and Original RFQ on top, then due / people, then the other custom fields
+    var cf=spaceFields(p),lead=cf.filter(function(f){return LEAD_FIELDS.indexOf(f.name.toLowerCase())>-1})
+      .sort(function(a,b){return LEAD_FIELDS.indexOf(a.name.toLowerCase())-LEAD_FIELDS.indexOf(b.name.toLowerCase())});
+    var keys=lead.map(function(f){return "cf:"+f.id}).concat(["due","assignee","reporter"],
+      cf.filter(function(f){return lead.indexOf(f)<0}).map(function(f){return "cf:"+f.id}),UNPINNED);
     var saved=((state.fOrder||{})[fieldOrderKey(p)]||[]).filter(function(k){return keys.indexOf(k)>-1});
     keys.forEach(function(k){if(saved.indexOf(k)<0)saved.push(k)});
     return saved;
