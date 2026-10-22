@@ -1635,11 +1635,18 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // a person's initials in a colored circle; the color is fixed per name
   // bright colors only: no grey, blue or dark shades
-  var AV_COLORS=["#E5484D","#F76B15","#D99A00","#30A46C","#12A594","#D6409F","#8E4EC6","#E54666","#5BA324","#C2410C"];
+  // and each person gets their own: colors are handed out in name order, so nobody shares until there are more people than colors
+  var AV_COLORS=[["#E5484D","#fff"],["#F2C200","#1d1d1d"],["#8E4EC6","#fff"],["#30A46C","#fff"],["#F76B15","#fff"],
+    ["#EC4899","#fff"],["#14B8A6","#fff"],["#A3D11A","#1d1d1d"],["#C026D3","#fff"],["#C08A5A","#fff"]];
+  function avColor(n){
+    var names=D.people.map(function(p){return p.name}).filter(function(x,i,a){return x&&a.indexOf(x)===i}).sort(),i=names.indexOf(n);
+    if(i<0){var h=0;for(var k=0;k<n.length;k++)h=(h*31+n.charCodeAt(k))|0;i=Math.abs(h)}
+    return AV_COLORS[i%AV_COLORS.length];
+  }
   function nameAv(n){
     if(!n)return '<span class="who none" title="Unassigned">'+ic("user",14)+'</span>';
-    var h=0;for(var i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))|0;
-    return '<span class="who" style="background:'+AV_COLORS[Math.abs(h)%AV_COLORS.length]+';color:#fff" title="'+esc(n)+'">'+esc(initials(n))+'</span>';
+    var c=avColor(n);
+    return '<span class="who" style="background:'+c[0]+';color:'+c[1]+'" title="'+esc(n)+'">'+esc(initials(n))+'</span>';
   }
   function fmtDay(s){return s?parse(s).toLocaleDateString(undefined,{month:"short",day:"2-digit",year:"numeric"}):""}
   function fmtStamp(ms){return ms?new Date(ms).toLocaleString(undefined,{month:"short",day:"2-digit",year:"numeric",hour:"numeric",minute:"2-digit"}):""}
