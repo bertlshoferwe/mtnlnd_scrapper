@@ -1009,6 +1009,15 @@ def api_add_project_to_jira(division_id):
     due_date = (data.get("due_date") or "").strip()
     if due_date:
         fields["duedate"] = due_date
+    # Already filed once (its board bid was deleted since, or it predates the
+    # board): reuse that issue rather than file a second one in Jira.
+    existing = supabase_store.load_project_jira_keys(division_id).get(key)
+    if existing:
+        try:
+            supabase_store.set_project_decision(division_id, key, "jira")
+        except Exception as e:
+            print(f"  ! couldn't record the Jira decision for {key} ({e})")
+        return _add_to_board(division_id, key, summary, due_date, existing)
     try:
         resp = requests.post(
             f"{JIRA_BASE_URL}/rest/api/3/issue",
@@ -1039,6 +1048,10 @@ def api_add_project_to_jira(division_id):
         supabase_store.set_project_decision(division_id, key, "jira")
     except ValueError as e:
         print(f"  ! couldn't record the Jira decision for {key} ({e})")
+    return _add_to_board(division_id, key, summary, due_date, issue_key)
+
+
+def _add_to_board(division_id, key, summary, due_date, issue_key):
     out = {"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"}
     # Running side by side with Jira for now: the same project also becomes a
     # bid on the workflow board. Never blocks the Jira filing — a failure just
@@ -1051,6 +1064,7 @@ def api_add_project_to_jira(division_id):
         bid_id = supabase_store.create_workflow_bid(
             division_id, key, summary, due=due_date or None, source_url=back)
         out["workflow_url"] = f"/workflow/?bid={bid_id}"
+        out["board_bid_id"] = bid_id
     except Exception as e:
         print(f"  ! couldn't add {key} to the workflow board ({e})")
         out["workflow_error"] = str(e)

@@ -1071,9 +1071,9 @@
       </div>
     </div>
 
-    <div class="view-tabs" role="tablist" aria-label="To review, Jira, or not a fit">
+    <div class="view-tabs" role="tablist" aria-label="To review, bid board, or not a fit">
       <button type="button" class="view-tab" id="viewTabReview" role="tab" onclick="switchResultsView('review')">To Review<span class="vt-count" id="viewCountReview"></span></button>
-      <button type="button" class="view-tab" id="viewTabJira" role="tab" onclick="switchResultsView('jira')">Jira<span class="vt-count" id="viewCountJira"></span></button>
+      <button type="button" class="view-tab" id="viewTabJira" role="tab" onclick="switchResultsView('jira')">Bid Board<span class="vt-count" id="viewCountJira"></span></button>
       <button type="button" class="view-tab" id="viewTabNotFit" role="tab" onclick="switchResultsView('not_fit')">Not a Fit<span class="vt-count" id="viewCountNotFit"></span></button>
       <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
     </div>
@@ -2867,7 +2867,7 @@ async function loadProjects() {
   list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
   if (currentResultsView === 'jira' && !search) {
-    empty.textContent = 'Nothing added to Jira yet.';
+    empty.textContent = 'Nothing on the bid board yet.';
   } else if (currentResultsView === 'not_fit' && !search) {
     empty.textContent = 'Nothing marked "not a fit" yet.';
   } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew) {
@@ -3676,7 +3676,7 @@ function renderDecision(p) {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' — ' + p.decision_reason : '')
       + (p.decision_note ? ': "' + p.decision_note + '"' : '');
   } else if (p.bucket === 'jira') {
-    msg = (p.jira_key ? 'In Jira' : 'On the bid board') + when + '.';
+    msg = 'On the bid board' + when + '.';
   } else if (p.reopened) {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' (' + p.decision_reason + ')' : '')
       + ', but a new matching document has come in since.';
@@ -3857,7 +3857,7 @@ async function moveProjectToReview() {
   }
 }
 
-function onBoard(p) { return !!(p.board_bid_id || p.jira_key); }
+function onBoard(p) { return !!p.board_bid_id; }
 
 function renderProjectJiraBtn(p) {
   const btn = document.getElementById('projectJiraBtn');
@@ -4020,6 +4020,7 @@ async function addProjectToJira(skipLinkCheck) {
     }
     p.jira_key = res.jira_key;
     p.jira_url = res.jira_url;
+    p.board_bid_id = res.board_bid_id || null;
     p.bucket = 'jira';
     p.decision = 'jira';
     p.decided_at = new Date().toISOString();

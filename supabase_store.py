@@ -1376,15 +1376,43 @@ def sync_workflow_bid_due(division_id, dates=None, times=None):
             print(f"  ! couldn't update board bid for {key} ({e})")
 
 
-def board_links(division_id):
+def board_links(division_id, strict=False):
     """{project_key: bid_id} for every board bid made from (or linked to) a
-    Bid Scout project. Empty if the board's tables aren't there."""
+    Bid Scout project. Empty if the board's tables aren't there — or None
+    with strict, so a caller can tell "no bids" from "couldn't look"."""
     try:
         rows = (get_client().table("wf_bids").select("id,source_project_id")
                 .eq("division_id", division_id).not_.is_("source_project_id", "null").execute().data)
     except Exception:
-        return {}
+        return None if strict else {}
     return {r["source_project_id"]: r["id"] for r in rows}
+
+
+# Projects put on the board from this day on are expected to have a bid
+# there (Add to Board reliably made one from Oct 21); older Jira-only ones
+# never did, so they're left alone.
+BOARD_SINCE = "2026-10-21"
+# Add to Board saves the decision a moment before the bid exists.
+BOARD_GRACE = timedelta(minutes=2)
+
+
+def _return_deleted_board_bids(division_id, decisions, board):
+    """A project on the Bid Board tab whose bid was deleted off the board goes
+    back to To Review (saved, with source "board" so the fit suggestions
+    don't learn from it). Updates `decisions` in place."""
+    if board is None:
+        return
+    cutoff = (datetime.now(timezone.utc) - BOARD_GRACE).isoformat()
+    for key, d in list(decisions.items()):
+        at = d.get("decided_at") or ""
+        if d.get("decision") != "jira" or key in board or not (BOARD_SINCE <= at[:10] and at < cutoff):
+            continue
+        try:
+            set_project_decision(division_id, key, None, source="board")
+            del decisions[key]
+            print(f"  · {key}: its bid was deleted off the board — back to To Review")
+        except Exception as e:
+            print(f"  ! couldn't move {key} back to review ({e})")
 
 
 def unlinked_workflow_bids(division_id):
@@ -1977,7 +2005,9 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
     jira_keys = load_project_jira_keys(division_id)
-    board = board_links(division_id)
+    board = board_links(division_id, strict=True)
+    _return_deleted_board_bids(division_id, decisions, board)
+    board = board or {}
     docs_ack = load_docs_ack(division_id)
     # "New" badge visibility window — a match stops counting as new after
     # this long even if it's never acknowledged via "Mark done".
