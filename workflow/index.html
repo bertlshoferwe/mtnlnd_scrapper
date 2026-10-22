@@ -144,6 +144,8 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cat-done{background:var(--low);color:var(--surface)}
 
 /* board */
+.board{scrollbar-width:none}
+.board::-webkit-scrollbar{display:none}
 .bmini{position:fixed;right:20px;bottom:20px;z-index:25;width:132px;height:44px;padding:6px;box-sizing:border-box;background:var(--surface);border:1px solid var(--line2);border-radius:10px;box-shadow:0 6px 20px rgba(16,22,46,.18);cursor:pointer;touch-action:none;user-select:none}
 .bmini[hidden]{display:none}
 .bmcols{position:relative;height:100%}
@@ -151,6 +153,7 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .bmview{position:absolute;top:4px;bottom:4px;border:2px solid var(--c1);border-radius:5px;box-sizing:border-box}
 @media (hover:none),(max-width:640px){.bmini{display:none}}
 .board{display:flex;gap:12px;overflow-x:auto;padding:12px 16px 28px;scroll-snap-type:x proximity;align-items:flex-start}
+@media (min-width:641px){.board{scroll-snap-type:none}}   /* snapping only helps swiping on a phone */
 .col{flex:0 0 min(84vw,290px);background:var(--col);border-radius:12px;padding:10px;scroll-snap-align:start}
 .col.over{outline:2px dashed var(--accent);outline-offset:-2px}
 .col h2{display:flex;justify-content:space-between;align-items:center;gap:6px;font:600 15px var(--head);margin:2px 4px 10px}
@@ -3368,6 +3371,19 @@ img.who{object-fit:cover;background:var(--chip)}
     var v=mm.lastChild;v.style.left=(6+bd.scrollLeft*sc).toFixed(1)+"px";v.style.width=(bd.clientWidth*sc).toFixed(1)+"px";
   }
   window.addEventListener("resize",updateMinimap);
+  // A mouse wheel over the board scrolls it sideways (its scrollbar is hidden; the minimap shows where you are).
+  // A column taller than the screen still scrolls the page down first; trackpad side-swipes work as usual.
+  document.addEventListener("wheel",function(e){
+    var bd=e.target.closest&&e.target.closest("#view .board");
+    if(!bd||e.ctrlKey||e.shiftKey||Math.abs(e.deltaX)>=Math.abs(e.deltaY)||bd.scrollWidth<=bd.clientWidth+4)return;
+    var col=e.target.closest(".col"),r=col&&col.getBoundingClientRect();
+    if(e.deltaY>0&&r&&r.bottom>window.innerHeight+2)return;
+    if(e.deltaY<0&&window.scrollY>0&&r&&r.top<0)return;
+    var max=bd.scrollWidth-bd.clientWidth;
+    if((e.deltaY<0&&bd.scrollLeft<=0)||(e.deltaY>0&&bd.scrollLeft>=max-1))return;
+    e.preventDefault();
+    bd.scrollLeft+=e.deltaMode===1?e.deltaY*40:e.deltaY;
+  },{passive:false});
   document.addEventListener("scroll",function(e){if(e.target.classList&&e.target.classList.contains("board"))updateMinimap()},true);
   (function(){
     var mm=$("bmini"),drag=false;
