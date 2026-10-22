@@ -872,7 +872,8 @@ def api_set_project_decision(division_id):
         return jsonify({"error": "pick the project this one duplicates"}), 400
     if decision == "not_fit" and reason not in supabase_store.NOT_FIT_REASONS:
         return jsonify({"error": "pick a reason"}), 400
-    if decision == "jira" and not supabase_store.load_project_jira_keys(division_id).get(key):
+    if (decision == "jira" and not supabase_store.load_project_jira_keys(division_id).get(key)
+            and not supabase_store.board_links(division_id).get(key)):
         return jsonify({"error": "this project hasn't been added to Jira"}), 400
     try:
         supabase_store.set_project_decision(
@@ -1054,6 +1055,58 @@ def api_add_project_to_jira(division_id):
         print(f"  ! couldn't add {key} to the workflow board ({e})")
         out["workflow_error"] = str(e)
     return jsonify(out)
+
+
+@app.route("/api/<division_id>/projects/board-candidates", methods=["GET"])
+def api_board_candidates(division_id):
+    """Bids typed in by hand on the board that ?key= might already be, most
+    similar title first: {"bids": [{"id", "key", "title", "due", "score"}]}
+    (score 0-1). Every unlinked bid is listed, so the picker can search."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+    if not WORKFLOW_SUPABASE_URL:
+        return jsonify({"bids": []})
+    name = supabase_store._split_site(key)[1].lower()
+    try:
+        bids = supabase_store.unlinked_workflow_bids(division_id)
+    except Exception as e:
+        return jsonify({"error": f"couldn't read the bid board: {e}"}), 424
+    for b in bids:
+        b["score"] = round(difflib.SequenceMatcher(None, name, (b["title"] or "").lower()).ratio(), 3)
+    bids.sort(key=lambda b: -b["score"])
+    return jsonify({"bids": bids})
+
+
+@app.route("/api/<division_id>/projects/board-link", methods=["POST"])
+def api_board_link(division_id):
+    """Body {"project_key", "bid_id"}: connect a project to a bid already on
+    the board (typed in by hand) instead of adding a new one, and update that
+    bid from Bid Scout. No Jira issue is filed. The project moves to the
+    Jira tab, like Add to Board."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    bid_id = (data.get("bid_id") or "").strip()
+    if not key or not bid_id:
+        return jsonify({"error": "project_key and bid_id are required"}), 400
+    back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
+    try:
+        supabase_store.link_workflow_bid(division_id, bid_id, key, source_url=back)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"couldn't update the bid board: {e}"}), 424
+    try:
+        supabase_store.set_project_decision(division_id, key, "jira")
+    except Exception as e:
+        print(f"  ! couldn't record the board decision for {key} ({e})")
+    return jsonify({"ok": True, "bid_id": bid_id})
 
 
 @app.route("/api/<division_id>/projects/jira/verify", methods=["POST"])

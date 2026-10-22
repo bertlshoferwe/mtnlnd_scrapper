@@ -269,6 +269,8 @@
     background: var(--surface); color: var(--text);
   }
   .nf-actions { display: flex; gap: 8px; margin-top: 10px; }
+  #projectLinkBtn { margin-left: auto; font-weight: 500; }
+  #projectLinkBtn[hidden], #linkPanel[hidden] { display: none; }
   .dup-list { display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow: auto; }
   .dup-list .desc { margin: 4px 0; }
   .dup-opt {
@@ -1308,6 +1310,7 @@
         <button type="button" id="projectJiraBtn" class="done-btn" onclick="addProjectToJira()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h5"/></svg><span id="projectJiraLabel">Add to Board</span></button>
         <button type="button" id="projectNotFitBtn" class="done-btn notfit-btn" onclick="openNotFitPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/></svg><span>Not a fit</span></button>
         <button type="button" id="projectDupBtn" class="done-btn notfit-btn" onclick="openDupPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>Duplicate</span></button>
+        <button type="button" id="projectLinkBtn" class="link-btn" onclick="openLinkPanel()">Already on the board?</button>
       </div>
       <div class="fit-suggestion" id="fitSuggestion" hidden></div>
       <div class="decision-bar" id="decisionBar" hidden>
@@ -1321,6 +1324,17 @@
         <div class="nf-actions">
           <button type="button" class="btn-primary" id="notFitSaveBtn" onclick="saveNotFit()" disabled>Save</button>
           <button type="button" class="btn-ghost" onclick="closeNotFitPanel()">Cancel</button>
+        </div>
+      </div>
+      <div class="not-fit-panel" id="linkPanel" hidden>
+        <div class="nf-title">Is this already on the bid board?</div>
+        <p class="desc" style="margin:-4px 0 10px;font-size:13px">Pick the bid someone typed in by hand to connect it to this project. Its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in. Nothing is filed in Jira.</p>
+        <input type="search" id="linkSearch" placeholder="Search bids on the board" autocomplete="off" oninput="renderLinkCandidates()">
+        <div class="dup-list" id="linkList" role="listbox" aria-label="Bids on the board"></div>
+        <div class="nf-actions">
+          <button type="button" class="btn-primary" id="linkSaveBtn" onclick="saveBoardLink()" disabled>Link to this bid</button>
+          <button type="button" class="btn-ghost" id="linkNewBtn" onclick="addProjectToJira(true)">No, add as a new bid</button>
+          <button type="button" class="btn-ghost" onclick="closeLinkPanel()">Cancel</button>
         </div>
       </div>
       <div class="not-fit-panel" id="dupPanel" hidden>
@@ -3089,6 +3103,7 @@ function openProjectModal(i) {
 
   closeNotFitPanel();
   closeDupPanel();
+  closeLinkPanel();
   renderDecision(p);
   renderFitSuggestion(p);
   renderProjectJiraBtn(p);
@@ -3661,7 +3676,7 @@ function renderDecision(p) {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' — ' + p.decision_reason : '')
       + (p.decision_note ? ': "' + p.decision_note + '"' : '');
   } else if (p.bucket === 'jira') {
-    msg = 'In Jira' + when + '.';
+    msg = (p.jira_key ? 'In Jira' : 'On the bid board') + when + '.';
   } else if (p.reopened) {
     msg = 'Marked not a fit' + when + (p.decision_reason ? ' (' + p.decision_reason + ')' : '')
       + ', but a new matching document has come in since.';
@@ -3678,6 +3693,7 @@ function openNotFitPanel() {
   const panel = document.getElementById('notFitPanel');
   if (!panel.hidden) { closeNotFitPanel(); return; }
   closeDupPanel();
+  closeLinkPanel();
   const box = document.getElementById('notFitReasons');
   box.innerHTML = '';
   const current = p.bucket === 'not_fit' ? p.decision_reason : null;
@@ -3713,6 +3729,7 @@ function openDupPanel() {
   const panel = document.getElementById('dupPanel');
   if (!panel.hidden) { closeDupPanel(); return; }
   closeNotFitPanel();
+  closeLinkPanel();
   dupPick = p.decision === 'duplicate' ? p.duplicate_of : null;
   dupCands = null;
   document.getElementById('dupSearch').value = '';
@@ -3840,11 +3857,110 @@ async function moveProjectToReview() {
   }
 }
 
+function onBoard(p) { return !!(p.board_bid_id || p.jira_key); }
+
 function renderProjectJiraBtn(p) {
   const btn = document.getElementById('projectJiraBtn');
   const label = document.getElementById('projectJiraLabel');
-  btn.classList.toggle('is-linked', !!p.jira_key);
-  label.textContent = p.jira_key ? 'Open in Bid Board' : 'Add to Board';
+  btn.classList.toggle('is-linked', onBoard(p));
+  label.textContent = onBoard(p) ? 'Open in Bid Board' : 'Add to Board';
+  document.getElementById('projectLinkBtn').hidden = onBoard(p);
+}
+
+// "Already on the board?": connect this project to a bid someone typed in by
+// hand, instead of adding a second one. Add to Board offers it on its own
+// when a bid's title looks like this project.
+const LINK_SUGGEST_AT = 0.5;
+let linkPick = null, linkCands = null;
+
+async function fetchLinkCandidates(p) {
+  const res = await api('/api/' + currentDivision + '/projects/board-candidates?key=' + encodeURIComponent(p.key));
+  return res.bids || [];
+}
+
+function openLinkPanel(cands) {
+  const p = currentProject;
+  if (!p) return;
+  const panel = document.getElementById('linkPanel');
+  if (!panel.hidden && !cands) { closeLinkPanel(); return; }
+  closeNotFitPanel();
+  closeDupPanel();
+  linkPick = null;
+  linkCands = cands || null;
+  document.getElementById('linkSearch').value = '';
+  document.getElementById('linkSaveBtn').disabled = true;
+  panel.hidden = false;
+  if (linkCands) { renderLinkCandidates(); return; }
+  document.getElementById('linkList').innerHTML = '<p class="desc">Loading the board…</p>';
+  fetchLinkCandidates(p).then(function(b) {
+    if (currentProject !== p) return;
+    linkCands = b;
+    renderLinkCandidates();
+  }).catch(function(e) {
+    document.getElementById('linkList').innerHTML = '<p class="desc">' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+function closeLinkPanel() {
+  document.getElementById('linkPanel').hidden = true;
+}
+
+function renderLinkCandidates() {
+  if (!linkCands) return;
+  const q = document.getElementById('linkSearch').value.trim().toLowerCase();
+  const list = document.getElementById('linkList');
+  const shown = (q ? linkCands.filter(function(b) {
+    return (b.title || '').toLowerCase().indexOf(q) > -1 || b.key.toLowerCase().indexOf(q) > -1;
+  }) : linkCands).slice(0, q ? 25 : 8);
+  list.innerHTML = '';
+  if (!shown.length) {
+    list.innerHTML = '<p class="desc">' + (linkCands.length ? 'No bids match that search.' : 'Every bid on the board is already connected to a project.') + '</p>';
+    return;
+  }
+  shown.forEach(function(b) {
+    const o = document.createElement('button');
+    o.type = 'button';
+    o.className = 'dup-opt' + (b.id === linkPick ? ' selected' : '');
+    o.setAttribute('role', 'option');
+    const sub = [b.key, b.due ? 'due ' + new Date(b.due + 'T00:00').toLocaleDateString([], { month: 'short', day: 'numeric' }) : '']
+      .filter(Boolean).join('  ·  ');
+    o.innerHTML = '<span class="dup-name">' + escapeHtml(b.title) + '</span><span class="dup-sub">' + escapeHtml(sub) + '</span>';
+    o.onclick = function() {
+      list.querySelectorAll('.dup-opt').forEach(function(x) { x.classList.remove('selected'); });
+      o.classList.add('selected');
+      linkPick = b.id;
+      document.getElementById('linkSaveBtn').disabled = false;
+    };
+    list.appendChild(o);
+  });
+}
+
+async function saveBoardLink() {
+  const p = currentProject;
+  if (!p || !linkPick) return;
+  const btn = document.getElementById('linkSaveBtn');
+  btn.disabled = true;
+  try {
+    await api('/api/' + currentDivision + '/projects/board-link', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, bid_id: linkPick }),
+    });
+    p.board_bid_id = linkPick;
+    p.bucket = 'jira';
+    p.decision = 'jira';
+    p.decided_at = new Date().toISOString();
+    p.reopened = false;
+    p.updated = false;
+    p.new_file_count = 0;
+    closeLinkPanel();
+    renderProjectJiraBtn(p);
+    renderDecision(p);
+    renderFitSuggestion(p);
+    loadProjects();
+  } catch (e) {
+    alert(e.message);
+    btn.disabled = false;
+  }
 }
 
 // Called every time a project's modal opens, if it has a stored jira_key —
@@ -3873,14 +3989,25 @@ async function verifyProjectJira(p) {
   } catch (e) { /* ignore — leave the button as-is */ }
 }
 
-async function addProjectToJira() {
+async function addProjectToJira(skipLinkCheck) {
   const p = currentProject;
   if (!p) return;
-  if (p.jira_key) {
+  if (onBoard(p)) {
     window.open('/workflow/?division=' + encodeURIComponent(currentDivision)
-      + '&project=' + encodeURIComponent(p.key), '_blank');
+      + (p.board_bid_id ? '&bid=' + encodeURIComponent(p.board_bid_id) : '&project=' + encodeURIComponent(p.key)), '_blank');
     return;
   }
+  // A bid typed in by hand that looks like this project? Offer to link it first.
+  if (!skipLinkCheck) {
+    const jb = document.getElementById('projectJiraBtn');
+    jb.disabled = true;
+    let cands = [];
+    try { cands = await fetchLinkCandidates(p); } catch (e) { /* board unreachable — just add */ }
+    jb.disabled = false;
+    if (currentProject !== p) return;
+    if (cands.length && cands[0].score >= LINK_SUGGEST_AT) { openLinkPanel(cands); return; }
+  }
+  closeLinkPanel();
   const btn = document.getElementById('projectJiraBtn');
   btn.disabled = true;
   try {

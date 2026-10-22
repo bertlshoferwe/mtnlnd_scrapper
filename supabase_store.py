@@ -1376,6 +1376,69 @@ def sync_workflow_bid_due(division_id, dates=None, times=None):
             print(f"  ! couldn't update board bid for {key} ({e})")
 
 
+def board_links(division_id):
+    """{project_key: bid_id} for every board bid made from (or linked to) a
+    Bid Scout project. Empty if the board's tables aren't there."""
+    try:
+        rows = (get_client().table("wf_bids").select("id,source_project_id")
+                .eq("division_id", division_id).not_.is_("source_project_id", "null").execute().data)
+    except Exception:
+        return {}
+    return {r["source_project_id"]: r["id"] for r in rows}
+
+
+def unlinked_workflow_bids(division_id):
+    """Board bids not tied to any Bid Scout project yet — typed in by hand —
+    as [{"id", "key", "title", "due"}] (key like "BW-14")."""
+    sb = get_client()
+    bids = (sb.table("wf_bids").select("id,space_id,num,title,due")
+            .eq("division_id", division_id).is_("source_project_id", "null").execute().data)
+    keys = {sp["id"]: sp["key"] for sp in
+            sb.table("wf_spaces").select("id,key").eq("division_id", division_id).execute().data}
+    return [{"id": b["id"], "key": f"{keys.get(b['space_id'], 'BID')}-{b['num']}",
+             "title": b["title"], "due": b.get("due")} for b in bids]
+
+
+def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
+    """Tie a bid typed in by hand on the board to a Bid Scout project and
+    bring it up to date: due date and time from Bid Scout (when it has
+    them), a blank Original RFQ / Team filled in, and from then on its Bid
+    Docs and Plan Holders tabs follow the project. Logged in the bid's
+    history as Bid Scout. Raises ValueError if either side is already linked."""
+    sb = get_client()
+    rows = (sb.table("wf_bids").select("id,division_id,source_project_id,due,due_time,history")
+            .eq("id", bid_id).limit(1).execute().data)
+    if not rows or rows[0]["division_id"] != division_id:
+        raise ValueError("that bid isn't on this division's board")
+    b = rows[0]
+    if b.get("source_project_id"):
+        raise ValueError("that bid is already linked to a Bid Scout project")
+    if board_links(division_id).get(project_key):
+        raise ValueError("this project is already on the board")
+    _, name = _split_site(project_key)
+    now = datetime.now(timezone.utc)
+    at = int(now.timestamp() * 1000)
+    hist = [{"by": "Bid Scout", "at": at, "field": "Bid Scout project", "from": "None", "to": name}]
+    patch = {"source_project_id": project_key, "source_url": source_url}
+    bid_date = load_project_bid_dates(division_id).get(project_key)
+    bid_time = load_project_bid_times(division_id).get(project_key)
+    hm = bid_time_hm(bid_time)
+    if bid_date and bid_date != b.get("due"):
+        patch["due"] = bid_date
+        hist.append({"by": "Bid Scout", "at": at, "field": "Due date",
+                     "from": _board_date(b.get("due")), "to": _board_date(bid_date)})
+    cur = (b.get("due_time") or "")[:5]
+    if hm and (bid_date or b.get("due")) and hm != cur:
+        patch["due_time"] = hm
+        hist.append({"by": "Bid Scout", "at": at, "field": "Due time",
+                     "from": _board_time(cur), "to": _board_time(hm)})
+    patch["history"] = (b.get("history") or []) + hist
+    patch["updated_at"] = now.isoformat()
+    sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
+    _fill_workflow_bid(division_id, bid_id, project_key, bid_time)
+    return bid_id
+
+
 BID_FILES_BUCKET = "bid-files"
 
 
@@ -1914,6 +1977,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
     jira_keys = load_project_jira_keys(division_id)
+    board = board_links(division_id)
     docs_ack = load_docs_ack(division_id)
     # "New" badge visibility window — a match stops counting as new after
     # this long even if it's never acknowledged via "Mark done".
@@ -2016,6 +2080,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "bid_date": bid_date,
             "bid_time": bid_times.get(site_key),
             "jira_key": jira_keys.get(site_key),
+            "board_bid_id": board.get(site_key),
             "first_seen": first_run or None,
             "files": sorted(g["files"], key=lambda f: f["filename"]),
         })
