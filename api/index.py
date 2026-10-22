@@ -1075,13 +1075,52 @@ def _add_to_board(division_id, key, summary, due_date, issue_key):
     try:
         back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
         bid_id = supabase_store.create_workflow_bid(
-            division_id, key, summary, due=due_date or None, source_url=back)
+            division_id, key, summary, due=due_date or None, source_url=back, jira_key=issue_key)
         out["workflow_url"] = f"/workflow/?bid={bid_id}"
         out["board_bid_id"] = bid_id
     except Exception as e:
         print(f"  ! couldn't add {key} to the workflow board ({e})")
         out["workflow_error"] = str(e)
     return jsonify(out)
+
+
+@app.route("/api/<division_id>/jira-sync", methods=["POST"])
+def api_jira_sync(division_id):
+    """Body {"dry": true|false}: preview, or run, copying this division's Jira
+    project onto the bid board (the scan worker does the work; see jira_sync.py)."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    base, cfg_err = _scanner_url()
+    if cfg_err:
+        return cfg_err
+    dry = bool((request.get_json(force=True, silent=True) or {}).get("dry", True))
+    try:
+        resp = requests.post(f"{base}/jira-sync", json={"division_id": division_id, "dry": dry}, timeout=10)
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424
+    if resp.status_code == 409:
+        return jsonify({"error": "A Jira import is already running."}), 409
+    if not resp.ok:
+        return jsonify({"error": f"Scan worker error {resp.status_code}: {resp.text[:300]}"}), 424
+    return jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/jira-sync/status", methods=["GET"])
+def api_jira_sync_status(division_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    base, cfg_err = _scanner_url()
+    if cfg_err:
+        return cfg_err
+    try:
+        resp = requests.get(f"{base}/jira-sync/status", params={"division_id": division_id}, timeout=10)
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424
+    if not resp.ok:
+        return jsonify({"error": f"Scan worker error {resp.status_code}"}), 424
+    return jsonify(resp.json())
 
 
 @app.route("/api/<division_id>/projects/board-candidates", methods=["GET"])

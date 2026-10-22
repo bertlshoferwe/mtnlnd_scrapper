@@ -99,6 +99,9 @@ DEFAULT_SETTINGS = {
     # Jira project "Add to Jira" files into for this division (its short key,
     # e.g. "GEO"). Blank = the JIRA_PROJECT_KEY env var.
     "jira_project_key": "",
+    # Set once the division's Jira project has been imported onto the bid
+    # board; the scanner then pulls Jira changes every 15 minutes (jira_sync.py).
+    "jira_sync": False,
 }
 _SETTING_LIMITS = {"fit_min_decisions": (5, 1000), "fit_sure_at": (0, 100)}
 
@@ -1227,7 +1230,7 @@ def _workflow_space(division_id):
     }).execute().data[0]
 
 
-def create_workflow_bid(division_id, project_key, title, due=None, source_url=None):
+def create_workflow_bid(division_id, project_key, title, due=None, source_url=None, jira_key=None):
     """Add a project to its division's workflow space on the bid board, in
     the space's first column. Returns the bid id; calling it again for the
     same project returns the same bid instead of a duplicate (also enforced
@@ -1241,6 +1244,7 @@ def create_workflow_bid(division_id, project_key, title, due=None, source_url=No
 
     bid_id = existing()
     if bid_id:
+        _set_bid_jira_key(bid_id, jira_key)
         return bid_id
     space = _workflow_space(division_id)
     bids = sb.table("wf_bids").select("num,rank").eq("space_id", space["id"]).execute().data
@@ -1263,11 +1267,23 @@ def create_workflow_bid(division_id, project_key, title, due=None, source_url=No
         bid_id = existing()
         if not bid_id:
             raise
+    _set_bid_jira_key(bid_id, jira_key)
     try:
         _fill_workflow_bid(division_id, bid_id, project_key, load_project_bid_times(division_id).get(project_key))
     except Exception as e:
         print(f"  ! couldn't fill in time/site on bid for {project_key} ({e})")
     return bid_id
+
+
+def _set_bid_jira_key(bid_id, jira_key):
+    """Remember the Jira issue a board bid goes with (so the Jira sync updates it
+    rather than adding a copy). Skipped quietly before workflow/sql/010_jira_sync.sql."""
+    if not jira_key:
+        return
+    try:
+        get_client().table("wf_bids").update({"jira_key": jira_key}).eq("id", bid_id).execute()
+    except Exception as e:
+        print(f"  ! couldn't note Jira key {jira_key} on bid {bid_id} ({e})")
 
 
 def bid_time_hm(text):

@@ -391,3 +391,33 @@ if __name__ == "__main__":
 # Bid board email notifications (off until SMTP_HOST is set) — see notifier.py.
 import notifier  # noqa: E402
 threading.Thread(target=notifier.loop, daemon=True).start()
+
+
+# Jira -> bid board import / sync (jira_sync.py). The web app forwards
+# /api/<division>/jira-sync here; once a division is imported, the loop keeps
+# it in step every 15 minutes.
+import jira_sync  # noqa: E402
+
+
+@app.route("/jira-sync", methods=["POST"])
+def jira_sync_start():
+    body = request.get_json(silent=True) or {}
+    division_id = (body.get("division_id") or "").strip()
+    if not division_id:
+        return jsonify({"error": "division_id is required"}), 400
+    if not jira_sync.start(division_id, dry=bool(body.get("dry", True))):
+        return jsonify({"error": "a Jira import is already running"}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/jira-sync/status", methods=["GET"])
+def jira_sync_status():
+    division_id = (request.args.get("division_id") or "").strip()
+    st = dict(jira_sync.STATE)
+    st["last_sync"] = st["last_sync"].get(division_id)
+    if st.get("division_id") != division_id:
+        st.update(report=None, error=None, dry=None)
+    return jsonify(st)
+
+
+threading.Thread(target=jira_sync.loop, daemon=True).start()
