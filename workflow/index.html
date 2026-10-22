@@ -546,6 +546,14 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .frow.fb{box-shadow:inset 0 2px 0 var(--c1)}
 .frow.fa{box-shadow:inset 0 -2px 0 var(--c1)}
 .frow .fv{min-width:0}
+.frow .fl{display:flex;align-items:center;gap:4px;min-width:0}
+.fpin{display:grid;place-items:center;flex:none;width:22px;height:22px;border:0;border-radius:5px;background:none;color:var(--muted);opacity:0;cursor:pointer}
+.fpin:hover{background:var(--bg);color:var(--ink)}
+.fpin.on{color:var(--c1)}
+.fpin.on svg{fill:currentColor}
+.frow:hover .fpin,.fpin:focus-visible{opacity:1}
+@media (hover:none){.fpin{opacity:1}}
+.fempty{font-size:13px;color:var(--muted);padding:4px 0 6px}
 .dt{display:flex;gap:6px;min-width:0}
 .tmrow{border-top:1px solid var(--line);padding:6px 0 8px}
 .phead{display:flex;align-items:center;gap:8px;margin-bottom:4px}
@@ -807,6 +815,7 @@ img.who{object-fit:cover;background:var(--chip)}
     enter:'<path d="M20 5v6a4 4 0 0 1-4 4H5"/><path d="m9 11-4 4 4 4"/>',
     more:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
     grip:'<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></g>',
+    pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
@@ -2409,14 +2418,31 @@ img.who{object-fit:cover;background:var(--chip)}
     sb.storage.from(FILE_BUCKET).remove([f.path]).then(function(r){if(r&&r.error)console.warn("file not removed from storage",r.error)});
   }
   // a label / value row in the side panels; inputs look like plain text until hovered
-  function frow(label,ctl,key){
+  // pin: true = in the pinned Fields panel (drag grip + filled pin), false = in Details (outline pin)
+  function frow(label,ctl,key,pin){
+    var pb=pin==null?'':'<button type="button" class="fpin'+(pin?' on':'')+'" data-fpin="'+esc(key)+'" title="'+(pin?'Unpin — move to Details':'Pin to the top')+'" aria-label="'+(pin?'Unpin ':'Pin ')+label.replace(/<[^>]*>/g,"")+'">'+ic("pin",14)+'</button>';
+    if(pin===false)return '<div class="frow"><span class="fl">'+label+pb+'</span><div class="fv">'+ctl+'</div></div>';
     return '<div class="frow"'+(key?' data-fkey="'+esc(key)+'"':'')+'>'+(key?'<span class="fgrip" draggable="true" data-fdrag="'+esc(key)+'" title="Drag to reorder" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+
-      '<span class="fl">'+label+'</span><div class="fv">'+ctl+'</div></div>';
+      '<span class="fl">'+label+pb+'</span><div class="fv">'+ctl+'</div></div>';
   }
   // the Fields panel's row order, arranged by dragging; kept per browser, one order per workflow
   function fieldOrderKey(p){var t=followedTpl(p);return t?t.id:"none"}
+  // fields that start out in Details until someone pins them
+  var UNPINNED=["priority","type","labels","parent"];
+  function isPinned(p,k){
+    var o=(state.fPin||{})[fieldOrderKey(p)]||{};
+    return k in o?!!o[k]:UNPINNED.indexOf(k)<0;
+  }
+  // pin / unpin a field; a newly pinned one goes to the bottom of the pinned list
+  function togglePin(k){
+    var p=proj(),t=fieldOrderKey(p),on=!isPinned(p,k);
+    state.fPin=state.fPin||{};state.fPin[t]=state.fPin[t]||{};state.fPin[t][k]=on;
+    if(on){state.fOrder=state.fOrder||{};state.fOrder[t]=fieldOrder(p).filter(function(x){return x!==k}).concat([k])}
+    savePrefs();
+    var is=byId(ui.issueId);if(is)$("i-side").innerHTML=issueSideHTML(is);
+  }
   function fieldOrder(p){
-    var keys=["due","assignee","reporter"].concat(spaceFields(p).map(function(f){return "cf:"+f.id}));
+    var keys=["due","assignee","reporter"].concat(spaceFields(p).map(function(f){return "cf:"+f.id}),UNPINNED);
     var saved=((state.fOrder||{})[fieldOrderKey(p)]||[]).filter(function(k){return keys.indexOf(k)>-1});
     keys.forEach(function(k){if(saved.indexOf(k)<0)saved.push(k)});
     return saved;
@@ -2443,21 +2469,27 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
     var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
       (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">'+ic("plus",18)+'</button>')+'</div>';
-    var rowsF={
-      due:frow("Due date",'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
-        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',"due"),
-      assignee:frow("Assignee",'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>',"assignee"),
-      reporter:frow("Reporter",'<span class="pv">'+(is.reporter?nameAv(nameOf(is.reporter)):'')+'<select id="i-rep" class="bare" data-f="reporter" aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select></span>',"reporter")
+    var lab={due:"Due date",assignee:"Assignee",reporter:"Reporter",priority:"Priority",type:"Type",labels:"Labels",parent:"Parent"};
+    var ctlF={
+      due:'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
+        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',
+      assignee:'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>',
+      reporter:'<span class="pv">'+(is.reporter?nameAv(nameOf(is.reporter)):'')+'<select id="i-rep" class="bare" data-f="reporter" aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select></span>',
+      priority:'<span class="pv">'+prHTML(is.priority)+'<select id="i-pri" class="bare" data-f="priority" aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>',
+      type:'<select id="i-type" class="bare" data-f="type" aria-label="Type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>',
+      labels:'<input id="i-labels" class="bare" data-f="labels" placeholder="Add labels" value="'+esc(is.labels.join(", "))+'" aria-label="Labels">'
     };
-    spaceFields(p).forEach(function(fd){rowsF["cf:"+fd.id]=frow(esc(fd.name),cfInput(fd,is),"cf:"+fd.id)});
-    h+='<div class="ipanel" id="i-fields"><div class="iph">Fields</div>'+fieldOrder(p).map(function(k){return rowsF[k]}).join("")+'</div>';
+    if(isSub)ctlF.parent='<select id="i-parent" class="bare" data-f="parent" aria-label="Parent">'+opt("","None",is.parent)+cands.map(function(c){return opt(c.id,ikey(c)+" "+c.title,is.parent)}).join("")+'</select>';
+    spaceFields(p).forEach(function(fd){lab["cf:"+fd.id]=fd.name;ctlF["cf:"+fd.id]=cfInput(fd,is)});
+    var order=fieldOrder(p).filter(function(k){return k in ctlF}),
+        pinned=order.filter(function(k){return isPinned(p,k)}),
+        rest=order.filter(function(k){return !isPinned(p,k)});
+    h+='<div class="ipanel" id="i-fields"><div class="iph">Pinned fields</div>'+
+      (pinned.length?pinned.map(function(k){return frow(esc(lab[k]),ctlF[k],k,true)}).join(""):'<div class="fempty">Pin fields from Details to keep them here.</div>')+'</div>';
     var open=!!ui.detOpen;
-    h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?ic("chevD",14):ic("chevR",14))+'</span>Details <span class="fine" style="margin:0;font-weight:400">Priority, Type, Labels'+(isSub?', Parent':'')+'</span></button>';
+    h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?ic("chevD",14):ic("chevR",14))+'</span>Details <span class="fine" style="margin:0;font-weight:400">'+esc(rest.map(function(k){return lab[k]}).join(", "))+'</span></button>';
     if(open){
-      h+=frow("Priority",'<span class="pv">'+prHTML(is.priority)+'<select id="i-pri" class="bare" data-f="priority" aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>')+
-        frow("Type",'<select id="i-type" class="bare" data-f="type" aria-label="Type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>')+
-        frow("Labels",'<input id="i-labels" class="bare" data-f="labels" placeholder="Add labels" value="'+esc(is.labels.join(", "))+'" aria-label="Labels">');
-      if(isSub)h+=frow("Parent",'<select id="i-parent" class="bare" data-f="parent" aria-label="Parent">'+opt("","None",is.parent)+cands.map(function(c){return opt(c.id,ikey(c)+" "+c.title,is.parent)}).join("")+'</select>');
+      h+=rest.map(function(k){return frow(esc(lab[k]),ctlF[k],k,false)}).join("");
       h+='<div class="ilinks">'+srcLinkHTML(is)+originHTML(is)+copiesHTML(is)+'</div>';
     }
     h+='</div>';
@@ -2705,6 +2737,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-gtoggle]"))){var gtk=el.getAttribute("data-gtoggle");ui.gClosed=ui.gClosed||{};ui.gClosed[gtk]=!ui.gClosed[gtk];render();return}
     if(t.closest("[data-fopen]")){ui.fOpen=!ui.fOpen;render();return}
     if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.teams=[];render();return}
+    if((el=t.closest("[data-fpin]"))){togglePin(el.getAttribute("data-fpin"));return}
     if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
       var tfid=el.getAttribute("data-taddfield"),tfp=D.config.templates.filter(function(x){return x.id===tfid})[0],tfin=$("tfn-"+tfid);
