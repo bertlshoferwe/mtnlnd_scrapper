@@ -1428,7 +1428,7 @@ img.who{object-fit:cover;background:var(--chip)}
       autoWs[d.id]=1;
       var name=d.name+" Workflow",base=autoKey(name)||"WF",key=base,n=2;
       while(divSpaces(d.id).some(function(s){return s.key===key}))key=base.slice(0,4)+(n++);
-      var tpl=D.config.templates.filter(function(t){return /bid pipeline/i.test(t.name)})[0]||D.config.templates[0];
+      var tpl=defaultTpl();
       D.spaces.push({id:newId("spaces"),divisionId:d.id,parentId:"",name:name,key:key,ci:divSpaces(d.id).length,next:1,statuses:tplStatuses(tpl?tpl.id:""),rules:[],created:today(),issues:[]});
       made=true;
     });
@@ -2085,7 +2085,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var ft=followedTpl(p);
     h+='<section class="panel"><h3>Workflow</h3>'+
       '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
-        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select>'+
+        tpls.map(function(t){return opt(t.id,t.name+(t===defaultTpl()?" (default)":""),ft?ft.id:"")}).join("")+'</select>'+
       (HAS_FIELDS&&HAS_FSET&&(D.config.fieldSets||[]).length?'<label for="p-fs" style="margin-top:12px">Fields</label><select id="p-fs" data-spacefs style="min-width:220px">'+
         D.config.fieldSets.map(function(fs){return opt(fs.id,fs.name+(isDefaultFieldSet(fs)?" (default)":""),fieldSetFor(p).id)}).join("")+'</select>':'')+'</section>';
     h+=automationsHTML(p);
@@ -2152,6 +2152,8 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // Workflows tab: template cards (columns left to right) and field cards; the pencil edits in a window
   var PEN_SVG='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+  // the default workflow: Bid pipeline (else the oldest) — new spaces start on it, and it can't be deleted
+  function defaultTpl(){var T=D.config.templates;return T.filter(function(t){return /bid pipeline/i.test(t.name)})[0]||T[0]||null}
   function tplUsers(t){return D.spaces.filter(function(sp){var f=followedTpl(sp);return f&&f.id===t.id}).length}
   function tplEditorHTML(){
     var T=D.config.templates;
@@ -2164,7 +2166,7 @@ img.who{object-fit:cover;background:var(--chip)}
         h+='<div class="mcard"><div class="tname">'+esc(t.name)+'</div>'+
           '<button class="editbtn" data-edittpl="'+t.id+'" data-tplmode="cols" aria-label="Edit '+esc(t.name)+'" title="Edit workflow">'+PEN_SVG+'</button>'+
           '<div class="wflow">'+t.statuses.map(function(st,i){return (i?'<span class="warr" aria-hidden="true">'+ic("chevR",12)+'</span>':'')+'<span class="sbadge cat-'+st.cat+'">'+esc(st.name)+'</span>'}).join("")+'</div>'+
-          '<div class="foot"><span class="cnt">'+t.statuses.length+' column'+(t.statuses.length===1?'':'s')+' · used by '+n+' space'+(n===1?'':'s')+'</span></div></div>';
+          '<div class="foot"><span class="cnt">'+(t===defaultTpl()?'Default · ':'')+t.statuses.length+' column'+(t.statuses.length===1?'':'s')+' · used by '+n+' space'+(n===1?'':'s')+'</span></div></div>';
       });
       h+='</div>';
     }else h+='<p class="fine">No templates yet. Use + to add one.</p>';
@@ -2206,6 +2208,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("tplTitle").textContent=cols?"Edit workflow":t.kind==="fields"?"Edit fields":"Fields · "+t.name;
     if(cols){
       h+='<label for="tpl-name">Name</label><input id="tpl-name" data-tname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
+        (t===defaultTpl()?'<p class="fine" style="margin:4px 0 0">The default workflow — new spaces start on it, so it can’t be deleted.</p>':'')+
         '<div class="phead wphead"><label>Columns <span class="fine" style="margin:0;font-weight:400">left to right, as they show on the board</span></label>'+
         '<button class="addbtn" data-taddcol="'+t.id+'" aria-label="Add a column" title="Add a column">'+ic("plus",16)+'</button></div><div class="wedit">';
       t.statuses.forEach(function(st,i){
@@ -2217,7 +2220,7 @@ img.who{object-fit:cover;background:var(--chip)}
           '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div></div>';
       });
       h+='</div>';
-      $("tplActs").innerHTML=(ORG?'<button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete workflow')+'</button>':'')+
+      $("tplActs").innerHTML=(ORG&&t!==defaultTpl()?'<button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete workflow')+'</button>':'')+
         '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
     }else{
       var F=t.fields||[];
@@ -2853,7 +2856,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var d=curDiv();if(!d||!isDivAdmin(d)){toast("Only division admins can create spaces.");return}
     ui.keyTouched=false;$("p-name").value="";$("p-key").value="";$("p-err").textContent="";
     $("p-parent").innerHTML=opt("","None (top level)","")+spaceTree(d.id).map(function(n){return opt(n.sp.id,"\u00a0\u00a0".repeat(n.depth)+n.sp.name,parentId||"")}).join("");
-    $("p-tpl").innerHTML=(D.config.templates.length?"":opt("","Default (To do, In progress, Done)",""))+D.config.templates.map(function(t){return opt(t.id,t.name,"")}).join("");
+    var dtp=defaultTpl();
+    $("p-tpl").innerHTML=(D.config.templates.length?"":opt("","Default (To do, In progress, Done)",""))+D.config.templates.map(function(t){return opt(t.id,t.name+(t===dtp?" (default)":""),dtp?dtp.id:"")}).join("");
     openOv("ov-space");setTimeout(function(){$("p-name").focus()},30);
   }
   function submitSpace(){
@@ -3198,7 +3202,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-deltpl]"))){
       if(!ORG)return;
-      var dtid=el.getAttribute("data-deltpl");
+      var dtid=el.getAttribute("data-deltpl"),dtt=tplById(dtid);
+      if(dtt&&dtt===defaultTpl())return;
       if(ui.armDT!==dtid){ui.armDT=dtid;render();return}
       D.config.templates=D.config.templates.filter(function(x){return x.id!==dtid});ui.armT=null;ui.armDT=null;closeOv("ov-tpl");save();render();return;
     }
