@@ -821,6 +821,14 @@ img.who{object-fit:cover;background:var(--chip)}
     is.status=sid;
     if(stat(p,sid).cat==="done"){if(!is.doneAt)is.doneAt=today()}else is.doneAt="";
   }
+  // Moving a bid into a "Quoted" column fills a blank "Date Quoted" date field with today.
+  function stampQuoted(p,is,sid){
+    var st=stat(p,sid);if(!st||(st.name||"").trim().toLowerCase()!=="quoted")return;
+    var fd=spaceFields(p).filter(function(x){return x.type==="date"&&(x.name||"").trim().toLowerCase()==="date quoted"})[0];
+    if(!fd)return;
+    is.fields=is.fields||{};if(is.fields[fd.id])return;
+    var v=today();logH(is,fd.name,"None",cfShow(fd,v));is.fields[fd.id]=v;
+  }
   function logH(is,field,from,to){is.history.push({by:ME,at:Date.now(),field:field,from:from,to:to})}
   function validParent(type,par){
     if(!par)return true;
@@ -853,7 +861,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
-    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v)}
+    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);stampQuoted(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
     else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None");is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
@@ -883,7 +891,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
       priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",dueTime:data.due&&data.dueTime||"",
       created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{},attachments:[]};
-    applyStatus(p,is,is.status);
+    applyStatus(p,is,is.status);stampQuoted(p,is,is.status);
     p.issues.push(is);save();return is;
   }
   function deleteIssue(id){
@@ -894,7 +902,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function moveTo(id,sid,beforeId){
     var p=proj(),is=byId(id);if(!is)return;
-    if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);is.updated=Date.now()}
+    if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);stampQuoted(p,is,sid);is.updated=Date.now()}
     var col=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(function(a,b){return rk(a)-rk(b)});
     var j=beforeId?col.findIndex(function(x){return x.id===beforeId}):-1;
     if(j<0)is.rank=(col.length?rk(col[col.length-1]):0)+1000;
