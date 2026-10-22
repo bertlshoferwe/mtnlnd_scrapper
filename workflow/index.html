@@ -913,7 +913,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,HAS_PDETAILS=false,FILE_BUCKET="bid-files";
+  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,HAS_PDETAILS=false,HAS_FSET=false,FILE_BUCKET="bid-files";
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -977,7 +977,15 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"],["team","Team"]];
   // the custom fields a space's bids have: those of the workflow template it follows
-  function spaceFields(p){var t=HAS_FIELDS&&p?followedTpl(p):null;return t?(t.fields||[]):[]}
+  function spaceFields(p){
+    if(!HAS_FIELDS||!p)return [];
+    if(HAS_FSET){var fs=fieldSetFor(p);return fs?(fs.fields||[]):[]}
+    var t=followedTpl(p);return t?(t.fields||[]):[];
+  }
+  // the space's field setup: its own pick, else the default (the oldest setup — Bid pipeline)
+  function fieldSetFor(p){var L=D.config.fieldSets||[];return L.filter(function(x){return x.id===p.fieldSet})[0]||L[0]||null}
+  function isDefaultFieldSet(fs){return !!fs&&(D.config.fieldSets||[])[0]===fs}
+  function tplById(id){return D.config.templates.concat(D.config.fieldSets||[]).filter(function(x){return x.id===id})[0]}
   function cfShow(fd,v){
     if(!v)return "None";
     if(fd.type==="person")return nameOf(v);
@@ -1097,14 +1105,14 @@ img.who{object-fit:cover;background:var(--chip)}
   function nz(s){return s?s:null}
 
   /* rows <-> documents */
-  function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],created:(r.created_at||"").slice(0,10)}}
-  function spaceToRow(id,d){return {id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]}}
+  function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
+  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
   function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):"",attachments:r.attachments||[]}}
   function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined,attachments:HAS_FILES?(d.attachments||[]):undefined}}
 
   function allDocs(){
     var m={};
-    m["org/config"]={templates:D.config.templates};
+    m["org/config"]={templates:D.config.templates,fieldSets:D.config.fieldSets||[]};
     D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||""}});
     (D.teams||[]).forEach(function(t){m["teams/"+t.id]={divisionId:t.divisionId,name:t.name,members:t.members||[]}});
     D.spaces.forEach(function(sp){
@@ -1128,22 +1136,25 @@ img.who{object-fit:cover;background:var(--chip)}
     else if(p[0]==="spaces")delete raw.spaces[p[1]];
     else if(p[0]==="bids")delete raw.bids[p[1]];
   }
-  async function writeTemplates(list){
+  // workflow templates and field setups share wf_templates (kind "workflow" / "fields")
+  async function writeTemplates(list,sets){
     var keep={},i,r;
+    list=list.concat(HAS_FSET?(sets||[]):[]);
     for(i=0;i<list.length;i++){
       keep[list[i].id]=1;
-      var trow={id:list[i].id,name:list[i].name,statuses:list[i].statuses};if(HAS_FIELDS)trow.fields=list[i].fields||[];
+      var trow={id:list[i].id,name:list[i].name,statuses:list[i].statuses||[]};if(HAS_FIELDS)trow.fields=list[i].fields||[];
+      if(HAS_FSET)trow.kind=list[i].kind==="fields"?"fields":"workflow";
       r=await sb.from("wf_templates").upsert(trow);
       if(r.error)throw r.error;
     }
-    var old=(raw.config&&raw.config.templates)||[];
+    var old=((raw.config&&raw.config.templates)||[]).concat((raw.config&&raw.config.fieldSets)||[]);
     for(i=0;i<old.length;i++){
       if(!keep[old[i].id]){r=await sb.from("wf_templates").delete().eq("id",old[i].id);if(r.error)throw r.error}
     }
   }
   async function writeDoc(path,data){
     var p=path.split("/"),id=p[1],r=null;
-    if(p[0]==="org")return writeTemplates(data.templates);
+    if(p[0]==="org")return writeTemplates(data.templates,data.fieldSets);
     if(p[0]==="spaces")r=await sb.from("wf_spaces").upsert(spaceToRow(id,data));
     else if(p[0]==="bids")r=await sb.from("wf_bids").upsert(bidToRow(id,data));
     else if(p[0]==="people"){var prow={id:id,division_id:data.divisionId,name:data.name};if(HAS_PDETAILS){prow.first_name=data.first||null;prow.last_name=data.last||null;prow.email=data.email||null}r=await sb.from("wf_people").upsert(prow)}
@@ -1192,7 +1203,8 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from("wf_spaces").select("*"),sb.from("wf_bids").select("*").limit(5000),sb.from("wf_division_names").select("*"),
       sb.from("wf_bids").select("fields").limit(1),sb.from("wf_templates").select("fields").limit(1),
       sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*"),
-      sb.from("wf_bids").select("attachments").limit(1),sb.from("wf_people").select("email").limit(1)]);
+      sb.from("wf_bids").select("attachments").limit(1),sb.from("wf_people").select("email").limit(1),
+      sb.from("wf_templates").select("kind").limit(1),sb.from("wf_spaces").select("field_set").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     HAS_PDETAILS=!rs[11].error;   // first/last name + email need workflow/sql/007_people_details.sql
@@ -1203,7 +1215,10 @@ img.who{object-fit:cover;background:var(--chip)}
     // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
     HAS_FIELDS=!rs[6].error&&!rs[7].error;
     HAS_DUETIME=!rs[8].error;   // the optional due time needs workflow/sql/004_due_time.sql
-    raw.config={templates:rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[],fields:r.fields||[]}})};
+    // field setups are their own templates; a space uses its own pick or the oldest (Bid pipeline)
+    HAS_FSET=!rs[12].error&&!rs[13].error;   // needs workflow/sql/009_field_sets.sql
+    var trows=rs[2].data.map(function(r){return {id:r.id,name:r.name,statuses:r.statuses||[],fields:r.fields||[],kind:r.kind==="fields"?"fields":"workflow"}});
+    raw.config={templates:trows.filter(function(t){return t.kind!=="fields"}),fieldSets:HAS_FSET?trows.filter(function(t){return t.kind==="fields"}):[]};
     raw.spaces={};rs[3].data.forEach(function(r){raw.spaces[r.id]=rowToSpace(r)});
     raw.bids={};rs[4].data.forEach(function(r){raw.bids[r.id]=rowToBid(r)});
     raw.names={};if(!rs[5].error)(rs[5].data||[]).forEach(function(r){raw.names[String(r.division_id)]={name:r.name,archivedAt:r.archived_at||""}});
@@ -1241,7 +1256,7 @@ img.who{object-fit:cover;background:var(--chip)}
     rebuild();
   }
   function rebuild(){
-    D.config={templates:clone((raw.config&&raw.config.templates)||[])};
+    D.config={templates:clone((raw.config&&raw.config.templates)||[]),fieldSets:clone((raw.config&&raw.config.fieldSets)||[])};
     D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||""}}).sort(byName);
     D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[])}}).sort(byName);
     D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
@@ -2068,7 +2083,9 @@ img.who{object-fit:cover;background:var(--chip)}
     var ft=followedTpl(p);
     h+='<section class="panel"><h3>Workflow</h3>'+
       '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
-        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select></section>';
+        tpls.map(function(t){return opt(t.id,t.name,ft?ft.id:"")}).join("")+'</select>'+
+      (HAS_FIELDS&&HAS_FSET&&(D.config.fieldSets||[]).length?'<label for="p-fs" style="margin-top:12px">Fields</label><select id="p-fs" data-spacefs style="min-width:220px">'+
+        D.config.fieldSets.map(function(fs){return opt(fs.id,fs.name+(isDefaultFieldSet(fs)?" (default)":""),fieldSetFor(p).id)}).join("")+'</select>':'')+'</section>';
     h+=automationsHTML(p);
     if(!main)h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section>';
     return h;
@@ -2150,7 +2167,23 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='</div>';
     }else h+='<p class="fine">No templates yet. Use + to add one.</p>';
     h+='</section>';
-    if(HAS_FIELDS&&T.length){
+    if(HAS_FIELDS&&HAS_FSET){
+      var FS=D.config.fieldSets||[];
+      h+='<section class="panel"><div class="phead"><h3>Fields</h3>'+(ORG?'<button class="addbtn" data-newfs aria-label="New field setup" title="New field setup">'+ic("plus",16)+'</button>':'')+'</div>'+
+        '<p class="fine" style="margin:0 0 10px">Every space uses the default setup unless its Settings pick a different one.</p>';
+      if(FS.length){
+        h+='<div class="cards wide">';
+        FS.forEach(function(t){
+          var F=t.fields||[],n=D.spaces.filter(function(sp){return fieldSetFor(sp)===t}).length;
+          h+='<div class="mcard"><div class="tname">'+esc(t.name)+'</div>'+
+            '<button class="editbtn" data-edittpl="'+t.id+'" data-tplmode="fields" aria-label="Edit '+esc(t.name)+'" title="Edit fields">'+PEN_SVG+'</button>'+
+            '<div class="wflow">'+(F.length?F.map(function(fd){var ty=(FTYPES.filter(function(x){return x[0]===fd.type})[0]||["",""])[1];return '<span class="fchip">'+esc(fd.name)+'<small>'+esc(ty)+'</small></span>'}).join(""):'<span class="fine" style="margin:0">No fields yet.</span>')+'</div>'+
+            '<div class="foot"><span class="cnt">'+(isDefaultFieldSet(t)?'Default · ':'')+F.length+' field'+(F.length===1?'':'s')+' · used by '+n+' space'+(n===1?'':'s')+'</span></div></div>';
+        });
+        h+='</div>';
+      }else h+='<p class="fine">No field setups yet. Use + to add one.</p>';
+      h+='</section>';
+    }else if(HAS_FIELDS&&T.length){
       h+='<section class="panel"><h3>Fields</h3><p class="fine" style="margin:0 0 10px">Shown on every bid in spaces using that workflow.</p><div class="cards wide">';
       T.forEach(function(t){
         var F=t.fields||[];
@@ -2164,11 +2197,11 @@ img.who{object-fit:cover;background:var(--chip)}
     return h;
   }
   function renderTplModal(){
-    var t=D.config.templates.filter(function(x){return x.id===ui.editTpl})[0];
+    var t=tplById(ui.editTpl);
     if(!t){closeOv("ov-tpl");return}
     var cols=ui.tplMode!=="fields",h='';
     $("ov-tpl").querySelector(".sheet").classList.toggle("wsheet",cols);
-    $("tplTitle").textContent=cols?"Edit workflow":"Fields · "+t.name;
+    $("tplTitle").textContent=cols?"Edit workflow":t.kind==="fields"?"Edit fields":"Fields · "+t.name;
     if(cols){
       h+='<label for="tpl-name">Name</label><input id="tpl-name" data-tname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
         '<div class="phead wphead"><label>Columns <span class="fine" style="margin:0;font-weight:400">left to right, as they show on the board</span></label>'+
@@ -2186,6 +2219,8 @@ img.who{object-fit:cover;background:var(--chip)}
         '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
     }else{
       var F=t.fields||[];
+      if(t.kind==="fields")h+='<label for="tpl-name">Name</label><input id="tpl-name" data-tname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
+        (isDefaultFieldSet(t)?'<p class="fine" style="margin:4px 0 0">The default setup — every space uses it unless its Settings pick another.</p>':'')+'<label>Fields</label>';
       F.forEach(function(fd,i){
         var k=t.id+":"+i;
         h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
@@ -2194,7 +2229,8 @@ img.who{object-fit:cover;background:var(--chip)}
       });
       if(!F.length)h+='<p class="fine">No fields yet.</p>';
       h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
-      $("tplActs").innerHTML='<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
+      $("tplActs").innerHTML=(t.kind==="fields"&&!isDefaultFieldSet(t)&&ORG?'<button class="btn small danger" data-delfs="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete setup')+'</button>':'')+
+        '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
     }
     $("tplBody").innerHTML=h;
   }
@@ -2393,7 +2429,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -2622,7 +2658,7 @@ img.who{object-fit:cover;background:var(--chip)}
       '<span class="fl">'+label+pb+'</span><div class="fv">'+ctl+'</div></div>';
   }
   // the Fields panel's row order, arranged by dragging; kept per browser, one order per workflow
-  function fieldOrderKey(p){var t=followedTpl(p);return t?t.id:"none"}
+  function fieldOrderKey(p){var t=HAS_FSET?fieldSetFor(p):followedTpl(p);return t?t.id:"none"}
   // fields that start out in Details until someone pins them
   var UNPINNED=["priority","type","labels","parent"];
   var LEAD_FIELDS=["ticket #","original rfq"];
@@ -2927,6 +2963,23 @@ img.who{object-fit:cover;background:var(--chip)}
       if(dp){dp.rules=(dp.rules||[]).filter(function(x){return x.id!==did});closeOv("ov-auto");save();render();toast("Automation deleted")}
       return;
     }
+    if(t.closest("[data-newfs]")){
+      if(!ORG)return;
+      var fnm="New fields",fno=2;
+      while((D.config.fieldSets||[]).some(function(x){return x.name===fnm}))fnm="New fields "+(fno++);
+      var nfs={id:uid("t"),name:fnm,statuses:[],fields:[],kind:"fields"};D.config.fieldSets.push(nfs);ui.editTpl=nfs.id;ui.tplMode="fields";save();render();
+      renderTplModal();openOv("ov-tpl");
+      var nfi=$("tpl-name");if(nfi){nfi.focus();nfi.select()}
+      return;
+    }
+    if((el=t.closest("[data-delfs]"))){
+      if(!ORG)return;
+      var dfs=el.getAttribute("data-delfs");
+      if(ui.armDT!==dfs){ui.armDT=dfs;renderTplModal();return}
+      D.config.fieldSets=D.config.fieldSets.filter(function(x){return x.id!==dfs});
+      D.spaces.forEach(function(sp){if(sp.fieldSet===dfs)sp.fieldSet=""});   // back to the default
+      closeOv("ov-tpl");save();render();toast("Field setup deleted");return;
+    }
     if((el=t.closest("[data-edittpl]"))){ui.editTpl=el.getAttribute("data-edittpl");ui.tplMode=el.getAttribute("data-tplmode")||"cols";ui.armDT=null;renderTplModal();openOv("ov-tpl");return}
     if(t.closest("[data-newtpl]")){
       if(!ORG)return;
@@ -2966,18 +3019,18 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-fpin]"))){togglePin(el.getAttribute("data-fpin"));return}
     if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
-      var tfid=el.getAttribute("data-taddfield"),tfp=D.config.templates.filter(function(x){return x.id===tfid})[0],tfin=$("tfn-"+tfid);
+      var tfid=el.getAttribute("data-taddfield"),tfp=tplById(tfid),tfin=$("tfn-"+tfid);
       if(!tfin||!tfin.value.trim()){if(tfin)tfin.focus();return}
       if(tfp){tfp.fields=tfp.fields||[];tfp.fields.push({id:"f"+uuid().slice(0,8),name:tfin.value.trim(),type:$("tft-"+tfid).value});save();render()}
       return;
     }
     if((el=t.closest("[data-tfmv]"))){
-      var mk=el.getAttribute("data-tfmv").split(":"),mt=D.config.templates.filter(function(x){return x.id===mk[0]})[0],mi=+mk[1],mj=mi+parseInt(el.getAttribute("data-d"),10);
+      var mk=el.getAttribute("data-tfmv").split(":"),mt=tplById(mk[0]),mi=+mk[1],mj=mi+parseInt(el.getAttribute("data-d"),10);
       if(mt&&mt.fields&&mj>=0&&mj<mt.fields.length){var mf=mt.fields[mi];mt.fields[mi]=mt.fields[mj];mt.fields[mj]=mf;save();render()}
       return;
     }
     if((el=t.closest("[data-tfdel]"))){
-      var dk=el.getAttribute("data-tfdel").split(":"),dt2=D.config.templates.filter(function(x){return x.id===dk[0]})[0];
+      var dk=el.getAttribute("data-tfdel").split(":"),dt2=tplById(dk[0]);
       if(dt2&&dt2.fields){dt2.fields.splice(+dk[1],1);save();render()}
       return;
     }
@@ -3179,6 +3232,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.qc&&el.hasAttribute("data-qctype")){ui.qc.type=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcwho")){ui.qc.assignee=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcdue")){ui.qc.due=el.value;render();return}
+    if(el.hasAttribute("data-spacefs")){
+      var fsp=proj(),pick=D.config.fieldSets.filter(function(x){return x.id===el.value})[0];
+      if(fsp&&pick){fsp.fieldSet=isDefaultFieldSet(pick)?"":pick.id;save();render();toast("Fields set to "+pick.name)}
+      return;
+    }
     if(el.hasAttribute("data-spacetpl")){
       var stp=D.config.templates.filter(function(x){return x.id===el.value})[0];
       if(stp){applyTemplate(proj(),stp);save();render();toast("Workflow changed to "+stp.name)}
@@ -3192,7 +3250,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.id==="pname"&&!isDefaultSpace(proj())){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.value;if(v==="to")ui.ar.col="";renderAutoModal();return}
     if((v=el.getAttribute("data-tname"))){
-      var tt=D.config.templates.filter(function(x){return x.id===v})[0],tv=el.value.trim();
+      var tt=tplById(v),tv=el.value.trim();
       if(tt&&tv){tt.name=tv;save()}else if(tt)el.value=tt.name;return;
     }
     if((v=el.getAttribute("data-tcname"))){
@@ -3205,7 +3263,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(tmr&&tmv){tmr.name=tmv;save();render()}else if(tmr)el.value=tmr.name;return;
     }
     if((v=el.getAttribute("data-tfname"))||(v=el.getAttribute("data-tftype"))){
-      var fk=v.split(":"),ft=D.config.templates.filter(function(x){return x.id===fk[0]})[0],ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
+      var fk=v.split(":"),ft=tplById(fk[0]),ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
       if(!ff)return;
       if(el.hasAttribute("data-tftype"))ff.type=el.value;else if(el.value.trim())ff.name=el.value.trim();else{el.value=ff.name;return}
       save();render();return;

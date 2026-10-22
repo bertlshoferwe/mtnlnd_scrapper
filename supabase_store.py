@@ -1205,7 +1205,9 @@ def _workflow_space(division_id):
         return own[0]
     div = sb.table("divisions").select("name").eq("id", division_id).limit(1).execute().data
     name = f"{div[0]['name'] if div else division_id} Workflow"
-    tpls = sb.table("wf_templates").select("id,name,statuses").order("created_at").execute().data
+    # workflow templates only — a field setup (kind "fields") has no columns
+    tpls = [t for t in sb.table("wf_templates").select("id,name,statuses").order("created_at").execute().data
+            if t.get("statuses")]
     tpl = next((t for t in tpls if "bid pipeline" in (t.get("name") or "").lower()), tpls[0] if tpls else None)
     src = (tpl or {}).get("statuses") or [{"name": "To do", "cat": "todo"},
                                           {"name": "In progress", "cat": "doing"},
@@ -1282,6 +1284,30 @@ def bid_time_hm(text):
     return f"{h:02d}:{mn:02d}" if h < 24 and mn < 60 else None
 
 
+def _space_fields(space_id):
+    """The custom fields a board space shows: its field setup (wf_spaces.field_set,
+    else the oldest kind="fields" template — the default), or before field setups
+    existed, the fields of the workflow template it follows."""
+    sb = get_client()
+    try:
+        space = sb.table("wf_spaces").select("statuses,field_set").eq("id", space_id).limit(1).execute().data
+        sets = (sb.table("wf_templates").select("id,fields").eq("kind", "fields")
+                .order("created_at").execute().data)
+    except Exception:
+        space = sb.table("wf_spaces").select("statuses").eq("id", space_id).limit(1).execute().data
+        sets = []
+    if not space:
+        return []
+    if sets:
+        pick = next((t for t in sets if t["id"] == space[0].get("field_set")), sets[0])
+        return pick.get("fields") or []
+    tpl_id = ((space[0].get("statuses") or [{}])[0] or {}).get("tpl")
+    if not tpl_id:
+        return []
+    tpl = sb.table("wf_templates").select("fields").eq("id", tpl_id).limit(1).execute().data
+    return (tpl[0].get("fields") or []) if tpl else []
+
+
 def _fill_workflow_bid(division_id, bid_id, project_key, bid_time):
     """Fill a new bid's blank due time (from the project's bid time), its
     "Original RFQ" field (the site Bid Scout found it on) and its Team (the
@@ -1299,11 +1325,8 @@ def _fill_workflow_bid(division_id, bid_id, project_key, bid_time):
         patch["due_time"] = hm
     site, _ = _split_site(project_key)
     fields = dict(bid.get("fields") or {})
-    space = sb.table("wf_spaces").select("statuses").eq("id", bid["space_id"]).limit(1).execute().data
-    tpl_id = ((space[0].get("statuses") or [{}])[0] or {}).get("tpl") if space else None
-    if site and tpl_id:
-        tpl = sb.table("wf_templates").select("fields").eq("id", tpl_id).limit(1).execute().data
-        tfields = (tpl[0].get("fields") or []) if tpl else []
+    tfields = _space_fields(bid["space_id"])
+    if site and tfields:
         rfq = next((f["id"] for f in tfields if (f.get("name") or "").strip().lower() == "original rfq"), None)
         if rfq and not fields.get(rfq):
             fields[rfq] = site
