@@ -985,6 +985,8 @@ img.who{object-fit:cover;background:var(--chip)}
   // the space's field setup: its own pick, else the default (the oldest setup — Bid pipeline)
   function fieldSetFor(p){var L=D.config.fieldSets||[];return L.filter(function(x){return x.id===p.fieldSet})[0]||L[0]||null}
   function isDefaultFieldSet(fs){return !!fs&&(D.config.fieldSets||[])[0]===fs}
+  // the default fields (the default setup; before field setups, Bid pipeline's) can't be removed
+  function lockedFields(t){return !!t&&(HAS_FSET?t.kind==="fields"&&isDefaultFieldSet(t):/bid pipeline/i.test(t.name||""))}
   function tplById(id){return D.config.templates.concat(D.config.fieldSets||[]).filter(function(x){return x.id===id})[0]}
   function cfShow(fd,v){
     if(!v)return "None";
@@ -2225,9 +2227,10 @@ img.who{object-fit:cover;background:var(--chip)}
         var k=t.id+":"+i;
         h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
           '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
-          '<button class="btn small danger" data-tfdel="'+k+'">Remove</button></div>';
+          (lockedFields(t)?'':'<button class="btn small danger" data-tfdel="'+k+'">Remove</button>')+'</div>';
       });
       if(!F.length)h+='<p class="fine">No fields yet.</p>';
+      if(lockedFields(t)&&F.length)h+='<p class="fine" style="margin:6px 0 0">These are the default fields, so they can’t be removed. You can rename them, reorder them or add more.</p>';
       h+='<div class="srow"><input id="tfn-'+t.id+'" placeholder="New field name" maxlength="40" aria-label="New field name"><select id="tft-'+t.id+'" aria-label="New field type">'+FTYPES.map(function(x){return opt(x[0],x[1],"text")}).join("")+'</select><button class="btn small primary" data-taddfield="'+t.id+'">Add field</button></div>';
       $("tplActs").innerHTML=(t.kind==="fields"&&!isDefaultFieldSet(t)&&ORG?'<button class="btn small danger" data-delfs="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete setup')+'</button>':'')+
         '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
@@ -3031,6 +3034,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-tfdel]"))){
       var dk=el.getAttribute("data-tfdel").split(":"),dt2=tplById(dk[0]);
+      if(lockedFields(dt2))return;
       if(dt2&&dt2.fields){dt2.fields.splice(+dk[1],1);save();render()}
       return;
     }
