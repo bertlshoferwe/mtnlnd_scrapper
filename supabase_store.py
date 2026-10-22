@@ -1454,6 +1454,37 @@ def _return_deleted_board_bids(division_id, decisions, board):
             print(f"  ! couldn't move {key} back to review ({e})")
 
 
+def _file_linked_board_bids(division_id, decisions, board, jira_keys):
+    """A project tied to a board bid (or a Jira issue) but still undecided —
+    e.g. linked by the Jira import — belongs on the Bid Board tab, so it's
+    saved as "jira" (source "board": not a fit signal). Updates `decisions`.
+    One a person last moved back to review is left where they put it; one
+    the board moved back (its bid was gone for a while) is filed again."""
+    todo = [k for k in set(board or {}) | {k for k, v in (jira_keys or {}).items() if v}
+            if k not in decisions]
+    if not todo:
+        return
+    try:
+        last = {}
+        for r in (get_client().table("project_decisions")
+                  .select("project_key,source").eq("division_id", division_id)
+                  .in_("project_key", todo).order("decided_at").execute().data):
+            last[r["project_key"]] = r.get("source")
+        seen = {k for k, src in last.items() if src != "board"}
+    except Exception:
+        return
+    for key in todo:
+        if key in seen:
+            continue
+        try:
+            set_project_decision(division_id, key, "jira", source="board")
+            decisions[key] = {"decision": "jira", "reason": None, "note": None,
+                              "decided_at": datetime.now(timezone.utc).isoformat()}
+            print(f"  · {key}: already on the board — filed under Bid Board")
+        except Exception as e:
+            print(f"  ! couldn't file {key} under Bid Board ({e})")
+
+
 def unlinked_workflow_bids(division_id):
     """Board bids not tied to any Bid Scout project yet — typed in by hand —
     as [{"id", "key", "title", "due"}] (key like "BW-14")."""
@@ -2047,6 +2078,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     board = board_links(division_id, strict=True)
     _return_deleted_board_bids(division_id, decisions, board)
     board = board or {}
+    _file_linked_board_bids(division_id, decisions, board, jira_keys)
     docs_ack = load_docs_ack(division_id)
     # "New" badge visibility window — a match stops counting as new after
     # this long even if it's never acknowledged via "Mark done".
