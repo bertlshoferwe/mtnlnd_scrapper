@@ -490,7 +490,11 @@ textarea{min-height:90px;resize:vertical}
 .dropz{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px;border:1.5px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:14px;cursor:pointer;padding:10px}
 .dropz:hover,.dropz.over{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 6%,transparent)}
 .dropz.busy{cursor:progress}
-.ftabs{margin:0 0 10px}
+.ftabs{margin:0}
+.ftabbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.ftabbar .dlall{margin-left:auto;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.dlbtn{display:grid;place-items:center;flex:0 0 auto;width:26px;height:26px;border-radius:6px;border:0;background:none;color:var(--muted);text-decoration:none}
+.dlbtn:hover{background:var(--chip);color:var(--ink)}
 .ftabs .pt{font-weight:500;color:var(--muted);margin-left:4px}
 .fnote{color:var(--muted);font-size:13.5px;margin:4px 0 10px}
 .att a.attn{text-decoration:none}
@@ -2227,10 +2231,12 @@ img.who{object-fit:cover;background:var(--chip)}
   // Three tabs where Attachments used to be. Bid Docs = the Bid Scout project's own documents
   // (opened through Bid Scout's viewer, so they stay current) plus any extra uploads marked
   // kind "doc"; Attachments = other uploads; Plan Holders = the project's list from Bid Scout.
+  var DL_IC='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
   var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
   function attRow(f){
     return '<div class="att">'+FILE_IC+'<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(f.name)+'</button>'+
       '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
+      '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'</button>'+
       '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
   }
   function dropzHTML(kind,label){
@@ -2249,9 +2255,11 @@ img.who{object-fit:cover;background:var(--chip)}
     var b=bsState(is),d=b.state==="ok"?b.data:null,src=d?(d.files||[]):[],hold=d?d.holders:null;
     var tab=ui.fileTab||"att";
     var tabs=[["att","Attachments",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]];
-    var h='<div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
+    var n=tab==="docs"?src.length+docs.length:tab==="att"?atts.length:0;
+    var h='<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
-    }).join("")+'</div>';
+    }).join("")+'</div>'+
+      (n?'<a class="btn small dlall" data-dlall href="/api/'+encodeURIComponent(is.divisionId)+'/bids/'+encodeURIComponent(is.id)+'/zip?tab='+tab+'" download>'+DL_IC+'Download all</a>':'')+'</div>';
     if(tab==="docs"){
       if(b.state==="loading")h+='<p class="fnote">Loading the documents from Bid Scout…</p>';
       else if(b.state==="err")h+='<p class="fnote">Couldn’t load the documents from Bid Scout. Close the bid and open it again to retry.</p>';
@@ -2305,7 +2313,8 @@ img.who{object-fit:cover;background:var(--chip)}
     node.files.slice().sort(function(a,b){return nat(a.name,b.name)}).forEach(function(x){
       var f=x.f,href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
       h+='<div class="dtn" style="--d:'+depth+'" role="treeitem"><span class="tsp"></span>'+DOC_IC+
-        '<a class="tnm" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(x.name)+'</a>'+'</div>';
+        '<a class="tnm" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(x.name)+'</a>'+
+        '<a class="dlbtn" href="'+esc(href)+'&amp;download=1" download title="Download '+esc(x.name)+'" aria-label="Download '+esc(x.name)+'">'+DL_IC+'</a></div>';
     });
     return h;
   }
@@ -2370,6 +2379,12 @@ img.who{object-fit:cover;background:var(--chip)}
     var r=await sb.storage.from(FILE_BUCKET).createSignedUrl(f.path,3600);
     if(r.error||!r.data){if(w)w.close();toast("Couldn’t open "+f.name+": "+((r.error&&r.error.message)||"unknown error"));return}
     if(w)w.location=r.data.signedUrl;else window.location=r.data.signedUrl;
+  }
+  async function downloadAttachment(is,aid){
+    var f=(is.attachments||[]).filter(function(x){return x.id===aid})[0];if(!f)return;
+    var r=await sb.storage.from(FILE_BUCKET).createSignedUrl(f.path,3600,{download:f.name});
+    if(r.error||!r.data){toast("Couldn’t download "+f.name+": "+((r.error&&r.error.message)||"unknown error"));return}
+    var a=document.createElement("a");a.href=r.data.signedUrl;a.download=f.name;document.body.appendChild(a);a.click();a.remove();
   }
   function removeAttachment(is,aid){
     var f=(is.attachments||[]).filter(function(x){return x.id===aid})[0];if(!f)return;
@@ -2759,6 +2774,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");renderAttach();return}
     if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
+    if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
+    if(t.closest("[data-dlall]")){toast("Preparing the download — big projects can take a minute…")}
     if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
     if((el=t.closest("[data-attdel]"))){
       var adi=byId(ui.issueId),aid=el.getAttribute("data-attdel");if(!adi)return;

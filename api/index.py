@@ -35,6 +35,7 @@ Routes:
   POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars), and as a bid on the workflow board
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
   GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
+  GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
   GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
@@ -1291,6 +1292,77 @@ def api_proxy_pdf(division_id):
         "Content-Disposition": f'{disp}; filename="{filename}"',
         "Cache-Control": "private, max-age=300",
     })
+
+
+def _document_bytes(division_id, doc, url):
+    """A scanned document's bytes for a zip download, or None: the stored copy
+    when there is one, otherwise a live fetch of `url`. An expired stored copy
+    (needs a slow logged-in re-fetch through the scanner) is skipped — it's
+    listed in the zip's note instead, and still opens one at a time."""
+    if doc and doc.get("storage_path"):
+        return supabase_store.download_document_bytes(doc["storage_path"])
+    if not doc or doc.get("is_cached_document"):
+        return None
+    try:
+        r = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0 (compatible; BidScoutBot/1.0)"})
+        r.raise_for_status()
+    except requests.RequestException:
+        return None
+    return r.content if len(r.content) <= PROXY_MAX_BYTES else None
+
+
+@app.route("/api/<division_id>/bids/<bid_id>/zip", methods=["GET"])
+def api_bid_zip(division_id, bid_id):
+    """Every file on one tab of a bid board bid, as a zip. ?tab=docs (the Bid
+    Scout project's documents, in their folders, plus documents uploaded on
+    the Bid Docs tab) or ?tab=att (the Attachments tab's uploads)."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    tab = request.args.get("tab") or "att"
+    bid = supabase_store.load_workflow_bid(bid_id)
+    if not bid or str(bid["division_id"]) != division_id:
+        abort(404, description="bid not found")
+    uploads = [a for a in (bid.get("attachments") or []) if (a.get("kind") == "doc") == (tab == "docs")]
+    jobs = []   # (path in zip, fetch -> bytes or None)
+    if tab == "docs" and bid.get("source_project_id"):
+        lookup = supabase_store.scanned_document_lookup(division_id)
+        for f in supabase_store.load_project_files(division_id, bid["source_project_id"]):
+            jobs.append((f["filename"], lambda f=f: _document_bytes(division_id, lookup.get(f["url"]), f["url"])))
+    for a in uploads:
+        jobs.append(((("Uploaded/" if tab == "docs" else "") + (a.get("name") or "file")),
+                     lambda a=a: supabase_store.download_bid_file(a.get("path"))))
+    if not jobs:
+        abort(404, description="nothing to download on this tab")
+
+    from concurrent.futures import ThreadPoolExecutor
+    import tempfile
+    import zipfile
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda j: (j[0], j[1]()), jobs))
+    out = tempfile.SpooledTemporaryFile(max_size=64 * 1024 * 1024)
+    missing, seen = [], set()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in results:
+            name = name.strip("/") or "file"
+            base, n = name, 2
+            while name in seen:   # two uploads with the same name
+                stem, dot, ext = base.rpartition(".")
+                name = f"{stem} ({n}).{ext}" if dot else f"{base} ({n})"
+                n += 1
+            seen.add(name)
+            if data is None:
+                missing.append(name)
+            else:
+                z.writestr(name, data)
+        if missing:
+            z.writestr("Files not included.txt",
+                       "These files couldn't be added to the download. Open them one at a time "
+                       "from the bid instead:\n\n" + "\n".join(missing) + "\n")
+    out.seek(0)
+    title = re.sub(r'[\\/:*?"<>|]+', "-", bid.get("title") or "Bid").strip() or "Bid"
+    return send_file(out, as_attachment=True, mimetype="application/zip",
+                     download_name=f"{title} - {'Bid Docs' if tab == 'docs' else 'Attachments'}.zip")
 
 
 def _filename_from(url):

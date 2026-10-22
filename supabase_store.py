@@ -1351,6 +1351,27 @@ def sync_workflow_bid_due(division_id, dates=None, times=None):
             print(f"  ! couldn't update board bid for {key} ({e})")
 
 
+BID_FILES_BUCKET = "bid-files"
+
+
+def load_workflow_bid(bid_id):
+    """One bid board bid's {"id", "division_id", "title", "source_project_id",
+    "attachments"}, or None."""
+    r = (get_client().table("wf_bids").select("id,division_id,title,source_project_id,attachments")
+         .eq("id", bid_id).limit(1).execute().data)
+    return r[0] if r else None
+
+
+def download_bid_file(path):
+    """Bytes of a file uploaded on the bid board (the private "bid-files"
+    bucket), or None."""
+    try:
+        return get_client().storage.from_(BID_FILES_BUCKET).download(path)
+    except Exception as e:
+        print(f"  ! couldn't fetch bid file {path} ({e})")
+        return None
+
+
 def load_project_files(division_id, project_key):
     """[{"filename", "url", "status", "keywords"}] — one project's documents,
     newest row per filename (shown without the leading "<project> - "), for
