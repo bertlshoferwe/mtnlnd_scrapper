@@ -660,6 +660,13 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 .proj.on{box-shadow:inset 3px 0 0 #9AA7E8}
 @media (max-width:640px){#theme .tl{display:none}}
 #theme{display:inline-flex;align-items:center;gap:4px}
+#me{display:inline-flex;align-items:center;gap:6px}
+#me[hidden]{display:none}
+#me .who{width:20px;height:20px;font-size:9px;color:#fff}
+@media (max-width:640px){#me .tl{display:none}}
+.melist{display:grid;gap:6px;margin:12px 0 4px;max-height:50vh;overflow:auto}
+.melist button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:14px;text-align:left;cursor:pointer}
+.melist button:hover,.melist button[aria-pressed="true"]{border-color:var(--c1)}
 #theme>span{display:inline-flex}
 
 /* ---- divisions, overview, team ---- */
@@ -690,6 +697,7 @@ img.who{object-fit:cover;background:var(--chip)}
     <header class="top">
       <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
       <div class="crumb"><small id="pkey"></small><h1 id="ptitle"></h1></div>
+      <button class="btn small" id="me" type="button" data-me hidden></button>
       <button class="btn small" id="theme" type="button"></button>
     </header>
     <nav class="dtabs" id="dtabs" aria-label="Divisions"></nav>
@@ -783,6 +791,15 @@ img.who{object-fit:cover;background:var(--chip)}
 </div>
 
 <!-- new / edit person (Settings → Division → Members) -->
+<div class="overlay" id="ov-me" role="dialog" aria-modal="true" aria-labelledby="meTitle">
+  <div class="sheet">
+    <h3 id="meTitle">Who are you?</h3>
+    <p class="fine">Pick your name so your changes and comments show who made them, and so you don’t get emailed about your own changes. This browser remembers it.</p>
+    <div id="meList" class="melist"></div>
+    <div class="actions"><span class="spacer"></span><button class="btn" data-meskip>I’m not on the list</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-person" role="dialog" aria-modal="true" aria-labelledby="psTitle">
   <div class="sheet">
     <h3 id="psTitle"></h3>
@@ -892,7 +909,7 @@ img.who{object-fit:cover;background:var(--chip)}
     is.fields=is.fields||{};if(is.fields[fd.id])return;
     var v=today();logH(is,fd.name,"None",cfShow(fd,v));is.fields[fd.id]=v;
   }
-  function logH(is,field,from,to){is.history.push({by:ME,at:Date.now(),field:field,from:from,to:to})}
+  function logH(is,field,from,to,toId){var e={by:ME,at:Date.now(),field:field,from:from,to:to};if(toId)e.toId=toId;is.history.push(e)}
   function validParent(type,par){
     if(!par)return true;
     return type==="Subtask"&&par.type!=="Subtask";
@@ -918,7 +935,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var fid=f.slice(3),fd=spaceFields(p).filter(function(x){return x.id===fid})[0];if(!fd)return false;
       is.fields=is.fields||{};v=String(v||"").trim();
       if(v===(is.fields[fid]||""))return false;
-      logH(is,fd.name,cfShow(fd,is.fields[fid]),cfShow(fd,v));
+      logH(is,fd.name,cfShow(fd,is.fields[fid]),cfShow(fd,v),fd.type==="person"?v:"");
       if(v)is.fields[fid]=v;else delete is.fields[fid];
       is.updated=Date.now();save();render();return true;
     }
@@ -926,7 +943,7 @@ img.who{object-fit:cover;background:var(--chip)}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
     else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);stampQuoted(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
-    else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None");is.reporter=v}
+    else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None",v);is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
     else if(f==="type"){
       if(v===is.type)return false;logH(is,"Type",is.type,v);is.type=v;
@@ -2138,9 +2155,29 @@ img.who{object-fit:cover;background:var(--chip)}
   function divisionHTML(d){
     return '<div class="rep"><section class="panel"><h3>Division</h3><div class="ro" style="font-weight:600">'+esc(d.name)+'</div><p class="fine">Division names come from Bid Scout.</p></section>'+membersHTML(d)+'</div>';
   }
+  /* ---------- "who are you?": no sign-in yet, so each browser picks its person per division ---------- */
+  function syncMe(){
+    var m=(state.me||{})[state.div];
+    ME=m&&D.people.some(function(x){return x.id===m})?m:"Someone";
+    var b=$("me");if(!b)return;
+    b.hidden=!state.div||!D.people.some(function(x){return x.divisionId===state.div});
+    b.innerHTML=ME!=="Someone"?avHTML(ME)+'<span class="tl">'+esc(nameOf(ME))+'</span>':ic("user",16)+'<span class="tl">Who are you?</span>';
+    b.setAttribute("aria-label",ME!=="Someone"?"Signed in as "+nameOf(ME)+". Tap to change.":"Pick who you are");
+  }
+  function openMe(){
+    var list=D.people.filter(function(x){return x.divisionId===state.div});
+    $("meList").innerHTML=list.map(function(x){return '<button type="button" data-mepick="'+esc(x.id)+'" aria-pressed="'+(x.id===ME)+'">'+avHTML(x.id)+esc(x.name)+'</button>'}).join("");
+    openOv("ov-me");
+  }
+  function maybeAskMe(loading){
+    if(loading||DENIED||!state.div||ME!=="Someone"||(state.meSkip||{})[state.div]||ui.meAsked)return;
+    if(!D.people.some(function(x){return x.divisionId===state.div})||$("ov-me").classList.contains("open"))return;
+    ui.meAsked=true;openMe();
+  }
   function render(){
     var v=state.view,d=curDiv(),p=proj();
     var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
+    syncMe();
     if(v==="settings")v=state.view="board";   // space settings live in the Settings window now
     if(v==="division"||orgView(v))v=state.view="board";   // members live in a space's Settings; org settings is a window
     renderSide();renderDivTabs();
@@ -2169,6 +2206,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
+    maybeAskMe(loading);
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
   // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
@@ -2207,7 +2245,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeTop(){
     if(ui.calPop){closeCalPop();return}
-    var ids=["ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
+    var ids=["ov-me","ov-person","ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
@@ -2658,6 +2696,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-pnew]")){ui.editPerson="new";ui.armPer=null;renderPersonModal();openOv("ov-person");$("ps-first").focus();return}
     if((el=t.closest("[data-pedit]"))){ui.editPerson=el.getAttribute("data-pedit");ui.armPer=null;renderPersonModal();openOv("ov-person");$("ps-first").focus();return}
     if(t.closest("[data-psave]")){savePerson();return}
+    if(t.closest("[data-me]")){openMe();return}
+    if((el=t.closest("[data-mepick]"))){state.me=state.me||{};state.me[state.div]=el.getAttribute("data-mepick");savePrefs();closeOv("ov-me");render();return}
+    if(t.closest("[data-meskip]")){state.meSkip=state.meSkip||{};state.meSkip[state.div]=true;savePrefs();closeOv("ov-me");return}
     if(t.closest("[data-tmnew]")){ui.editTeam="new";ui.draftTeam={name:"",members:[]};renderTeamModal();openOv("ov-team");var tnn=$("tm-name");if(tnn)tnn.focus();return}
     if((el=t.closest("[data-tmdraft]"))){
       var dpid=el.getAttribute("data-tmdraft"),dm=ui.draftTeam.members,di=dm.indexOf(dpid);
@@ -3144,7 +3185,7 @@ img.who{object-fit:cover;background:var(--chip)}
   $("p-save").addEventListener("click",submitSpace);
 
   state=loadPrefs();
-  ORG=true;CANWRITE=true;ME=state.myName||"Someone";
+  ORG=true;CANWRITE=true;ME="Someone";
   // Same switch as Bid Scout (served from the same site, so same localStorage).
   try{var bt=localStorage.getItem("bidscout_theme");if(THEMES.indexOf(bt)>=0)state.theme=bt}catch(e){}
   applyTheme();applySide();

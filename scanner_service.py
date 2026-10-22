@@ -386,3 +386,8 @@ threading.Thread(target=_retention_loop, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("SCANNER_PORT", "9100"))
     app.run(host="0.0.0.0", port=port)
+
+
+# Bid board email notifications (off until SMTP_HOST is set) — see notifier.py.
+import notifier  # noqa: E402
+threading.Thread(target=notifier.loop, daemon=True).start()
