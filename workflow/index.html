@@ -636,7 +636,9 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .wcol input,.wcol select{width:100%;margin:0}
 .wbtns{display:flex;gap:4px}
 .wbtns .danger{margin-left:auto}
-.wcol.wnew{border-style:dashed}
+.wphead{margin:14px 0 6px}
+.wphead label{margin:0;flex:1}
+#tpl-name{width:min(320px,100%)}
 .tplsub{font-weight:700;font-size:13px;margin:14px 0 2px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 #i-top{grid-area:top;min-width:0}
 #i-side{grid-area:side;min-width:0}
@@ -2169,7 +2171,8 @@ img.who{object-fit:cover;background:var(--chip)}
     $("tplTitle").textContent=cols?"Edit workflow":"Fields · "+t.name;
     if(cols){
       h+='<label for="tpl-name">Name</label><input id="tpl-name" data-tname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
-        '<label>Columns <span class="fine" style="margin:0;font-weight:400">left to right, as they show on the board</span></label><div class="wedit">';
+        '<div class="phead wphead"><label>Columns <span class="fine" style="margin:0;font-weight:400">left to right, as they show on the board</span></label>'+
+        '<button class="addbtn" data-taddcol="'+t.id+'" aria-label="Add a column" title="Add a column">'+ic("plus",16)+'</button></div><div class="wedit">';
       t.statuses.forEach(function(st,i){
         var k=t.id+":"+i;
         h+='<div class="wcol"><input data-tcname="'+k+'" value="'+esc(st.name)+'" aria-label="Column name" maxlength="30">'+
@@ -2178,9 +2181,7 @@ img.who{object-fit:cover;background:var(--chip)}
           '<button class="btn small" data-tdown="'+k+'" aria-label="Move right" title="Move right"'+(i===t.statuses.length-1?' disabled':'')+'>'+ic("arrowR",14)+'</button>'+
           '<button class="btn small danger" data-tdel="'+k+'"'+(t.statuses.length<2?' disabled':'')+'>Remove</button></div></div>';
       });
-      h+='<div class="wcol wnew"><input id="tn-'+t.id+'" placeholder="New column name" maxlength="30" aria-label="New column name">'+
-        '<select id="tc-'+t.id+'" aria-label="New column category">'+CATS.map(function(c){return opt(c[0],c[1],"doing")}).join("")+'</select>'+
-        '<button class="btn small primary" data-taddcol="'+t.id+'">Add column</button></div></div>';
+      h+='</div>';
       $("tplActs").innerHTML=(ORG?'<button class="btn small danger" data-deltpl="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete workflow')+'</button>':'')+
         '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
     }else{
@@ -2982,9 +2983,14 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-taddcol]"))){
       if(!ORG)return;
-      var tid3=el.getAttribute("data-taddcol"),tp3=D.config.templates.filter(function(x){return x.id===tid3})[0],tin=$("tn-"+tid3);
-      if(!tin||!tin.value.trim()){if(tin)tin.focus();return}
-      if(tp3){tp3.statuses.push({name:tin.value.trim(),cat:$("tc-"+tid3).value});save();render()}
+      // + on the Edit workflow window: a new column on the right, its name selected to type over
+      var tid3=el.getAttribute("data-taddcol"),tp3=D.config.templates.filter(function(x){return x.id===tid3})[0];
+      if(!tp3)return;
+      var cn="New column",cno=2;
+      while(tp3.statuses.some(function(x){return x.name===cn}))cn="New column "+(cno++);
+      tp3.statuses.push({name:cn,cat:"doing"});save();render();
+      var cins=document.querySelectorAll("#tplBody [data-tcname]"),cin=cins[cins.length-1];
+      if(cin){cin.scrollIntoView({block:"nearest",inline:"end"});cin.focus();cin.select()}
       return;
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
