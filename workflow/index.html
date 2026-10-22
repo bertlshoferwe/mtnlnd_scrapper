@@ -148,11 +148,11 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 /* board */
 .board{scrollbar-width:none}
 .board::-webkit-scrollbar{display:none}
-.bmini{position:fixed;right:20px;bottom:20px;z-index:25;padding:4px;box-sizing:content-box;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:0 6px 20px rgba(16,22,46,.18);cursor:pointer;touch-action:none;user-select:none}
+.bmini{position:fixed;right:20px;bottom:20px;z-index:25;padding:5px;box-sizing:content-box;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:0 4px 14px rgba(16,22,46,.14);cursor:pointer;touch-action:none;user-select:none}
 .bmini[hidden]{display:none}
 .bmcols{position:relative;width:100%;height:100%}
-.bmcols span{position:absolute;top:0;border-radius:2px;background:var(--line2)}
-.bmview{position:absolute;top:2px;bottom:2px;border:2px solid var(--c1);border-radius:4px;box-sizing:border-box;pointer-events:none}
+.bmcols span{position:absolute;top:0;bottom:0;border-radius:2px;background:color-mix(in srgb,var(--ink) 13%,transparent)}
+.bmview{position:absolute;top:2px;bottom:2px;border:2px solid var(--c1);border-radius:5px;box-sizing:border-box;pointer-events:none}
 @media (hover:none),(max-width:640px){.bmini{display:none}}
 .board{display:flex;gap:12px;overflow-x:auto;padding:12px 16px 28px;scroll-snap-type:x proximity;align-items:flex-start}
 @media (min-width:641px){.board{scroll-snap-type:none}}   /* snapping only helps swiping on a phone */
@@ -3361,27 +3361,40 @@ img.who{object-fit:cover;background:var(--chip)}
   window.addEventListener("resize",placeCalPop);
   /* Board minimap (like Jira's): shows up bottom right when the columns are wider than the screen;
      the box is what's in view — click or drag to scroll the board. */
-  // Minimap: a scaled copy of the board's columns — each at its real position and width (collapsed
-  // ones as thin strips), full height like Jira's, boxed tight around them. MM_W is the columns' width in it.
-  var MM_W=150,MM_H=26;
-  function boardSpan(bd){
+  // Minimap (like Jira's): one rounded bar per column in board order, each as wide as the column
+  // scaled down (a collapsed column is a thin strip), with even gaps between; the outlined box is
+  // what's on screen. Board x and minimap x map onto each other column by column (mmSegs).
+  var MM_K=0.035,MM_GAP=2,MM_H=22;
+  function mmSegs(bd){
     var cols=bd.querySelectorAll(".col");if(!cols.length)return null;
-    var ox=bd.getBoundingClientRect().left-bd.scrollLeft,a=cols[0].getBoundingClientRect(),z=cols[cols.length-1].getBoundingClientRect();
-    return {cols:cols,ox:ox,x0:a.left-ox,x1:z.right-ox,top:a.top};
+    var ox=bd.getBoundingClientRect().left-bd.scrollLeft,cur=0,out=[];
+    Array.prototype.forEach.call(cols,function(c){
+      var r=c.getBoundingClientRect(),w=Math.max(2,Math.round(r.width*MM_K));
+      out.push({cs:r.left-ox,ce:r.right-ox,ms:cur,me:cur+w});cur+=w+MM_GAP;
+    });
+    out.w=cur-MM_GAP;return out;
+  }
+  // board x → minimap x, and back
+  function mmMap(sg,x,inv){
+    var a=inv?"ms":"cs",b=inv?"me":"ce",c=inv?"cs":"ms",d=inv?"ce":"me";
+    if(x<=sg[0][a])return sg[0][c];
+    for(var i=0;i<sg.length;i++){
+      var g=sg[i];
+      if(x<=g[b])return g[c]+(x-g[a])/((g[b]-g[a])||1)*(g[d]-g[c]);
+      var n=sg[i+1];
+      if(n&&x<n[a])return g[d]+(x-g[b])/((n[a]-g[b])||1)*(n[c]-g[d]);
+    }
+    return sg[sg.length-1][d];
   }
   function updateMinimap(){
     var mm=$("bmini"),bd=document.querySelector("#view .board");
     if(!bd||bd.scrollWidth<=bd.clientWidth+4){mm.hidden=true;return}
-    var sp=boardSpan(bd);if(!sp){mm.hidden=true;return}
+    var sg=mmSegs(bd);if(!sg){mm.hidden=true;return}
     mm.hidden=false;
-    var sc=MM_W/(sp.x1-sp.x0);
-    mm.firstChild.innerHTML=Array.prototype.map.call(sp.cols,function(c){
-      var r=c.getBoundingClientRect();
-      return '<span style="left:'+((r.left-sp.ox-sp.x0)*sc).toFixed(1)+'px;width:'+Math.max(1.5,r.width*sc).toFixed(1)+'px;height:'+MM_H+'px"></span>';
-    }).join("");
-    mm.style.width=MM_W+"px";mm.style.height=MM_H+"px";
-    var vx0=Math.max(sp.x0,bd.scrollLeft),vx1=Math.min(sp.x1,bd.scrollLeft+bd.clientWidth),v=mm.lastChild;
-    v.style.left=(4+(vx0-sp.x0)*sc).toFixed(1)+"px";v.style.width=Math.max(6,(vx1-vx0)*sc).toFixed(1)+"px";
+    mm.firstChild.innerHTML=sg.map(function(g){return '<span style="left:'+g.ms+'px;width:'+(g.me-g.ms)+'px"></span>'}).join("");
+    mm.style.width=sg.w+"px";mm.style.height=MM_H+"px";
+    var a=mmMap(sg,bd.scrollLeft),b=mmMap(sg,bd.scrollLeft+bd.clientWidth),v=mm.lastChild;
+    v.style.left=(5+a-3).toFixed(1)+"px";v.style.width=(b-a+6).toFixed(1)+"px";
   }
   window.addEventListener("resize",updateMinimap);
   // A mouse wheel over the board scrolls it sideways (its scrollbar is hidden; the minimap shows where you are).
@@ -3403,12 +3416,12 @@ img.who{object-fit:cover;background:var(--chip)}
     document.body.appendChild(mm);   // fixed to the window itself, not to a scrolling ancestor
     function go(e){
       var bd=document.querySelector("#view .board");if(!bd)return;
-      var sp=boardSpan(bd);if(!sp)return;
+      var sg=mmSegs(bd);if(!sg)return;
       // the page may be zoomed: turn the pointer into the minimap's own pixels first
       var mr=mm.getBoundingClientRect(),zr=mr.width/mm.offsetWidth||1;
-      var x=(e.clientX-mr.left)/zr-5,sc=MM_W/(sp.x1-sp.x0);
+      var x=(e.clientX-mr.left)/zr-6;
       bd.style.scrollSnapType="none";   // follow the pointer exactly, no snapping
-      bd.scrollLeft=sp.x0+x/sc-bd.clientWidth/2;
+      bd.scrollLeft=mmMap(sg,x,true)-bd.clientWidth/2;
     }
     mm.addEventListener("pointerdown",function(e){drag=true;mm.setPointerCapture(e.pointerId);go(e)});
     mm.addEventListener("pointermove",function(e){if(drag)go(e)});
