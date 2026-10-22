@@ -709,6 +709,7 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 .tmore:hover,.tmore[aria-expanded="true"]{background:var(--chip)}
 @media (hover:none){.tmore{display:none}}
 #vmenu{display:none;z-index:60}
+.fmenu .mspc{display:inline-block;width:15px;flex:none}
 .fmenu button:disabled{opacity:.45;cursor:default}
 .fmenu button:disabled:hover{background:none}
 .tab:hover{color:var(--ink)}
@@ -948,7 +949,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var b=ui.vmenu&&document.querySelector('[data-vmenu="'+ui.vmenu+'"]');
     if(!b){m.style.display="none";return}
     var o=viewOrder(),i=o.findIndex(function(x){return x[0]===ui.vmenu}),r=b.getBoundingClientRect(),isDef=defaultView()===ui.vmenu;
-    m.innerHTML='<button type="button" role="menuitem" data-vact="default"'+(isDef?' disabled':'')+'>'+ic("task",15)+(isDef?'Default view':'Set as default')+'</button>'+
+    m.innerHTML='<button type="button" role="menuitemcheckbox" aria-checked="'+isDef+'" data-vact="default">'+(isDef?ic("task",15):'<span class="mspc"></span>')+'Set as default</button>'+
       '<button type="button" role="menuitem" data-vact="left"'+(i<=0?' disabled':'')+'>'+ic("arrowL",15)+'Move left</button>'+
       '<button type="button" role="menuitem" data-vact="right"'+(i>=o.length-1?' disabled':'')+'>'+ic("arrowR",15)+'Move right</button>';
     m.style.cssText="display:block;position:fixed;top:"+(r.bottom+6)+"px;left:"+r.left+"px;right:auto";
