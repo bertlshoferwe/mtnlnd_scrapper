@@ -1476,7 +1476,6 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function visible(is){
     var f=ui.f;
-    if(f.type&&is.type!==f.type)return false;
     if(f.pri&&is.priority!==f.pri)return false;
     if(f.who&&(is.assignee||"__none")!==f.who)return false;
     if(f.teams.length&&!f.teams.some(function(tid){return inTeam(is,tid)}))return false;
@@ -2131,11 +2130,10 @@ img.who{object-fit:cover;background:var(--chip)}
       ids.map(function(i){var n=nameOf(i);return '<button class="favb'+(f.who===i?' on':'')+'" data-fwho="'+esc(i)+'" title="'+esc(n)+'" aria-pressed="'+(f.who===i)+'">'+nameAv(n)+'</button>'}).join("")+'</div>';
     var tl=HAS_TEAMS?divTeams(d):[];
     f.teams=f.teams.filter(function(id){return tl.some(function(x){return x.id===id})});
-    var nf=(f.type?1:0)+(f.pri?1:0)+f.teams.length;
+    var nf=(f.pri?1:0)+f.teams.length;
     h+='<div class="fwrap"><button class="btn small fbtn'+(nf?' on':'')+'" data-fopen aria-expanded="'+(!!ui.fOpen)+'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter'+(nf?' <span class="count">'+nf+'</span>':'')+'</button>';
     if(ui.fOpen){
       h+='<div class="fpop" role="dialog" aria-label="Filter">'+
-        '<label for="ff-type">Type</label><select id="ff-type" data-ff="type">'+opt("","All types",f.type)+TYPES.map(function(t){return opt(t,t,f.type)}).join("")+'</select>'+
         '<label for="ff-pri">Priority</label><select id="ff-pri" data-ff="pri">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>'+
         (HAS_TEAMS?'<label>Team</label>'+(tl.length?'<div class="fchecks">'+tl.map(function(x){var on=f.teams.indexOf(x.id)>-1;return '<label class="fcheck"><input type="checkbox" data-fteam="'+x.id+'"'+(on?' checked':'')+'>'+esc(x.name)+'</label>'}).join("")+'</div>'
           :'<p class="fine" style="margin:2px 0 0">No teams yet. Add them in Settings (bottom of the sidebar), on the Division tab.</p>'):'')+
