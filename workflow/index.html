@@ -2847,7 +2847,7 @@ img.who{object-fit:cover;background:var(--chip)}
         rest=order.filter(function(k){return !isPinned(p,k)});
     h+='<div class="ipanel" id="i-fields"><div class="iph">Pinned fields</div>'+
       (pinned.length?pinned.map(function(k){return frow(esc(lab[k]),ctlF[k],k,true)}).join(""):'<div class="fempty">Pin fields from Details to keep them here.</div>')+'</div>';
-    var open=!!ui.detOpen;
+    var open=ui.detOpen!==false;
     h+='<div class="ipanel"><button class="iph tog" data-detopen aria-expanded="'+open+'"><span class="chev">'+(open?ic("chevD",14):ic("chevR",14))+'</span>Details <span class="fine" style="margin:0;font-weight:400">'+esc(rest.map(function(k){return lab[k]}).join(", "))+'</span></button>';
     if(open){
       h+=rest.map(function(k){return frow(esc(lab[k]),ctlF[k],k,false)}).join("");
@@ -3143,7 +3143,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-fteamacc]")){ui.fTeamOpen=!ui.fTeamOpen;ui.fOpen=true;render();return}
     if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.teams=[];render();return}
     if((el=t.closest("[data-fpin]"))){togglePin(el.getAttribute("data-fpin"));return}
-    if(t.closest("[data-detopen]")){ui.detOpen=!ui.detOpen;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
+    if(t.closest("[data-detopen]")){ui.detOpen=ui.detOpen===false;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
       var tfid=el.getAttribute("data-taddfield"),tfp=tplById(tfid),tfin=$("tfn-"+tfid);
       if(!tfin||!tfin.value.trim()){if(tfin)tfin.focus();return}
