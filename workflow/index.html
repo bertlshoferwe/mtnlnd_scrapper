@@ -1175,19 +1175,23 @@ img.who{object-fit:cover;background:var(--chip)}
     var snapshotDocs=allDocs();
     Object.keys(snapshotDocs).forEach(function(p){base[p]=canon(snapshotDocs[p])});
     if(syncTemplates())scheduleFlush();   // a template changed elsewhere, or a space can start following one
+    ensureWorkflowSpaces();
     fixSelection();
     render();
     handoff();
   }
+  var selDone=false;
   function fixSelection(){
     var vis=myDivs();
     if(!orgView(state.view)&&!vis.concat(D.archived).some(function(d){return d.id===state.div})){
       state.div=vis.length?vis[0].id:"";state.cur="";
       if(!state.div)state.view="board";
     }
-    if(!divSpaces(state.div).some(function(s){return s.id===state.cur})){
-      var tr=spaceTree(state.div);state.cur=tr.length?tr[0].sp.id:"";
+    // each page load starts on the division's workflow space; after that, keep where the user is
+    if(!selDone||!divSpaces(state.div).some(function(s){return s.id===state.cur})){
+      state.cur=defaultSpace(state.div);
     }
+    selDone=true;
     savePrefs();
   }
   /* links from Bid Scout: ?bid=<id> opens a bid, ?division=<id> opens a division */
@@ -1276,11 +1280,36 @@ img.who{object-fit:cover;background:var(--chip)}
     ids.sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
     return '<option value="">Unassigned</option>'+ids.map(function(i){return opt(i,nameOf(i),cur||"")}).join("");
   }
+  // "BS" was the old "Bid Scout inbox" space; Add to Jira files into the workflow space now.
+  function isInbox(s){return !s.parentId&&s.key==="BS"}
+  // A division opens on its workflow space (e.g. "Bid Workflow"), where Add to Jira files bids.
+  function defaultSpace(divId){
+    var tr=spaceTree(divId),w=tr.filter(function(x){return x.depth===0&&!isInbox(x.sp)})[0]||tr[0];
+    return w?w.sp.id:"";
+  }
+  // Every division gets a "<Division> Workflow" space, following the Bid pipeline
+  // workflow, if it has no space of its own yet (supabase_store._workflow_space does the same).
+  var autoWs={};
+  function ensureWorkflowSpaces(){
+    if(!CANWRITE)return;
+    var made=false;
+    myDivs().forEach(function(d){
+      if(d.archived||autoWs[d.id])return;
+      if(divSpaces(d.id).some(function(s){return !s.parentId&&!isInbox(s)}))return;
+      autoWs[d.id]=1;
+      var name=d.name+" Workflow",base=autoKey(name)||"WF",key=base,n=2;
+      while(divSpaces(d.id).some(function(s){return s.key===key}))key=base.slice(0,4)+(n++);
+      var tpl=D.config.templates.filter(function(t){return /bid pipeline/i.test(t.name)})[0]||D.config.templates[0];
+      D.spaces.push({id:newId("spaces"),divisionId:d.id,parentId:"",name:name,key:key,ci:divSpaces(d.id).length,next:1,statuses:tplStatuses(tpl?tpl.id:""),rules:[],created:today(),issues:[]});
+      made=true;
+    });
+    if(made)save();
+  }
   function spaceTree(divId){
     var list=divSpaces(divId),ids={},out=[];
     list.forEach(function(s){ids[s.id]=1});
     function walk(pid,depth){
-      list.filter(function(s){return pid===""?(!s.parentId||!ids[s.parentId]):s.parentId===pid}).forEach(function(s){out.push({sp:s,depth:depth});walk(s.id,depth+1)});
+      list.filter(function(s){return pid===""?(!s.parentId||!ids[s.parentId]):s.parentId===pid}).sort(function(a,b){return pid===""?(isInbox(a)?1:0)-(isInbox(b)?1:0):0}).forEach(function(s){out.push({sp:s,depth:depth});walk(s.id,depth+1)});
     }
     walk("",0);
     return out;
@@ -2132,7 +2161,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function switchDiv(id){
     state.div=id;state.cur="";state.view="board";
-    var tr=spaceTree(id);if(tr.length)state.cur=tr[0].sp.id;
+    state.cur=defaultSpace(id);
     resetFilters();closeOv("ov-issue");if($("ov-settings").classList.contains("open"))closeOv("ov-settings");closeDrawer();ensureScope();save();render();
   }
   function gotoBid(id){
@@ -2824,7 +2853,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var gone=descendants(state.cur);
       D.spaces=D.spaces.filter(function(x){return gone.indexOf(x.id)<0});
       ui.armP=false;state.cur="";state.view="board";
-      var rest=spaceTree(state.div);if(rest.length)state.cur=rest[0].sp.id;
+      state.cur=defaultSpace(state.div);
       if($("ov-settings").classList.contains("open"))closeOv("ov-settings");
       save();render();toast("Space deleted");return;
     }

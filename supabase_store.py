@@ -14,6 +14,7 @@ anon key ever being used by mistake.
 import hashlib
 import os
 import re
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from supabase import create_client
 
@@ -1169,19 +1170,79 @@ _fit_stats_cache = {}
 _FIT_STATS_TTL_S = 60
 
 
+def _workflow_space(division_id):
+    """The division's workflow space on the bid board, where Add to Jira files
+    bids: its oldest top-level space (e.g. "Bid Workflow"). Made as
+    "<Division> Workflow", following the "Bid pipeline" template, if the
+    division has none yet — the board makes the same one when it loads."""
+    sb = get_client()
+    spaces = (
+        sb.table("wf_spaces").select("id,key,statuses,next")
+        .eq("division_id", division_id).is_("parent_id", "null")
+        .order("created_at").execute().data
+    )
+    # "BS" was the old "Bid Scout inbox" space; bids go to the workflow space now.
+    own = [sp for sp in spaces if sp["key"] != "BS"]
+    if own:
+        return own[0]
+    div = sb.table("divisions").select("name").eq("id", division_id).limit(1).execute().data
+    name = f"{div[0]['name'] if div else division_id} Workflow"
+    tpls = sb.table("wf_templates").select("id,name,statuses").order("created_at").execute().data
+    tpl = next((t for t in tpls if "bid pipeline" in (t.get("name") or "").lower()), tpls[0] if tpls else None)
+    src = (tpl or {}).get("statuses") or [{"name": "To do", "cat": "todo"},
+                                          {"name": "In progress", "cat": "doing"},
+                                          {"name": "Done", "cat": "done"}]
+    statuses = []
+    for st in src:
+        row = {"id": str(uuid.uuid4()), "name": st.get("name"), "cat": st.get("cat")}
+        if tpl and st.get("id"):
+            row.update({"tpl": tpl["id"], "tc": st["id"]})
+        statuses.append(row)
+    used = {sp["key"] for sp in spaces}
+    key, n = "WF", 2
+    while key in used:
+        key, n = f"WF{n}", n + 1
+    return sb.table("wf_spaces").insert({
+        "division_id": division_id, "name": name, "key": key, "statuses": statuses,
+    }).execute().data[0]
+
+
 def create_workflow_bid(division_id, project_key, title, due=None, source_url=None):
-    """Add a project to the workflow board's "Bid Scout inbox" for its
-    division (workflow/sql/001_workflow.sql's wf_create_bid_from_project).
-    Returns the bid id; calling it again for the same project returns the
-    same bid instead of a duplicate."""
-    res = get_client().rpc("wf_create_bid_from_project", {
-        "p_division_id": division_id,
-        "p_project_id": project_key,
-        "p_title": title,
-        "p_due": due,
-        "p_source_url": source_url,
-    }).execute()
-    bid_id = res.data
+    """Add a project to its division's workflow space on the bid board, in
+    the space's first column. Returns the bid id; calling it again for the
+    same project returns the same bid instead of a duplicate (also enforced
+    by wf_bids_source_uidx)."""
+    sb = get_client()
+
+    def existing():
+        r = (sb.table("wf_bids").select("id").eq("division_id", division_id)
+             .eq("source_project_id", project_key).limit(1).execute().data)
+        return r[0]["id"] if r else None
+
+    bid_id = existing()
+    if bid_id:
+        return bid_id
+    space = _workflow_space(division_id)
+    bids = sb.table("wf_bids").select("num,rank").eq("space_id", space["id"]).execute().data
+    num = max([b["num"] for b in bids] + [0]) + 1
+    num = max(num, space.get("next") or 1)
+    rank = max([b.get("rank") or 0 for b in bids] + [0]) + 1000
+    sb.table("wf_spaces").update({"next": num + 1}).eq("id", space["id"]).execute()
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    try:
+        bid_id = sb.table("wf_bids").insert({
+            "space_id": space["id"], "division_id": division_id, "num": num, "rank": rank,
+            "type": "Task", "title": title.strip(), "descr": "",
+            "status": (space.get("statuses") or [{}])[0].get("id"),
+            "priority": "Medium", "reporter": "Bid Scout", "due": due,
+            "source_project_id": project_key, "source_url": source_url,
+            "history": [{"by": "Bid Scout", "at": now_ms, "field": "created"}],
+        }).execute().data[0]["id"]
+    except Exception:
+        # Lost a race with another click on the same project: return the winner.
+        bid_id = existing()
+        if not bid_id:
+            raise
     try:
         _fill_workflow_bid(bid_id, project_key, load_project_bid_times(division_id).get(project_key))
     except Exception as e:
