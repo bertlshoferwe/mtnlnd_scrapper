@@ -144,6 +144,12 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cat-done{background:var(--low);color:var(--surface)}
 
 /* board */
+.bmini{position:fixed;right:20px;bottom:20px;z-index:25;width:132px;height:44px;padding:6px;box-sizing:border-box;background:var(--surface);border:1px solid var(--line2);border-radius:10px;box-shadow:0 6px 20px rgba(16,22,46,.18);cursor:pointer;touch-action:none;user-select:none}
+.bmini[hidden]{display:none}
+.bmcols{position:relative;height:100%}
+.bmcols span{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--line2)}
+.bmview{position:absolute;top:4px;bottom:4px;border:2px solid var(--c1);border-radius:5px;box-sizing:border-box}
+@media (hover:none),(max-width:640px){.bmini{display:none}}
 .board{display:flex;gap:12px;overflow-x:auto;padding:12px 16px 28px;scroll-snap-type:x proximity;align-items:flex-start}
 .col{flex:0 0 min(84vw,290px);background:var(--col);border-radius:12px;padding:10px;scroll-snap-align:start}
 .col.over{outline:2px dashed var(--accent);outline-offset:-2px}
@@ -723,6 +729,7 @@ img.who{object-fit:cover;background:var(--chip)}
       <div class="fright" id="fright"></div>
     </div>
     <main id="view"></main>
+    <div class="bmini" id="bmini" hidden aria-hidden="true"><div class="bmcols"></div><div class="bmview"></div></div>
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -2261,12 +2268,18 @@ img.who{object-fit:cover;background:var(--chip)}
     if(v!=="calendar")ui.calPop=null;
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
+    // re-drawing the same board (collapsing a column, sorting, editing a card…) keeps its sideways scroll
+    var obd=document.querySelector("#view .board"),okey=state.cur+"|"+v,osl=obd&&ui.boardKey===okey?obd.scrollLeft:0;
     $("view").innerHTML=html;
+    var nbd=document.querySelector("#view .board");
+    ui.boardKey=nbd?okey:null;
+    if(nbd&&osl){nbd.style.scrollSnapType="none";nbd.scrollLeft=osl;requestAnimationFrame(function(){nbd.style.scrollSnapType=""})}
     $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
     maybeAskMe(loading);
+    updateMinimap();
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
   // Wide screens: the menu button shrinks the sidebar to icons and back (remembered per browser). Narrow: it opens the drawer.
@@ -3174,6 +3187,34 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.qc&&ui.qc.where==="day"&&!inPop)closeQC();
   },true);
   window.addEventListener("resize",placeCalPop);
+  /* Board minimap (like Jira's): shows up bottom right when the columns are wider than the screen;
+     the box is what's in view — click or drag to scroll the board. */
+  function updateMinimap(){
+    var mm=$("bmini"),bd=document.querySelector("#view .board");
+    if(!bd||bd.scrollWidth<=bd.clientWidth+4){mm.hidden=true;return}
+    mm.hidden=false;
+    var sc=120/bd.scrollWidth,bl=bd.getBoundingClientRect().left-bd.scrollLeft;
+    mm.firstChild.innerHTML=Array.prototype.map.call(bd.querySelectorAll(".col"),function(c){
+      var r=c.getBoundingClientRect();
+      return '<span style="left:'+((r.left-bl)*sc).toFixed(1)+'px;width:'+Math.max(2,r.width*sc-1).toFixed(1)+'px"></span>';
+    }).join("");
+    var v=mm.lastChild;v.style.left=(6+bd.scrollLeft*sc).toFixed(1)+"px";v.style.width=(bd.clientWidth*sc).toFixed(1)+"px";
+  }
+  window.addEventListener("resize",updateMinimap);
+  document.addEventListener("scroll",function(e){if(e.target.classList&&e.target.classList.contains("board"))updateMinimap()},true);
+  (function(){
+    var mm=$("bmini"),drag=false;
+    function go(e){
+      var bd=document.querySelector("#view .board");if(!bd)return;
+      var x=e.clientX-mm.getBoundingClientRect().left-6,sc=120/bd.scrollWidth;
+      bd.style.scrollSnapType="none";   // follow the pointer exactly, no snapping
+      bd.scrollLeft=x/sc-bd.clientWidth/2;
+    }
+    mm.addEventListener("pointerdown",function(e){drag=true;mm.setPointerCapture(e.pointerId);go(e)});
+    mm.addEventListener("pointermove",function(e){if(drag)go(e)});
+    function end(){drag=false;var bd=document.querySelector("#view .board");if(bd)bd.style.scrollSnapType=""}
+    mm.addEventListener("pointerup",end);mm.addEventListener("pointercancel",end);
+  })();
   document.addEventListener("mousedown",function(e){
     if(ui.fmenu&&!(e.target.closest&&e.target.closest(".fmenu,[data-fmore]"))){ui.fmenu=false;renderAttach()}
     var mpk=e.target.closest&&e.target.closest("[data-mpick]");
