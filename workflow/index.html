@@ -559,9 +559,8 @@ textarea{min-height:90px;resize:vertical}
 textarea.bare{width:100%;min-height:44px;border:1px solid transparent!important;background:transparent!important;border-radius:6px;padding:6px 8px;margin-left:-8px;resize:vertical;font-size:14px}
 textarea.bare:hover,textarea.bare:focus{border-color:var(--line)!important;background:var(--bg)!important}
 .istat{margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.imorew{position:relative;margin-left:auto}
-.istat .imore{width:34px;height:34px;color:var(--muted)}
-.istat .imore:hover,.istat .imore[aria-expanded="true"]{background:var(--chip);color:var(--ink)}
+.isecw{position:relative;display:inline-flex;align-items:center;gap:6px;cursor:default;user-select:none;-webkit-user-select:none}
+.isecw .fmenu{left:0;right:auto;top:30px}
 .fmenu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:var(--ink);font-size:14px;text-align:left;cursor:pointer;white-space:nowrap}
 .fmenu button:hover{background:var(--chip)}
 .fmenu button.danger{color:var(--high)}
@@ -2469,7 +2468,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- issue modal ---------- */
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
-    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;delete ui.bs[id];
+    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;delete ui.bs[id];
     renderIssue();openOv("ov-issue");
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
@@ -2484,7 +2483,8 @@ img.who{object-fit:cover;background:var(--chip)}
   function renderIssueHead(is){
     var par=is.parent?byId(is.parent):null;
     $("i-head").innerHTML=(par?'<button class="crumb-btn" data-goto="'+par.id+'">'+tiHTML(par.type)+ikey(par)+'</button><span class="key">/</span>':'')+
-      tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">'+ic("x",18)+'</button>';
+      '<span class="isecw" data-isecret>'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+
+        (ui.imenu&&canAct()?'<div class="fmenu" role="menu"><button type="button" role="menuitem" class="danger" data-delissue>'+ic("trash",15)+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div>':'')+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">'+ic("x",18)+'</button>';
   }
   function issueTopHTML(is){
     var kids=children(is);
@@ -2727,9 +2727,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueSideHTML(is){
     var p=proj(),cands=parentCandidates(is.type,is.id),isSub=is.type==="Subtask",st=stat(p,is.status);
     var h='<div class="istat"><select id="i-status" class="lzb cat-'+st.cat+'" data-f="status" aria-label="Status">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select>'+
-      (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">'+ic("plus",18)+'</button>')+
-      (!canAct()?'':'<span class="imorew"><button class="icon imore" data-imore title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="'+(!!ui.imenu)+'">'+ic("more",18)+'</button>'+
-        (ui.imenu?'<div class="fmenu" role="menu"><button type="button" role="menuitem" class="danger" data-delissue>'+ic("trash",15)+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div>':'')+'</span>')+'</div>';
+      (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">'+ic("plus",18)+'</button>')+'</div>';
     var lab={due:"Due date",assignee:"Assignee",reporter:"Reporter",priority:"Priority",type:"Type",labels:"Labels",parent:"Parent"};
     var ctlF={
       due:'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
@@ -3074,7 +3072,7 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
-    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
+    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
     if(t.closest(".cpick"))return;
     if((el=t.closest("[data-open]"))){
       var id=el.getAttribute("data-open");
@@ -3142,9 +3140,14 @@ img.who{object-fit:cover;background:var(--chip)}
       if(ui.armAtt!==aid){ui.armAtt=aid;renderAttach();return}
       ui.armAtt=null;removeAttachment(adi,aid);renderAttach();renderIssueAct();return;
     }
-    if(t.closest("[data-imore]")){ui.imenu=!ui.imenu;ui.armI=false;renderIssueSideOnly();return}
+    // hidden delete: tap the bid's type icon / key three times quickly
+    if(t.closest("[data-isecret]")&&!t.closest(".fmenu")){
+      var tn=Date.now();ui.secT=(ui.secT||[]).filter(function(x){return tn-x<700});ui.secT.push(tn);
+      if(ui.secT.length>=3){ui.secT=[];ui.imenu=!ui.imenu;ui.armI=false;var sci=byId(ui.issueId);if(sci)renderIssueHead(sci)}
+      return;
+    }
     if(t.closest("[data-delissue]")){
-      if(!ui.armI){ui.armI=true;var ai2=byId(ui.issueId);$("i-side").innerHTML=issueSideHTML(ai2);return}
+      if(!ui.armI){ui.armI=true;var ai2=byId(ui.issueId);renderIssueHead(ai2);return}
       var did=ui.issueId,dfi=byId(did),dpaths=((dfi&&dfi.attachments)||[]).map(function(x){return x.path});
       closeOv("ov-issue");deleteIssue(did);render();toast("Bid deleted");
       if(dpaths.length&&sb)sb.storage.from(FILE_BUCKET).remove(dpaths).then(function(){},function(){});
@@ -3445,7 +3448,7 @@ img.who{object-fit:cover;background:var(--chip)}
   })();
   document.addEventListener("mousedown",function(e){
     if(ui.fmenu&&!(e.target.closest&&e.target.closest(".fmenu,[data-fmore]"))){ui.fmenu=false;renderAttach()}
-    if(ui.imenu&&!(e.target.closest&&e.target.closest(".imorew"))){ui.imenu=false;ui.armI=false;renderIssueSideOnly()}
+    if(ui.imenu&&!(e.target.closest&&e.target.closest(".isecw"))){ui.imenu=false;ui.armI=false;var hci=byId(ui.issueId);if(hci)renderIssueHead(hci)}
     var mpk=e.target.closest&&e.target.closest("[data-mpick]");
     if(mpk){e.preventDefault();pickMention(mpk.getAttribute("data-mpick"));return}
     if(ui.mq&&e.target!==ui.mq.el)closeMention();
