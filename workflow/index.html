@@ -683,7 +683,6 @@ img.who{object-fit:cover;background:var(--chip)}
       <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
       <div class="crumb"><small id="pkey"></small><h1 id="ptitle"></h1></div>
       <button class="btn small" id="theme" type="button"></button>
-      <button class="btn primary" data-create id="createBtn">Create</button>
     </header>
     <nav class="dtabs" id="dtabs" aria-label="Divisions"></nav>
     <nav class="tabs" id="tabs" role="tablist" aria-label="Views"></nav>
@@ -2139,7 +2138,6 @@ img.who{object-fit:cover;background:var(--chip)}
     var showF=showTabs&&["board","list","calendar"].indexOf(v)>-1;
     $("filters").style.display=showF?"":"none";
     if(showF)renderFsel();
-    $("createBtn").style.display=(showTabs&&canAct())?"":"none";
     var html;
     if(DENIED)html=emptyHTML("Can’t open the bid board",esc(DENIED));
     else if(loading)html='<div class="rep"><p class="fine" style="font-size:14px">Loading…</p></div>';
@@ -2600,7 +2598,6 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-close]"))){closeOv(el.getAttribute("data-close"));return}
     if(t.classList&&t.classList.contains("overlay")){closeOv(t.id);return}
     if((el=t.closest("[data-space]"))){switchSpace(el.getAttribute("data-space"));return}
-    if(t.closest("[data-create]")){openCreate();return}
     if((el=t.closest("[data-div]"))){switchDiv(el.getAttribute("data-div"));return}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
