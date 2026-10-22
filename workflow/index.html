@@ -1202,13 +1202,20 @@ img.who{object-fit:cover;background:var(--chip)}
     selDone=true;
     savePrefs();
   }
-  /* links from Bid Scout: ?bid=<id> opens a bid, ?division=<id> opens a division */
+  /* links from Bid Scout: ?bid=<id> opens a bid, ?project=<Bid Scout project key> opens the bid
+     made from that project, ?division=<id> opens a division */
   function handoff(){
     if(handoffDone)return;
     handoffDone=true;
-    var q=new URLSearchParams(location.search),bid=q.get("bid"),div=q.get("division");
-    if(!bid&&!div)return;
+    var q=new URLSearchParams(location.search),bid=q.get("bid"),div=q.get("division"),pk=q.get("project");
+    if(!bid&&!div&&!pk)return;
     try{history.replaceState(null,"",location.pathname)}catch(e){}
+    if(pk&&!bid){
+      D.spaces.forEach(function(s){s.issues.forEach(function(i){
+        if(i.sourceProjectId===pk&&(!bid||(div&&i.divisionId===String(div))))bid=i.id;
+      })});
+      if(!bid)toast("That bid isn’t on the board.");
+    }
     if(bid){
       var found=D.spaces.some(function(s){return s.issues.some(function(i){return i.id===bid})});
       if(found){gotoBid(bid);return}

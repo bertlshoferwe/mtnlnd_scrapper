@@ -3722,12 +3722,12 @@ function renderProjectJiraBtn(p) {
   const btn = document.getElementById('projectJiraBtn');
   const label = document.getElementById('projectJiraLabel');
   btn.classList.toggle('is-linked', !!p.jira_key);
-  label.textContent = p.jira_key ? 'View in Jira (' + p.jira_key + ')' : 'Add to Board';
+  label.textContent = p.jira_key ? 'Open in Bid Board' : 'Add to Board';
 }
 
 // Called every time a project's modal opens, if it has a stored jira_key —
 // confirms the issue hasn't been deleted on the Jira side since. Reverts
-// the button to "Add to Jira" if it's gone; silently does nothing otherwise
+// the button to "Add to Board" if it's gone; silently does nothing otherwise
 // (including if Jira is unreachable) so a network blip can't drop a real link.
 async function verifyProjectJira(p) {
   if (!p.jira_key) return;
@@ -3754,7 +3754,11 @@ async function verifyProjectJira(p) {
 async function addProjectToJira() {
   const p = currentProject;
   if (!p) return;
-  if (p.jira_key) { window.open(p.jira_url || '#', '_blank'); return; }
+  if (p.jira_key) {
+    window.open('/workflow/?division=' + encodeURIComponent(currentDivision)
+      + '&project=' + encodeURIComponent(p.key), '_blank');
+    return;
+  }
   const btn = document.getElementById('projectJiraBtn');
   btn.disabled = true;
   try {
