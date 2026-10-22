@@ -36,6 +36,50 @@ import supabase_store
 BID_FILES_BUCKET = supabase_store.BID_FILES_BUCKET
 PRIORITIES = ["Highest", "High", "Medium", "Low"]
 
+# Jira statuses with no column of the same name (after dropping a " - In Process" tail).
+STATUS_ALIASES = {"submitted": "quoted"}
+
+# Common nicknames, so board "Nick" matches Jira "Nicholas Griffiths".
+NICKNAMES = {
+    "nick": "nicholas", "nic": "nicholas", "benji": "benjamin", "ben": "benjamin", "jake": "jacob",
+    "mike": "michael", "matt": "matthew", "chris": "christopher", "dan": "daniel", "danny": "daniel",
+    "dave": "david", "tom": "thomas", "will": "william", "bill": "william", "rob": "robert",
+    "bob": "robert", "jim": "james", "joe": "joseph", "tony": "anthony", "andy": "andrew",
+    "drew": "andrew", "josh": "joshua", "sam": "samuel", "alex": "alexander", "zach": "zachary",
+    "nate": "nathan", "steve": "steven", "greg": "gregory", "jeff": "jeffrey", "ken": "kenneth",
+    "rick": "richard", "rich": "richard", "pat": "patrick", "tim": "timothy", "ed": "edward",
+    "ted": "edward", "kate": "katherine", "katie": "katherine", "liz": "elizabeth", "beth": "elizabeth",
+    "jen": "jennifer", "jenny": "jennifer", "abby": "abigail", "maddie": "madison",
+}
+
+
+def _canon_first(n):
+    n = (n or "").strip().lower()
+    return NICKNAMES.get(n, n)
+
+
+def _tidy_name(n):
+    """'GRIFFITHS' -> 'Griffiths'; mixed case is left alone."""
+    n = (n or "").strip()
+    return n.title() if n.isupper() or n.islower() else n
+
+
+def _status_for(statuses, name):
+    """The board column for a Jira status: same name, else the part before
+    " - " ('Email - In Process' -> Email), else an alias (Submitted -> Quoted)."""
+    def find(n):
+        n = (n or "").strip().lower()
+        return next((s for s in statuses if (s.get("name") or "").strip().lower() == n), None)
+    base = re.split(r"\s+[-–]\s+", name or "")[0]
+    return find(name) or find(base) or find(STATUS_ALIASES.get(base.strip().lower()))
+
+
+def _norm_team(n):
+    """'Northern UT' and 'Northern Utah' compare equal (state codes spelled out)."""
+    words = [supabase_store._STATE_NAMES.get(w.upper(), w) if len(w) == 2 else w
+             for w in re.split(r"\s+", (n or "").strip())]
+    return " ".join(words).lower()
+
 
 class JiraError(Exception):
     pass
@@ -199,9 +243,11 @@ class People:
         name = (user.get("displayName") or "").strip()
         email = (user.get("emailAddress") or "").strip()
         parts = name.split(" ", 1)
-        first, last = parts[0], (parts[1] if len(parts) > 1 else "")
+        first, last = _tidy_name(parts[0]), _tidy_name(parts[1] if len(parts) > 1 else "")
+        name = (first + " " + last).strip()
         row = (next((r for r in self.rows if email and (r.get("email") or "").lower() == email.lower()), None)
-               or next((r for r in self.rows if self._first(r.get("first_name") or r.get("name")) == first.lower()), None))
+               or next((r for r in self.rows
+                        if _canon_first(self._first(r.get("first_name") or r.get("name"))) == _canon_first(first)), None))
         if row:
             patch = {}
             if last and (row.get("last_name") or "") != last:
@@ -209,7 +255,8 @@ class People:
             if email and (row.get("email") or "") != email:
                 patch["email"] = email
             if patch:
-                patch["first_name"] = row.get("first_name") or first
+                # the board keeps its own first name (a nickname like Nick stays Nick)
+                patch["first_name"] = row.get("first_name") or (row.get("name") or "").strip().split(" ")[0] or first
                 patch["name"] = f"{patch['first_name']} {patch.get('last_name') or row.get('last_name') or ''}".strip()
                 self.changes.append(f"Update {row.get('name')} → {patch['name']}"
                                     + (f" ({patch['email']})" if patch.get("email") else ""))
@@ -302,7 +349,8 @@ def run(division_id, dry=True, log=print):
             continue
 
         st_name = ((f.get("status") or {}).get("name") or "").strip()
-        st = next((s for s in statuses if (s.get("name") or "").strip().lower() == st_name.lower()), None)
+        st = _status_for(statuses, st_name)
+        st_matched = bool(st)
         if not st:
             report["unmatched_statuses"][st_name] = report["unmatched_statuses"].get(st_name, 0) + 1
             st = statuses[0] if statuses else {"id": None}
@@ -321,7 +369,7 @@ def run(division_id, dry=True, log=print):
                     custom[bf["id"]] = pid
             elif t == "team":
                 tn = _plain(v)
-                tm = next((x for x in teams if x["name"].strip().lower() == tn.strip().lower()), None)
+                tm = next((x for x in teams if _norm_team(x["name"]) == _norm_team(tn)), None)
                 if tm:
                     custom[bf["id"]] = tm["id"]
                 else:
@@ -431,7 +479,7 @@ def run(division_id, dry=True, log=print):
         report["issues"].append({
             "key": key, "title": row["title"], "action": action,
             "board": (f"{space.get('key')}-{row.get('num') or bid.get('num')}"),
-            "status": st_name, "column": st.get("name"),
+            "status": st_name, "column": st.get("name"), "matched": st_matched,
             "assignee": (f.get("assignee") or {}).get("displayName"),
             "comments": len(row["comments"]) - len((bid or {}).get("comments") or []),
             "attachments": len(f.get("attachment") or []),

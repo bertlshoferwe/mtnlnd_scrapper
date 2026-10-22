@@ -2359,7 +2359,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(rows.length){
         h+='<div class="jtable"><table><thead><tr><th>Jira</th><th>Bid</th><th>Board</th><th>Column</th><th>Assignee</th><th>Comments</th><th>Files</th></tr></thead><tbody>'+
           rows.map(function(x){return '<tr><td>'+esc(x.key)+'</td><td>'+esc(x.title)+'</td><td>'+(x.action==="new"?esc(x.board)+' <span class="fine">new</span>':esc(x.board||"")+' <span class="fine">update</span>')+'</td>'+
-            '<td'+(x.status&&x.status.toLowerCase()!==String(x.column||"").toLowerCase()?' style="color:var(--high)"':'')+'>'+esc(x.column||"")+'</td><td>'+esc(x.assignee||"")+'</td><td class="num">'+(x.comments||"")+'</td><td class="num">'+(x.attachments||"")+'</td></tr>'}).join("")+
+            '<td'+(x.matched===false?' style="color:var(--high)" title="No column for Jira status “'+esc(x.status)+'”"':'')+'>'+esc(x.column||"")+'</td><td>'+esc(x.assignee||"")+'</td><td class="num">'+(x.comments||"")+'</td><td class="num">'+(x.attachments||"")+'</td></tr>'}).join("")+
           '</tbody></table></div>';
       }
       h+='</div>';
