@@ -3168,7 +3168,11 @@ img.who{object-fit:cover;background:var(--chip)}
       var jd=curDiv(),ja=el.getAttribute("data-jira");if(!jd)return;
       if(ja==="import"&&!ui.armJ){ui.armJ=true;$("orgSetBody").innerHTML=orgSettingsHTML();return}
       ui.armJ=false;ui.jiraErr=null;
-      jiraApi(jd,"",{dry:ja!=="import"}).then(function(){jiraPoll(jd)}).catch(function(e){ui.jiraErr=e.message;$("orgSetBody").innerHTML=orgSettingsHTML()});
+      jiraApi(jd,"",{dry:ja!=="import"}).then(function(){jiraPoll(jd)}).catch(function(e){
+        ui.jiraErr=/404/.test(e.message)?"The scan worker hasn’t picked up the Jira import yet — it updates itself a few minutes after a new version ships. Try again shortly.":e.message;
+        if(ui.jira[jd.id])ui.jira[jd.id].running=false;
+        $("orgSetBody").innerHTML=orgSettingsHTML();
+      });
       ui.jira[jd.id]=Object.assign({},ui.jira[jd.id]||{},{running:true,dry:ja!=="import",error:null});$("orgSetBody").innerHTML=orgSettingsHTML();
       return;
     }
