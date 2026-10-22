@@ -557,6 +557,13 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .mcard .foot{display:flex;align-items:center;gap:8px}
 .mcard .cnt{flex:1;font-size:12px;color:var(--muted)}
 .mcard .linkbtn.danger{font-size:12px;color:var(--high)}
+.mcard{position:relative}
+.mcard .tname{font-weight:700;font-size:14px;padding-right:30px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcard .editbtn{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;border-radius:7px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);opacity:0;transition:opacity .12s}
+.mcard:hover .editbtn,.mcard:focus-within .editbtn,.mcard .editbtn:focus-visible{opacity:1}
+@media (hover:none){.mcard .editbtn{opacity:1}}
+.tmp.ro{cursor:default}
+#teamBody .tmpeople{margin-top:6px}
 .tmpeople{display:flex;flex-wrap:wrap;gap:6px}
 .tmp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;background:none;padding:3px 10px 3px 3px;font-size:13px;color:var(--muted)}
 .tmp .who{width:22px;height:22px;font-size:9px;color:#fff;opacity:.5}
@@ -753,6 +760,15 @@ img.who{object-fit:cover;background:var(--chip)}
       <button class="btn primary" id="p-save">Create space</button>
       <button class="btn" data-close="ov-space">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- edit team (opened from a team card in Settings) -->
+<div class="overlay" id="ov-team" role="dialog" aria-modal="true" aria-labelledby="tmTitle">
+  <div class="sheet">
+    <h3 id="tmTitle">Edit team</h3>
+    <div id="teamBody"></div>
+    <div class="actions"><span id="tmDelWrap"></span><span class="spacer"></span><button class="btn primary" data-close="ov-team">Done</button></div>
   </div>
 </div>
 
@@ -1997,19 +2013,30 @@ img.who{object-fit:cover;background:var(--chip)}
   function teamsHTML(d,ids){
     if(!HAS_TEAMS)return "";
     var h='<section class="panel"><div class="phead"><h3>Teams</h3><button class="addbtn" data-showadd="team" aria-expanded="'+(ui.adding==="team")+'" aria-label="Add a team" title="Add a team">'+ic("plus",16)+'</button></div>'+
-      '<p class="fine" style="margin:0 0 10px">Group this division’s members, for example by region. Click a name to add or remove them.</p>';
+      '<p class="fine" style="margin:0 0 10px">Group this division’s members, for example by region. Hover a team and use the pencil to edit it.</p>';
     if(ui.adding==="team")h+='<div class="addrow"><input id="newteam" placeholder="Team name, e.g. Northern Utah" maxlength="40" aria-label="Team name"><button class="btn small primary" data-addteam>Add</button><button class="btn small" data-showadd="">Cancel</button></div>';
     var T=divTeams(d);
     if(T.length){
       h+='<div class="cards wide">';
       T.forEach(function(t){
-        h+='<div class="mcard"><div class="mtop"><input data-tmname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Team name" maxlength="40"></div><div class="tmpeople">'+
-          (ids.length?ids.map(function(pid){var on=t.members.indexOf(pid)>-1;return '<button class="tmp'+(on?' on':'')+'" data-tmtoggle="'+t.id+':'+esc(pid)+'" aria-pressed="'+on+'">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</button>'}).join(""):'<span class="fine" style="margin:0">Add members first.</span>')+
-          '</div><div class="foot"><span class="cnt">'+t.members.length+' member'+(t.members.length===1?'':'s')+'</span><button class="linkbtn danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Remove')+'</button></div></div>';
+        var mem=ids.filter(function(pid){return t.members.indexOf(pid)>-1});
+        h+='<div class="mcard"><div class="tname">'+esc(t.name)+'</div>'+
+          '<button class="editbtn" data-tmedit="'+t.id+'" aria-label="Edit '+esc(t.name)+'" title="Edit team"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>'+
+          '<div class="tmpeople">'+(mem.length?mem.map(function(pid){return '<span class="tmp on ro">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</span>'}).join(""):'<span class="fine" style="margin:0">No one yet.</span>')+'</div>'+
+          '<div class="foot"><span class="cnt">'+t.members.length+' member'+(t.members.length===1?'':'s')+'</span></div></div>';
       });
       h+='</div>';
     }else h+='<p class="fine">No teams yet. Use + to add one.</p>';
     return h+'</section>';
+  }
+  function renderTeamModal(){
+    var t=(D.teams||[]).filter(function(x){return x.id===ui.editTeam})[0];
+    if(!t){closeOv("ov-team");return}
+    var d=curDiv(),ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
+    $("teamBody").innerHTML='<label for="tm-name">Team name</label><input id="tm-name" data-tmname="'+t.id+'" value="'+esc(t.name)+'" maxlength="40">'+
+      '<label>Members <span class="fine" style="font-weight:400">· click a name to add or remove them</span></label><div class="tmpeople">'+
+      (ids.length?ids.map(function(pid){var on=t.members.indexOf(pid)>-1;return '<button class="tmp'+(on?' on':'')+'" data-tmtoggle="'+t.id+':'+esc(pid)+'" aria-pressed="'+on+'">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</button>'}).join(""):'<span class="fine" style="margin:0">Add members first.</span>')+'</div>';
+    $("tmDelWrap").innerHTML='<button class="btn small danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Delete team')+'</button>';
   }
   function divisionHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
@@ -2082,7 +2109,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -2092,7 +2119,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeTop(){
     if(ui.calPop){closeCalPop();return}
-    var ids=["ov-space","ov-create","ov-issue","ov-day","ov-settings"];
+    var ids=["ov-team","ov-space","ov-create","ov-issue","ov-day","ov-settings"];
     for(var i=0;i<ids.length;i++)if($(ids[i]).classList.contains("open")){closeOv(ids[i]);return}
     $("side").classList.remove("open");$("scrim").classList.remove("open");
   }
@@ -2513,15 +2540,16 @@ img.who{object-fit:cover;background:var(--chip)}
       D.teams=D.teams||[];D.teams.push({id:uid("tm"),divisionId:state.div,name:tnm2,members:[]});
       ui.adding="";save();render();return;
     }
+    if((el=t.closest("[data-tmedit]"))){ui.editTeam=el.getAttribute("data-tmedit");ui.armTm=null;renderTeamModal();openOv("ov-team");var tn=$("tm-name");if(tn)tn.focus();return}
     if((el=t.closest("[data-tmtoggle]"))){
       var tg=el.getAttribute("data-tmtoggle"),tgi=tg.indexOf(":"),tgt=(D.teams||[]).filter(function(x){return x.id===tg.slice(0,tgi)})[0],tgp=tg.slice(tgi+1);
-      if(tgt){var ti=tgt.members.indexOf(tgp);if(ti>-1)tgt.members.splice(ti,1);else tgt.members.push(tgp);save();render()}
+      if(tgt){var ti=tgt.members.indexOf(tgp);if(ti>-1)tgt.members.splice(ti,1);else tgt.members.push(tgp);save();render();if(ui.editTeam===tgt.id)renderTeamModal()}
       return;
     }
     if((el=t.closest("[data-tmdel]"))){
       var tdid=el.getAttribute("data-tmdel");
-      if(ui.armTm!==tdid){ui.armTm=tdid;render();return}
-      D.teams=D.teams.filter(function(x){return x.id!==tdid});ui.armTm=null;save();render();return;
+      if(ui.armTm!==tdid){ui.armTm=tdid;if(ui.editTeam===tdid)renderTeamModal();return}
+      D.teams=D.teams.filter(function(x){return x.id!==tdid});ui.armTm=null;save();render();if(ui.editTeam===tdid){ui.editTeam=null;closeOv("ov-team")}return;
     }
     if((el=t.closest("[data-rmperson]"))){
       var rpid=el.getAttribute("data-rmperson");
@@ -2811,7 +2839,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((v=el.getAttribute("data-tmname"))){
       var tmr=(D.teams||[]).filter(function(x){return x.id===v})[0],tmv=el.value.trim();
-      if(tmr&&tmv){tmr.name=tmv;save()}else if(tmr)el.value=tmr.name;return;
+      if(tmr&&tmv){tmr.name=tmv;save();render()}else if(tmr)el.value=tmr.name;return;
     }
     if((v=el.getAttribute("data-tfname"))||(v=el.getAttribute("data-tftype"))){
       var fk=v.split(":"),ft=D.config.templates.filter(function(x){return x.id===fk[0]})[0],ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
