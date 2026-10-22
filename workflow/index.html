@@ -539,6 +539,24 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .frow .fv{min-width:0}
 .dt{display:flex;gap:6px;min-width:0}
 .tmrow{border-top:1px solid var(--line);padding:6px 0 8px}
+.phead{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.phead h3{margin:0;flex:1}
+.addbtn{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:none;color:var(--ink)}
+.addbtn:hover,.addbtn[aria-expanded="true"]{background:var(--chip);border-color:var(--c1)}
+.addrow{display:flex;gap:8px;margin:0 0 12px}
+.addrow input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.cards.wide{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.mcard{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.mcard .mtop{display:flex;align-items:center;gap:10px;min-width:0}
+.mcard .who{width:32px;height:32px;font-size:12px;flex:0 0 auto}
+.sheet .mcard input,.mcard input{flex:1;width:auto;min-width:0;margin:0;background:none;border:1px solid transparent;border-radius:6px;padding:4px 6px;font-weight:600;font-size:14px;color:var(--ink)}
+.sheet .mcard input:hover{border-color:var(--line)}
+.sheet .mcard input:focus{border-color:var(--c1);background:var(--surface)}
+.sheet .addrow input{width:auto}
+.mcard .foot{display:flex;align-items:center;gap:8px}
+.mcard .cnt{flex:1;font-size:12px;color:var(--muted)}
+.mcard .linkbtn.danger{font-size:12px;color:var(--high)}
 .tmpeople{display:flex;flex-wrap:wrap;gap:6px}
 .tmp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;background:none;padding:3px 10px 3px 3px;font-size:13px;color:var(--muted)}
 .tmp .who{width:22px;height:22px;font-size:9px;color:#fff;opacity:.5}
@@ -1961,28 +1979,37 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function membersHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
-    var h='<section class="panel"><h3>Members</h3><p class="fine" style="margin:0 0 8px">The people bids can be assigned to. Shared by every space in '+esc(d.name)+'.</p>';
-    ids.forEach(function(id){
-      h+='<div class="srow member">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40"><button class="btn small danger" data-rmperson="'+esc(id)+'">Remove</button></div>';
-    });
-    if(!ids.length)h+='<p class="fine">No one yet. Add the people who work on this division’s bids so you can assign them.</p>';
-    h+='<div class="srow"><input id="newperson" placeholder="Add a person" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button></div></section>';
-    return h+teamsHTML(d,ids);
+    var h='<section class="panel"><div class="phead"><h3>Members</h3><button class="addbtn" data-showadd="person" aria-expanded="'+(ui.adding==="person")+'" aria-label="Add a person" title="Add a person">'+ic("plus",16)+'</button></div>'+
+      '<p class="fine" style="margin:0 0 10px">The people bids can be assigned to. Shared by every space in '+esc(d.name)+'.</p>';
+    if(ui.adding==="person")h+='<div class="addrow"><input id="newperson" placeholder="Name" maxlength="40" aria-label="Person name"><button class="btn small primary" data-addperson>Add</button><button class="btn small" data-showadd="">Cancel</button></div>';
+    if(ids.length){
+      h+='<div class="cards">';
+      ids.forEach(function(id){
+        h+='<div class="mcard"><div class="mtop">'+avHTML(id)+'<input data-pname="'+esc(id)+'" value="'+esc(nameOf(id))+'" aria-label="Name" maxlength="40">'+
+          '<button class="linkbtn danger" data-rmperson="'+esc(id)+'">'+(ui.armPer===id?'Tap to confirm':'Remove')+'</button></div></div>';
+      });
+      h+='</div>';
+    }else h+='<p class="fine">No one yet. Use + to add the people who work on this division’s bids so you can assign them.</p>';
+    return h+'</section>'+teamsHTML(d,ids);
   }
   // Teams (e.g. regions): named groups of this division's members; a bid's Team field picks one
   function divTeams(d){return d?(D.teams||[]).filter(function(t){return t.divisionId===d.id}):[]}
   function teamsHTML(d,ids){
     if(!HAS_TEAMS)return "";
-    var h='<section class="panel"><h3>Teams</h3><p class="fine" style="margin:0 0 8px">Group this division’s members, for example by region. Click a name to add or remove them.</p>';
-    divTeams(d).forEach(function(t){
-      h+='<div class="tmrow"><div class="srow" style="border:0;padding:4px 0"><input data-tmname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Team name" maxlength="40">'+
-        '<span class="cnt">'+t.members.length+' member'+(t.members.length===1?'':'s')+'</span>'+
-        '<button class="btn small danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Remove')+'</button></div><div class="tmpeople">'+
-        (ids.length?ids.map(function(pid){var on=t.members.indexOf(pid)>-1;return '<button class="tmp'+(on?' on':'')+'" data-tmtoggle="'+t.id+':'+esc(pid)+'" aria-pressed="'+on+'">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</button>'}).join(""):'<span class="fine" style="margin:0">Add members above first.</span>')+
-        '</div></div>';
-    });
-    if(!divTeams(d).length)h+='<p class="fine">No teams yet.</p>';
-    return h+'<div class="srow"><input id="newteam" placeholder="Add a team, e.g. Northern Utah" maxlength="40" aria-label="Team name"><button class="btn small primary" data-addteam>Add</button></div></section>';
+    var h='<section class="panel"><div class="phead"><h3>Teams</h3><button class="addbtn" data-showadd="team" aria-expanded="'+(ui.adding==="team")+'" aria-label="Add a team" title="Add a team">'+ic("plus",16)+'</button></div>'+
+      '<p class="fine" style="margin:0 0 10px">Group this division’s members, for example by region. Click a name to add or remove them.</p>';
+    if(ui.adding==="team")h+='<div class="addrow"><input id="newteam" placeholder="Team name, e.g. Northern Utah" maxlength="40" aria-label="Team name"><button class="btn small primary" data-addteam>Add</button><button class="btn small" data-showadd="">Cancel</button></div>';
+    var T=divTeams(d);
+    if(T.length){
+      h+='<div class="cards wide">';
+      T.forEach(function(t){
+        h+='<div class="mcard"><div class="mtop"><input data-tmname="'+t.id+'" value="'+esc(t.name)+'" aria-label="Team name" maxlength="40"></div><div class="tmpeople">'+
+          (ids.length?ids.map(function(pid){var on=t.members.indexOf(pid)>-1;return '<button class="tmp'+(on?' on':'')+'" data-tmtoggle="'+t.id+':'+esc(pid)+'" aria-pressed="'+on+'">'+nameAv(nameOf(pid))+esc(nameOf(pid))+'</button>'}).join(""):'<span class="fine" style="margin:0">Add members first.</span>')+
+          '</div><div class="foot"><span class="cnt">'+t.members.length+' member'+(t.members.length===1?'':'s')+'</span><button class="linkbtn danger" data-tmdel="'+t.id+'">'+(ui.armTm===t.id?'Tap to confirm':'Remove')+'</button></div></div>';
+      });
+      h+='</div>';
+    }else h+='<p class="fine">No teams yet. Use + to add one.</p>';
+    return h+'</section>';
   }
   function divisionHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
@@ -2460,7 +2487,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-opendiv]"))){switchDiv(el.getAttribute("data-opendiv"));return}
     if((el=t.closest("[data-gotobid]"))){gotoBid(el.getAttribute("data-gotobid"));return}
     if(t.closest("[data-orgsettings]")){openOrgSettings();return}
-    if((el=t.closest("[data-settab]"))){ui.setTab=el.getAttribute("data-settab");ui.armP=false;ui.armTm=null;render();return}
+    if((el=t.closest("[data-settab]"))){ui.setTab=el.getAttribute("data-settab");ui.armP=false;ui.armTm=null;ui.armPer=null;ui.adding="";render();return}
     if((el=t.closest("[data-colfold]"))){
       var cfp=proj().id,cfs=el.getAttribute("data-colfold");
       state.colFold=state.colFold||{};state.colFold[cfp]=state.colFold[cfp]||{};
@@ -2469,17 +2496,22 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(t.closest("[data-newspace]")){closeDrawer();openSpace("");return}
     if((el=t.closest("[data-newsub]"))){openSpace(el.getAttribute("data-newsub"));return}
+    if((el=t.closest("[data-showadd]"))){
+      var sa=el.getAttribute("data-showadd");ui.adding=(sa&&ui.adding!==sa)?sa:"";render();
+      var ai=$(ui.adding==="person"?"newperson":"newteam");if(ui.adding&&ai)ai.focus();
+      return;
+    }
     if(t.closest("[data-addperson]")){
       var pin=$("newperson"),pnm=pin?pin.value.trim():"";
       if(!pnm){if(pin)pin.focus();return}
       D.people.push({id:uid("p"),divisionId:state.div,name:pnm});
-      save();render();return;
+      save();render();var np=$("newperson");if(np)np.focus();return;
     }
     if(t.closest("[data-addteam]")){
       var tin2=$("newteam"),tnm2=tin2?tin2.value.trim():"";
       if(!tnm2){if(tin2)tin2.focus();return}
       D.teams=D.teams||[];D.teams.push({id:uid("tm"),divisionId:state.div,name:tnm2,members:[]});
-      save();render();return;
+      ui.adding="";save();render();return;
     }
     if((el=t.closest("[data-tmtoggle]"))){
       var tg=el.getAttribute("data-tmtoggle"),tgi=tg.indexOf(":"),tgt=(D.teams||[]).filter(function(x){return x.id===tg.slice(0,tgi)})[0],tgp=tg.slice(tgi+1);
@@ -2493,6 +2525,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-rmperson]"))){
       var rpid=el.getAttribute("data-rmperson");
+      if(ui.armPer!==rpid){ui.armPer=rpid;render();return}
+      ui.armPer=null;
       D.people=D.people.filter(function(x){return x.id!==rpid});
       (D.teams||[]).forEach(function(tm){tm.members=tm.members.filter(function(x){return x!==rpid})});
       D.spaces.forEach(function(sp){sp.issues.forEach(function(is){if(is.assignee===rpid)is.assignee=""})});
@@ -2825,6 +2859,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(e.key==="Escape"){e.preventDefault();closeQC();return}
     }
     if(e.key==="Escape"&&ui.addSub&&e.target.getAttribute&&e.target.getAttribute("data-quick")){e.preventDefault();e.stopPropagation();ui.addSub=false;var eis=byId(ui.issueId);if(eis)$("i-top").innerHTML=issueTopHTML(eis);return}
+    if(e.key==="Escape"&&ui.adding&&e.target.id&&(e.target.id==="newperson"||e.target.id==="newteam")){e.preventDefault();ui.adding="";render();return}
     if(e.key==="Escape"){closeTop();return}
     var t=e.target;
     var day=t.closest&&t.closest("[data-day]");
@@ -2833,6 +2868,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(e.key==="Enter"&&t.id==="ns"){e.preventDefault();var b=document.querySelector("[data-addstatus]");if(b)b.click()}
     if(e.key==="Enter"&&(t.id==="c-title"||t.id==="p-name"||t.id==="p-key")){e.preventDefault();if(t.id==="c-title")submitCreate();else submitSpace()}
     if(e.key==="Enter"&&t.id==="newperson"){e.preventDefault();var ab=document.querySelector("[data-addperson]");if(ab)ab.click()}
+    if(e.key==="Enter"&&t.id==="newteam"){e.preventDefault();var atb=document.querySelector("[data-addteam]");if(atb)atb.click()}
   });
   /* drag and drop on the board */
   var view=$("view");
