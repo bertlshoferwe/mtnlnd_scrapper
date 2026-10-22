@@ -175,6 +175,11 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cards{display:flex;flex-direction:column;gap:8px;min-height:24px}
 .card{background:var(--surface);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);cursor:grab}
 .card.dragging{opacity:.4}
+/* where a dragged card will land: a bar between cards, like Jira's */
+.dropbar{position:relative;height:2px;margin:-3px 2px;border-radius:2px;background:var(--c1);pointer-events:none;transform-origin:left center;animation:dbin .14s ease-out}
+.dropbar::before{content:"";position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;border:2px solid var(--c1);background:var(--col);box-sizing:border-box}
+@keyframes dbin{from{transform:scaleX(.2);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.dropbar{animation:none}}
 .ck{display:flex;align-items:center;gap:6px;margin-bottom:2px}
 .ck .pr{margin-left:auto}
 .card .title{display:block;width:100%;text-align:left;background:none;border:0;padding:2px 0 8px;font-weight:500;font-size:15px}
@@ -3484,7 +3489,7 @@ img.who{object-fit:cover;background:var(--chip)}
     ui.dragId=c.getAttribute("data-id")||c.getAttribute("data-iid");c.classList.add("dragging");
     try{e.dataTransfer.setData("text/plain",ui.dragId);e.dataTransfer.effectAllowed="move"}catch(x){}
   });
-  view.addEventListener("dragend",function(){ui.dragId=null;ui.dragCol=null;ui.dragRow=null;render()});
+  view.addEventListener("dragend",function(){ui.dragId=null;ui.dragCol=null;ui.dragRow=null;clearDropBar();render()});
   view.addEventListener("dragover",function(e){
     if(ui.dragRow){
       var otr=e.target.closest("tr[data-row]");if(!otr)return;
@@ -3497,11 +3502,25 @@ img.who{object-fit:cover;background:var(--chip)}
     if(th&&ui.dragCol){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll(".th-over"),function(x){x.classList.remove("th-over")});th.classList.add("th-over");return}
     var dy=e.target.closest("[data-day]");
     if(dy&&ui.dragId){e.preventDefault();Array.prototype.forEach.call(view.querySelectorAll("[data-day].drop"),function(x){x.classList.remove("drop")});dy.classList.add("drop");return}
-    var col=e.target.closest(".col");if(!col||!ui.dragId)return;
+    var col=e.target.closest(".col");
+    if(!col||!ui.dragId){clearDropBar();return}
     e.preventDefault();
-    Array.prototype.forEach.call(view.querySelectorAll(".col.over"),function(x){x.classList.remove("over")});
-    col.classList.add("over");
+    Array.prototype.forEach.call(view.querySelectorAll(".col.over"),function(x){if(x!==col)x.classList.remove("over")});
+    if(col.classList.contains("folded")){clearDropBar();col.classList.add("over");return}
+    col.classList.remove("over");
+    // the first card whose middle is below the pointer is the one the dragged card would go before
+    var box=col.querySelector(".cards");if(!box)return;
+    var cards=Array.prototype.filter.call(box.querySelectorAll(".card"),function(c){return c.getAttribute("data-id")!==ui.dragId});
+    var nxt=null;
+    for(var ci=0;ci<cards.length;ci++){var cr=cards[ci].getBoundingClientRect();if(e.clientY<cr.top+cr.height/2){nxt=cards[ci];break}}
+    var key=col.getAttribute("data-col")+"|"+(nxt?nxt.getAttribute("data-id"):"");
+    if(ui.dropKey===key)return;
+    ui.dropKey=key;ui.dropCol=col.getAttribute("data-col");ui.dropBefore=nxt?nxt.getAttribute("data-id"):null;
+    var bar=view.querySelector(".dropbar");if(bar)bar.remove();
+    bar=document.createElement("div");bar.className="dropbar";bar.setAttribute("aria-hidden","true");
+    if(nxt)box.insertBefore(bar,nxt);else box.appendChild(bar);
   });
+  function clearDropBar(){var b=view.querySelector(".dropbar");if(b)b.remove();ui.dropKey=null;ui.dropCol=null;ui.dropBefore=null}
   view.addEventListener("drop",function(e){
     if(ui.dragRow){
       var dtr=e.target.closest("tr[data-row]"),rid=ui.dragRow;ui.dragRow=null;
@@ -3513,12 +3532,24 @@ img.who{object-fit:cover;background:var(--chip)}
     if(th&&ui.dragCol){e.preventDefault();var from=ui.dragCol;ui.dragCol=null;moveCol(from,th.getAttribute("data-lcol"));return}
     var dy=e.target.closest("[data-day]");
     if(dy&&ui.dragId){e.preventDefault();var did0=ui.dragId;ui.dragId=null;var di=byId(did0);if(di)setField(di,"due",dy.getAttribute("data-day"));return}
-    var col=e.target.closest(".col");if(!col||!ui.dragId)return;
+    var col=e.target.closest(".col");if(!col||!ui.dragId){clearDropBar();return}
     e.preventDefault();
-    var over=e.target.closest(".card");
-    var before=over&&over.getAttribute("data-id")!==ui.dragId?over.getAttribute("data-id"):null;
-    var id=ui.dragId;ui.dragId=null;
-    moveTo(id,col.getAttribute("data-col"),before);
+    var sid=col.getAttribute("data-col"),before=ui.dropCol===sid?ui.dropBefore:null;
+    var id=ui.dragId;ui.dragId=null;clearDropBar();
+    var p=proj(),mv=byId(id),mode=colSort(p,sid);
+    if(mv&&mv.status===sid){   // dropped right back where it was: nothing to do
+      var all=p.issues.filter(function(x){return x.status===sid}).sort(mode==="rank"?function(a,b){return rk(a)-rk(b)}:colCmp(mode)),nx=all[all.indexOf(mv)+1];
+      if((before||null)===(nx?nx.id:null)){render();return}
+    }
+    // a card dropped at a particular spot in a sorted column: the column becomes Manual so it stays there
+    // (its cards first get ranks in the order they were showing, so nothing else jumps around)
+    if(mv&&mode!=="rank"&&!col.classList.contains("folded")&&(before||mv.status===sid)){
+      var shown=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(colCmp(mode));
+      shown.forEach(function(x,i){x.rank=(i+1)*1000});
+      state.colSort=state.colSort||{};state.colSort[p.id]=state.colSort[p.id]||{};state.colSort[p.id][sid]="rank";savePrefs();
+      toast("“"+stat(p,sid).name+"” is now sorted by hand, so the card stays where you dropped it.");
+    }
+    moveTo(id,sid,before);
   });
 
   var THEMES=["auto","light","dark"],TGL={auto:ic("auto",14),light:ic("sun",14),dark:ic("moon",14)},TLBL={auto:"Auto",light:"Light",dark:"Dark"};
