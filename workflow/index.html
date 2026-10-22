@@ -214,6 +214,17 @@ table.list select{background:var(--bg);border:1px solid var(--line);border-radiu
 .jl table.list th{position:sticky;top:0;z-index:1;background:var(--surface);font-size:12px;font-weight:700;white-space:nowrap;border-right:1px solid var(--line)}
 .jl table.list th button{padding:9px 10px}
 .jl table.list td{padding:6px 10px;font-size:14px;white-space:nowrap;border-right:1px solid var(--line)}
+.jl table.list td.led{cursor:pointer}
+.jl table.list td.led:hover{background:var(--chip)}
+.jl table.list td.ledon{padding:3px 6px;background:var(--surface)}
+.lin{min-width:130px;max-width:100%;font:inherit;font-size:14px;padding:4px 6px;border:1px solid var(--c1);border-radius:6px;background:var(--bg);color:var(--ink)}
+.lin2{display:flex;gap:4px}
+.lin2 .lin{min-width:0}
+.jl table.list td.ledon .lin[data-lf=title]{min-width:260px}
+.lpen{display:grid;place-items:center;flex:none;width:24px;height:24px;margin-left:2px;border:0;border-radius:5px;background:none;color:var(--muted);opacity:0;cursor:pointer}
+.lpen:hover{background:var(--chip);color:var(--ink)}
+tr:hover .lpen,.lpen:focus-visible{opacity:1}
+@media (hover:none){.lpen{opacity:1}}
 .jl table.list td.rx,.jl table.list th.th-x{border-right:0;width:44px;text-align:center}
 .jl table.list tbody tr:hover td{background:var(--col)}
 .jl td.wk{max-width:440px;overflow:hidden}
@@ -832,6 +843,7 @@ img.who{object-fit:cover;background:var(--chip)}
     enter:'<path d="M20 5v6a4 4 0 0 1-4 4H5"/><path d="m9 11-4 4 4 4"/>',
     more:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
     grip:'<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></g>',
+    pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -1474,7 +1486,30 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function fmtDay(s){return s?parse(s).toLocaleDateString(undefined,{month:"short",day:"2-digit",year:"numeric"}):""}
   function fmtStamp(ms){return ms?new Date(ms).toLocaleString(undefined,{month:"short",day:"2-digit",year:"numeric",hour:"numeric",minute:"2-digit"}):""}
+  /* List cells edit in place: click a cell and it turns into its control (the bid's name keeps
+     opening the bid; its pencil renames it). ui.lEdit = {id, k} is the cell being edited. */
+  var LEDIT={title:1,due:1,assignee:1,reporter:1,priority:1};
+  function listEditable(k){return canAct()&&(LEDIT[k]||k.indexOf("cf:")===0)}
+  function listEditor(k,is){
+    var p=proj(),a=' data-lid="'+is.id+'" data-lf="'+esc(k)+'"';
+    if(k==="title")return '<input class="lin" maxlength="255"'+a+' value="'+esc(is.title)+'" aria-label="Name">';
+    if(k==="due")return '<span class="lin2"><input class="lin" type="date"'+a+' value="'+esc(is.due)+'" aria-label="Due date">'+
+      (HAS_DUETIME&&is.due?'<input class="lin" type="time" data-lid="'+is.id+'" data-lf="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>';
+    if(k==="assignee")return '<select class="lin"'+a+' aria-label="Assignee">'+teamOptions(is.assignee)+'</select>';
+    if(k==="reporter")return '<select class="lin"'+a+' aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select>';
+    if(k==="priority")return '<select class="lin"'+a+' aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select>';
+    var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===k})[0];
+    return fd?cfInput(fd,is).replace(' data-f="cf:'+fd.id+'"',a).replace('class="bare','class="lin'):'';
+  }
   function listCell(k,is){
+    var e=ui.lEdit;
+    if(e&&e.id===is.id&&e.k===k)return '<td class="ledon">'+listEditor(k,is)+'</td>';
+    var h=listCellView(k,is);
+    if(!listEditable(k))return h;
+    if(k==="title")return h.replace('</span></td>','<button class="lpen" data-ledit="'+is.id+'|title" title="Rename" aria-label="Rename '+ikey(is)+'">'+ic("pencil",14)+'</button></span></td>');
+    return h.replace(/^<td( class="([^"]*)")?/,function(m,_,c){return '<td class="led'+(c?' '+c:'')+'" data-ledit="'+is.id+'|'+esc(k)+'"'});
+  }
+  function listCellView(k,is){
     var p=proj(),done=isDone(is);
     if(k.indexOf("cf:")===0){
       var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===k})[0],fv=fd?(is.fields||{})[fd.id]:"";
@@ -2175,6 +2210,10 @@ img.who{object-fit:cover;background:var(--chip)}
     ui.meAsked=true;openMe();
   }
   function render(){
+    // a list cell being edited: let its change save before the cell is replaced (removing a
+    // focused input fires its change mid-render otherwise)
+    var ae=document.activeElement;
+    if(ae&&ae.closest&&ae.closest("td.ledon")&&!ui.lBlur){ui.lBlur=true;try{ae.blur()}finally{ui.lBlur=false}}
     var v=state.view,d=curDiv(),p=proj();
     var loading=!(loaded.config&&loaded.divs&&loaded.spaces&&loaded.bids);
     syncMe();
@@ -2672,6 +2711,13 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- events ---------- */
   document.addEventListener("click",function(e){
     var el,t=e.target;
+    if((el=t.closest("[data-ledit]"))&&!t.closest("[data-open]")&&!t.closest("[data-lf]")){
+      var lp=el.getAttribute("data-ledit").split("|");
+      ui.lEdit={id:lp[0],k:lp.slice(1).join("|")};render();
+      var ed=document.querySelector("td.ledon [data-lf]");
+      if(ed){ed.focus();if(ed.select&&ed.type==="text")ed.select();if(ed.tagName==="SELECT"||ed.type==="date"){try{ed.showPicker()}catch(x){}}}
+      return;
+    }
     if(t.closest("[data-menu]")){
       if(window.matchMedia("(min-width:900px)").matches){state.sideHidden=!state.sideHidden;savePrefs();applySide();return}
       $("side").classList.add("open");$("scrim").classList.add("open");return;
@@ -2979,6 +3025,14 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-ff"))){ui.f[v]=el.value;ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-fteam"))){var fi=ui.f.teams.indexOf(v);if(el.checked&&fi<0)ui.f.teams.push(v);else if(!el.checked&&fi>-1)ui.f.teams.splice(fi,1);ui.fOpen=true;render();return}
     if((v=el.getAttribute("data-status"))){var is=byId(v);setField(is,"status",el.value);return}
+    if((v=el.getAttribute("data-lf"))&&el.closest("td.ledon")){
+      var lis=byId(el.getAttribute("data-lid"));if(!lis)return;
+      // a due date stays open so a time can be added; everything else is done
+      if(v!=="due")ui.lEdit=null;
+      if(!setField(lis,v,el.value))render();
+      if(v==="due"){var tm=document.querySelector('td.ledon [data-lf="dueTime"]');if(tm)tm.focus()}
+      return;
+    }
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
     if((v=el.getAttribute("data-cardpri"))){var cpi=byId(v);if(cpi)setField(cpi,"priority",el.value);return}
     if((v=el.getAttribute("data-cardwho"))){var cwi=byId(v);if(cwi)setField(cwi,"assignee",el.value);return}
@@ -3044,7 +3098,23 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.id==="p-name"&&!ui.keyTouched){$("p-key").value=autoKey(el.value);return}
     if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
   });
+  // clicking or tabbing away from a list cell being edited closes it (its change saved first)
+  document.addEventListener("focusout",function(e){
+    if(ui.lBlur||!ui.lEdit||!e.target.closest||!e.target.closest("td.ledon"))return;
+    setTimeout(function(){
+      var a=document.activeElement;
+      if(ui.lEdit&&!(a&&a.closest&&a.closest("td.ledon"))){ui.lEdit=null;render()}
+    },0);
+  });
   document.addEventListener("keydown",function(e){
+    if(ui.lEdit&&e.target.closest&&e.target.closest("td.ledon")){
+      if(e.key==="Escape"){
+        e.preventDefault();e.stopPropagation();
+        if(e.target.tagName==="INPUT")e.target.value=e.target.defaultValue;   // so leaving it saves nothing
+        ui.lEdit=null;render();return;
+      }
+      if(e.key==="Enter"&&e.target.tagName==="INPUT"){e.preventDefault();e.target.blur();return}
+    }
     if(ui.mq&&e.target===ui.mq.el){
       var mq=ui.mq;
       if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();mq.sel=(mq.sel+(e.key==="ArrowDown"?1:mq.list.length-1))%mq.list.length;updateMention(mq.el);return}
