@@ -182,13 +182,20 @@ def workflow_redirect():
 
 @app.route("/workflow/")
 def workflow_index():
-    resp = send_from_directory(WORKFLOW_DIR, "index.html")
+    # The config goes straight into the page rather than through config.js:
+    # Cloudflare caches .js files, and once cached a 404 from the proxy while
+    # the container was restarting for an update, leaving the board saying
+    # "The app isn't configured" for hours. HTML isn't cached.
+    with open(os.path.join(WORKFLOW_DIR, "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    page = page.replace('<script src="config.js"></script>',
+                        "<script>" + _workflow_config_js() + "</script>", 1)
+    resp = Response(page, mimetype="text/html")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
 
-@app.route("/workflow/config.js")
-def workflow_config():
+def _workflow_config_js():
     cfg = {
         "SUPABASE_URL": WORKFLOW_SUPABASE_URL,
         "SUPABASE_ANON_KEY": WORKFLOW_SUPABASE_ANON_KEY,
@@ -197,8 +204,14 @@ def workflow_config():
         "DIVISION_ID_COLUMN": "id",
         "DIVISION_NAME_COLUMN": "name",
     }
-    resp = Response("window.APP_CONFIG = " + json.dumps(cfg) + ";\n",
-                    mimetype="text/javascript")
+    # </ can't appear inside an inline <script>
+    return "window.APP_CONFIG = " + json.dumps(cfg).replace("</", "<\\/") + ";\n"
+
+
+@app.route("/workflow/config.js")
+def workflow_config():
+    # Kept for anything still asking for it; the page itself has the config inline.
+    resp = Response(_workflow_config_js(), mimetype="text/javascript")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
