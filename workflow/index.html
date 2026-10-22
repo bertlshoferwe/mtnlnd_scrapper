@@ -2629,7 +2629,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var A=is.attachments||[],docs=A.filter(function(f){return f.kind==="doc"}),atts=A.filter(function(f){return f.kind!=="doc"});
     var b=bsState(is),d=b.state==="ok"?b.data:null,src=d?(d.files||[]):[],hold=d?d.holders:null;
     var tab=ui.fileTab||"att";
-    var tabs=[["att","Attachments",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]];
+    var tabs=[["att","Supporting Docs",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]];
     var n=tab==="docs"?src.length+docs.length:tab==="att"?atts.length:0;
     var h='<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
@@ -2647,8 +2647,8 @@ img.who{object-fit:cover;background:var(--chip)}
       h+=dropzHTML("doc","add a document");
     }else if(tab==="att"){
       atts.forEach(function(f){h+=attRow(f)});
-      if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No attachments.</p>';
-      h+=dropzHTML("att","add attachment");
+      if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No supporting docs.</p>';
+      h+=dropzHTML("att","add a supporting doc");
     }else{
       if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they only show on bids added from Bid Scout.</p>';
       else if(b.state==="loading")h+='<p class="fnote">Loading plan holders from Bid Scout…</p>';
@@ -2749,7 +2749,7 @@ img.who{object-fit:cover;background:var(--chip)}
         var cur=byId(is.id);if(!cur)continue;
         var rec={id:id,name:f.name,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME};if(kind==="doc")rec.kind="doc";
         cur.attachments=(cur.attachments||[]).concat([rec]);
-        logH(cur,kind==="doc"?"Bid doc":"Attachment","",f.name);cur.updated=Date.now();save();
+        logH(cur,kind==="doc"?"Bid doc":"Supporting doc","",f.name);cur.updated=Date.now();save();
       }catch(err){toast("Couldn’t upload "+f.name+": "+((err&&err.message)||"unknown error"))}
       ui.uploading--;renderAttach();renderIssueAct();
     }
