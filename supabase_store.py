@@ -1230,6 +1230,20 @@ def _workflow_space(division_id):
     }).execute().data[0]
 
 
+def _rank_by_due(col, due, last):
+    """A rank that puts a new bid in due-date order among a column's bids, so
+    it lands in the right spot even in a column arranged by hand (Manual).
+    No due date, or nothing later: after everything (`last`)."""
+    if not due:
+        return last
+    col = sorted(col, key=lambda b: b.get("rank") or 0)
+    for i, b in enumerate(col):
+        if not b.get("due") or b["due"] > due:
+            prev = col[i - 1].get("rank") or 0 if i else (b.get("rank") or 0) - 1000
+            return (prev + (b.get("rank") or 0)) / 2
+    return last
+
+
 def create_workflow_bid(division_id, project_key, title, due=None, source_url=None, jira_key=None):
     """Add a project to its division's workflow space on the bid board, in
     the space's first column. Returns the bid id; calling it again for the
@@ -1247,17 +1261,19 @@ def create_workflow_bid(division_id, project_key, title, due=None, source_url=No
         _set_bid_jira_key(bid_id, jira_key)
         return bid_id
     space = _workflow_space(division_id)
-    bids = sb.table("wf_bids").select("num,rank").eq("space_id", space["id"]).execute().data
+    first = (space.get("statuses") or [{}])[0].get("id")
+    bids = sb.table("wf_bids").select("num,rank,status,due").eq("space_id", space["id"]).execute().data
     num = max([b["num"] for b in bids] + [0]) + 1
     num = max(num, space.get("next") or 1)
-    rank = max([b.get("rank") or 0 for b in bids] + [0]) + 1000
+    rank = _rank_by_due([b for b in bids if b.get("status") == first], due,
+                        max([b.get("rank") or 0 for b in bids] + [0]) + 1000)
     sb.table("wf_spaces").update({"next": num + 1}).eq("id", space["id"]).execute()
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     try:
         bid_id = sb.table("wf_bids").insert({
             "space_id": space["id"], "division_id": division_id, "num": num, "rank": rank,
             "type": "Task", "title": title.strip(), "descr": "",
-            "status": (space.get("statuses") or [{}])[0].get("id"),
+            "status": first,
             "priority": "Medium", "reporter": "Bid Scout", "due": due,
             "source_project_id": project_key, "source_url": source_url,
             "history": [{"by": "Bid Scout", "at": now_ms, "field": "created"}],
