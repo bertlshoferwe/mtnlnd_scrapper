@@ -591,7 +591,8 @@ def scan_site(site, ai_client):
             # everything from scratch every run.
             known_updated = supabase_store.load_project_last_updated(division_id)
             doc_links, login_result, current_updated = adapter.find_documents_with_browser(
-                site, _site_login(site), known_updated=known_updated)
+                site, _site_login(site), known_updated=known_updated,
+                holders_at=supabase_store.load_plan_holders_at(division_id))
             if current_updated:
                 supabase_store.save_project_last_updated(division_id, current_updated)
             _save_plan_holders(site, adapter)

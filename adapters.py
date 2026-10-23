@@ -18,7 +18,7 @@ import os
 import re
 import time
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -110,7 +110,7 @@ class SiteAdapter:
         `site` is the sites row (dict)."""
         raise NotImplementedError
 
-    def find_documents_with_browser(self, site, login, known_updated=None):
+    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None):
         """Only for needs_browser=True adapters. Return (doc_links,
         login_result, current_updated):
         doc_links is [(label, document_url_or_None, filename, content_bytes_or_None,
@@ -613,7 +613,16 @@ class ConstructConnectAdapter(SiteAdapter):
     USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 
-    def find_documents_with_browser(self, site, login, known_updated=None):
+    # Projects skipped as unchanged still get their Contacts re-read when the
+    # saved plan holders are missing or older than this — companies keep
+    # joining right up to bid day, while the documents stay the same. Capped
+    # per run so a first pass over a long list doesn't eat the whole budget.
+    CONTACTS_STALE_S = 20 * 3600
+    MAX_CONTACT_REFRESH = 40
+
+    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None):
+        self._site_name = site.get("name") or ""
+        self._holders_at = holders_at or {}
         if not login:
             print("  ! ConstructConnect: no login configured on this site — skipping")
             return [], None, {}
@@ -905,6 +914,7 @@ class ConstructConnectAdapter(SiteAdapter):
         project_count = 0
         skipped_no_docs = 0
         skipped_unchanged = 0
+        contacts_refreshed = 0
         while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
             rows = self._project_rows(page)
             if not rows:
@@ -922,6 +932,12 @@ class ConstructConnectAdapter(SiteAdapter):
                         and known_updated.get(project_id) == last_updated):
                     skipped_unchanged += 1
                     project_count += 1
+                    if contacts_refreshed < self.MAX_CONTACT_REFRESH and self._contacts_stale(label):
+                        contacts_refreshed += 1
+                        try:
+                            self._refresh_contacts(page, label)
+                        except Exception as e:
+                            print(f"  ! ConstructConnect: couldn't refresh plan holders for '{label}': {e}")
                     continue
                 try:
                     out.extend(self._download_project(page, label))
@@ -933,7 +949,8 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(1500)
         print(f"  ConstructConnect: {project_count} project(s) checked, "
               f"{skipped_no_docs} skipped (no documents posted yet), "
-              f"{skipped_unchanged} skipped (unchanged since last scan), "
+              f"{skipped_unchanged} skipped (unchanged since last scan; "
+              f"{contacts_refreshed} of those had their plan holders refreshed), "
               f"{len(out)} document(s) found")
         return out, current_updated
 
@@ -1060,6 +1077,28 @@ class ConstructConnectAdapter(SiteAdapter):
         except Exception:
             pass
         return False
+
+    def _contacts_stale(self, label):
+        at = self._holders_at.get(f"{self._site_name} — {label}")
+        if not at:
+            return True
+        try:
+            seen = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        return (datetime.now(timezone.utc) - seen).total_seconds() > self.CONTACTS_STALE_S
+
+    def _refresh_contacts(self, page, label):
+        """Opens an unchanged project from the results list just to re-read
+        its Contacts (plan holders), then comes back to the list."""
+        self._dismiss_cookie_banner(page)
+        page.click(f"text={label}", timeout=8000)
+        try:
+            page.wait_for_selector("text=Documents", timeout=self.PAGE_TIMEOUT_MS)
+            self._extract_contacts(page, label, page.url)
+        finally:
+            page.go_back()
+            page.wait_for_timeout(1200)
 
     def _download_project(self, page, label):
         """Navigates to `label`'s project from the current results list,

@@ -1950,6 +1950,19 @@ def _load_project_plan_holders(division_id, project_key):
     return res.data[0].get("plan_holders"), res.data[0].get("plan_holders_at")
 
 
+def load_plan_holders_at(division_id):
+    """{project_key: when its plan holders were last read} for every project
+    that has a saved list — lets a browser adapter re-read stale ones."""
+    try:
+        res = (
+            get_client().table("project_flags").select("project_key,plan_holders_at")
+            .eq("division_id", division_id).not_.is_("plan_holders_at", "null").execute()
+        )
+    except Exception:
+        return {}
+    return {r["project_key"]: r["plan_holders_at"] for r in res.data}
+
+
 def load_project_last_updated(division_id):
     """{project_id: 'Oct 4, 2026'} — the ConstructConnect results grid's own
     "Last Updated" date as of the last time each project was actually
