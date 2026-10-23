@@ -738,12 +738,6 @@ h1{font-weight:800;font-size:24px;letter-spacing:-.01em}
 .tmore:hover,.tmore[aria-expanded="true"]{background:var(--chip)}
 @media (hover:none){.tmore{display:none}}
 #vmenu{display:none;z-index:60}
-.jrep{margin-top:6px}
-.jtable{max-height:360px;overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:8px}
-.jtable table{width:100%;border-collapse:collapse;font-size:13px}
-.jtable th{position:sticky;top:0;background:var(--surface);text-align:left;font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line)}
-.jtable td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-.jtable td.num{text-align:right;color:var(--muted)}
 .fmenu .mspc{display:inline-block;width:15px;flex:none}
 .fmenu button:disabled{opacity:.45;cursor:default}
 .fmenu button:disabled:hover{background:none}
@@ -2534,7 +2528,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var nt=$("setNewTpl");if(nt)nt.style.display="none";   // the + lives on the Workflow templates panel now
     var h='<div class="settabs" role="tablist">'+tabs.map(function(x){return '<button class="tab" role="tab" data-settab="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+esc(x[1])+'</button>'}).join("")+'</div>';
     if(tab==="space")return h+settingsHTML();
-    if(tab==="division")return h+membersHTML(d)+jiraHTML(d);
+    if(tab==="division")return h+membersHTML(d);
     h+=tplEditorHTML();
     if(D.archived.length){
       h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
@@ -2549,55 +2543,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     return h;
   }
-  /* ---------- Jira import / sync (the scan worker does it: jira_sync.py) ---------- */
-  function jiraApi(d,path,body){
-    return fetch("/api/"+encodeURIComponent(d.id)+"/jira-sync"+(path||""),body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{})
-      .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||("Request failed ("+r.status+")"));return j})});
-  }
-  function jiraPoll(d){
-    clearTimeout(ui.jiraT);
-    jiraApi(d,"/status").then(function(st){
-      ui.jira=ui.jira||{};ui.jira[d.id]=st;ui.jiraErr=null;
-      if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
-      if(st.running)ui.jiraT=setTimeout(function(){jiraPoll(d)},2500);
-      else if(st.report&&!st.dry)scheduleReload();   // a real import just finished: show the new bids
-    }).catch(function(e){ui.jiraErr=e.message;if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML()});
-  }
   function fmtBytes(n){return n>1e9?(n/1e9).toFixed(1)+" GB":n>1e6?(n/1e6).toFixed(1)+" MB":Math.max(1,Math.round(n/1e3))+" KB"}
-  function jiraHTML(d){
-    ui.jira=ui.jira||{};
-    var st=ui.jira[d.id];
-    if(st===undefined){ui.jira[d.id]=null;jiraPoll(d)}
-    var h='<section class="panel"><h3>Jira</h3><p class="fine" style="margin:0 0 10px">Copy every issue in this division’s Jira project onto the board — fields, comments, attachments and subtasks — then keep pulling Jira’s changes every 15 minutes. Preview first: it shows what would happen and changes nothing.</p>';
-    if(ui.jiraErr)h+='<p class="fine" style="color:var(--high)">'+esc(ui.jiraErr)+'</p>';
-    var running=st&&st.running,rep=st&&st.report;
-    h+='<div class="srow" style="border:0;gap:8px;flex-wrap:wrap">'+
-      '<button class="btn small" data-jira="preview"'+(running?' disabled':'')+'>'+(running&&st.dry?'Previewing…':'Preview')+'</button>'+
-      '<button class="btn small primary" data-jira="import"'+(running||!(rep&&rep.dry)?' disabled':'')+'>'+(running&&!st.dry?'Importing…':ui.armJ?'Tap again to import':'Import now')+'</button>'+
-      '<span class="fine" style="margin:0">'+(running&&!st.dry?'Copying attachments can take a few minutes.':st&&st.last_sync?'Last synced '+esc(new Date(st.last_sync).toLocaleString()):'')+'</span></div>';
-    if(st&&st.error)h+='<p class="fine" style="color:var(--high)">'+esc(st.error)+'</p>';
-    if(rep){
-      var warn=function(o,lab){var k=Object.keys(o||{});return k.length?'<p class="fine" style="color:var(--high);margin:6px 0 0">'+lab+': '+k.map(function(x){return esc(x||"(blank)")+" ("+o[x]+")"}).join(", ")+'</p>':''};
-      h+='<div class="jrep"><p style="margin:6px 0"><b>'+(rep.dry?'Preview':'Done')+'</b> · Jira '+esc(rep.project)+' → '+esc(rep.space)+': '+
-        '<b>'+rep.new+'</b> new, <b>'+rep.updated+'</b> updated, '+rep.unchanged+' already up to date'+
-        (rep.attachments?' · '+rep.attachments+' attachment'+(rep.attachments===1?'':'s')+' ('+fmtBytes(rep.attachment_bytes)+')':'')+'</p>'+
-        warn(rep.unmatched_statuses,"Statuses with no matching column (go to the first column)")+
-        warn(rep.unmatched_teams,"Teams not on the board (left blank)")+
-        (rep.people&&rep.people.length?'<p class="fine" style="margin:6px 0 0"><b>People:</b> '+rep.people.map(esc).join(" · ")+'</p>':'')+
-        '<p class="fine" style="margin:6px 0 0"><b>Fields copied:</b> '+(rep.fields.length?rep.fields.map(esc).join(", "):"none")+
-        (rep.board_fields_missing.length?' · <b>No Jira field for:</b> '+rep.board_fields_missing.map(esc).join(", "):'')+
-        (rep.jira_fields_unused.length?' · <b>Jira fields not copied:</b> '+rep.jira_fields_unused.map(esc).join(", "):'')+'</p>';
-      var rows=rep.issues.filter(function(x){return x.action!=="unchanged"});
-      if(rows.length){
-        h+='<div class="jtable"><table><thead><tr><th>Jira</th><th>Bid</th><th>Board</th><th>Column</th><th>Assignee</th><th>Comments</th><th>Files</th></tr></thead><tbody>'+
-          rows.map(function(x){return '<tr><td>'+esc(x.key)+'</td><td>'+esc(x.title)+'</td><td>'+(x.action==="new"?esc(x.board)+' <span class="fine">new</span>':esc(x.board||"")+' <span class="fine">update</span>')+'</td>'+
-            '<td'+(x.matched===false?' style="color:var(--high)" title="No column for Jira status “'+esc(x.status)+'”"':'')+'>'+esc(x.column||"")+'</td><td>'+esc(x.assignee||"")+'</td><td class="num">'+(x.comments||"")+'</td><td class="num">'+(x.attachments||"")+'</td></tr>'}).join("")+
-          '</tbody></table></div>';
-      }
-      h+='</div>';
-    }
-    return h+'</section>';
-  }
   function membersHTML(d){
     var ids=teamIds(d).sort(function(a,b){return nameOf(a).localeCompare(nameOf(b))});
     var h='<section class="panel"><div class="phead"><h3>Members</h3><button class="addbtn" data-pnew aria-label="Add a person" title="Add a person">'+ic("plus",16)+'</button></div>'+
@@ -3503,18 +3449,6 @@ img.who{object-fit:cover;background:var(--chip)}
       tp3.statuses.push({name:cn,cat:"doing"});save();render();
       var cins=document.querySelectorAll("#tplBody [data-tcname]"),cin=cins[cins.length-1];
       if(cin){cin.scrollIntoView({block:"nearest",inline:"end"});cin.focus();cin.select()}
-      return;
-    }
-    if((el=t.closest("[data-jira]"))){
-      var jd=curDiv(),ja=el.getAttribute("data-jira");if(!jd)return;
-      if(ja==="import"&&!ui.armJ){ui.armJ=true;$("orgSetBody").innerHTML=orgSettingsHTML();return}
-      ui.armJ=false;ui.jiraErr=null;
-      jiraApi(jd,"",{dry:ja!=="import"}).then(function(){jiraPoll(jd)}).catch(function(e){
-        ui.jiraErr=/404/.test(e.message)?"The scan worker hasn’t picked up the Jira import yet — it updates itself a few minutes after a new version ships. Try again shortly.":e.message;
-        if(ui.jira[jd.id])ui.jira[jd.id].running=false;
-        $("orgSetBody").innerHTML=orgSettingsHTML();
-      });
-      ui.jira[jd.id]=Object.assign({},ui.jira[jd.id]||{},{running:true,dry:ja!=="import",error:null});$("orgSetBody").innerHTML=orgSettingsHTML();
       return;
     }
     if((el=t.closest("[data-vmenu]"))){var vk=el.getAttribute("data-vmenu");ui.vmenu=ui.vmenu===vk?null:vk;render();return}

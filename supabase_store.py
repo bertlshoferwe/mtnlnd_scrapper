@@ -119,9 +119,6 @@ DEFAULT_SETTINGS = {
     # Jira project "Add to Jira" files into for this division (its short key,
     # e.g. "GEO"). Blank = the JIRA_PROJECT_KEY env var.
     "jira_project_key": "",
-    # Set once the division's Jira project has been imported onto the bid
-    # board; the scanner then pulls Jira changes every 15 minutes (jira_sync.py).
-    "jira_sync": False,
 }
 _SETTING_LIMITS = {"fit_min_decisions": (5, 1000), "fit_sure_at": (0, 100)}
 
