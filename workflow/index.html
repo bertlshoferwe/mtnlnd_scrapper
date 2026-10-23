@@ -250,6 +250,8 @@ table.list select{background:var(--bg);border:1px solid var(--line);border-radiu
 .lpen:hover{background:var(--chip);color:var(--ink)}
 tr:hover .lpen,.lpen:focus-visible{opacity:1}
 @media (hover:none){.lpen{opacity:1}}
+.lcolc label{display:inline-flex;align-items:center;gap:6px;padding:5px 4px;font-size:14px;cursor:pointer}
+.lcolc.off label{color:var(--muted)}
 .jl table.list td.rx,.jl table.list th.th-x{border-right:0;width:44px;text-align:center}
 .jl table.list tbody tr:hover td{background:var(--col)}
 .jl td.wk{max-width:440px;overflow:hidden}
@@ -1749,18 +1751,22 @@ img.who{object-fit:cover;background:var(--chip)}
     return h+'</div>';
   }
   function listHTML(){
-    var p=proj(),order=listOrder(),all=p.issues.filter(function(i){return i.type!=="Subtask"||visible(i)}),rows=p.issues.filter(visible).sort(cmp),h='';
+    var p=proj(),full=listOrder(),hid=state.listHide||[],order=full.filter(function(k){return k==="title"||hid.indexOf(k)<0}),all=p.issues.filter(function(i){return i.type!=="Subtask"||visible(i)}),rows=p.issues.filter(visible).sort(cmp),h='';
     if(ui.colsOpen){
-      h+='<div class="lbar"><span class="fine" style="margin:0">Column order:</span>'+order.map(function(k,i){
-        return '<span class="saved"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+esc(lcolName(k))+' left"'+(i===0?' disabled':'')+'>'+ic("arrowL",14)+'</button><span style="padding:5px 4px;font-size:14px">'+esc(lcolName(k))+'</span><button data-colmv="'+k+'" data-d="1" aria-label="Move '+esc(lcolName(k))+' right"'+(i===order.length-1?' disabled':'')+'>'+ic("arrowR",14)+'</button></span>';
-      }).join("")+'<button class="btn small" data-colreset>Reset order</button></div>';
+      // tick a column to show it, untick to hide it; the arrows move it (Work is always shown)
+      h+='<div class="lbar"><span class="fine" style="margin:0">Columns:</span>'+full.map(function(k,i){
+        var on=k==="title"||hid.indexOf(k)<0;
+        return '<span class="saved lcolc'+(on?'':' off')+'"><button data-colmv="'+k+'" data-d="-1" aria-label="Move '+esc(lcolName(k))+' left"'+(i===0?' disabled':'')+'>'+ic("arrowL",14)+'</button>'+
+          '<label><input type="checkbox" data-colshow="'+k+'"'+(on?' checked':'')+(k==="title"?' disabled':'')+'>'+esc(lcolName(k))+'</label>'+
+          '<button data-colmv="'+k+'" data-d="1" aria-label="Move '+esc(lcolName(k))+' right"'+(i===full.length-1?' disabled':'')+'>'+ic("arrowR",14)+'</button></span>';
+      }).join("")+'<button class="btn small" data-colreset>Reset</button></div>';
     }
     var grp=curGroup(p);GROUPBAR=groupBarHTML(p);
     var canDrag=ui.sort==="rank"&&canAct()&&!grp;
     h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
       var on=ui.sort===k;
       return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">'+ic("grip",14)+'</span><button data-sort="'+k+'">'+esc(lcolName(k))+(on?(ui.dir>0?ic("arrowU",12):ic("arrowD",12)):'')+'</button></div></th>';
-    }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Column order" aria-label="Column order"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
+    }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Show, hide and order columns" aria-label="Columns"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
     var emit=function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">'+ic("more",18)+'</button></td></tr>'};
     if(!grp)rows.forEach(emit);
     else{
@@ -3234,7 +3240,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-calmode]"))){setCalMode(el.getAttribute("data-calmode"));return}
     if(t.closest("[data-unsch]")){ui.unsch=!ui.unsch;render();return}
     if(t.closest("[data-colsbtn]")){ui.colsOpen=!ui.colsOpen;render();return}
-    if(t.closest("[data-colreset]")){state.listCols2=null;save();render();return}
+    if(t.closest("[data-colreset]")){state.listCols2=null;state.listHide=[];save();render();return}
+    if((el=t.closest("[data-colshow]"))){
+      var hk=el.getAttribute("data-colshow"),hl=(state.listHide||[]).filter(function(x){return x!==hk});
+      if(!el.checked)hl.push(hk);state.listHide=hl;save();render();return;
+    }
     if((el=t.closest("[data-colmv]"))){
       var lo=listOrder(),li=lo.indexOf(el.getAttribute("data-colmv")),lj=li+parseInt(el.getAttribute("data-d"),10);
       if(lj>=0&&lj<lo.length){var lt=lo[li];lo[li]=lo[lj];lo[lj]=lt;state.listCols2=lo;save();render()}
