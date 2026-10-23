@@ -1223,10 +1223,6 @@
         <span class="set-input"><input type="number" id="setFitSure" min="0" max="100" step="5"> % sure</span>
       </label>
       <p class="desc set-stats" id="setFitStats"></p>
-      <label class="set-row">
-        <span><b>Jira project</b><span class="desc" id="setJiraDesc">The short code of the Jira project "Add to Board" files into, like GEO.</span></span>
-        <span class="set-input"><input type="text" class="set-text" id="setJiraProject" maxlength="10" autocomplete="off" spellcheck="false"></span>
-      </label>
       <div class="row" style="gap:8px; margin-top:14px;">
         <button class="btn-primary" id="setSaveBtn" onclick="saveSettings()">Save</button>
         <button class="btn-ghost" onclick="closeModal()">Cancel</button>
@@ -3126,7 +3122,6 @@ function openProjectModal(i) {
   renderDecision(p);
   renderFitSuggestion(p);
   renderProjectJiraBtn(p);
-  verifyProjectJira(p);
 
   renderProjectFiles();
   document.getElementById('projTabDocsCount').textContent = p.file_count || '';
@@ -3637,12 +3632,6 @@ async function openSettings() {
     document.getElementById('setFitMin').value = st.fit_min_decisions;
     document.getElementById('setFitSure').value = st.fit_sure_at;
     document.getElementById('setFitStats').textContent = fitStatsText(res.fit_training);
-    const jira = document.getElementById('setJiraProject');
-    jira.value = st.jira_project_key || '';
-    jira.placeholder = res.jira_default_project || 'GEO';
-    document.getElementById('setJiraDesc').textContent =
-      'The short code of the Jira project "Add to Board" files into, like GEO.' +
-      (res.jira_default_project ? ' Leave blank to use ' + res.jira_default_project + '.' : '');
     openModal('settings');
   } catch (e) {
     alert(e.message);
@@ -3661,7 +3650,6 @@ async function saveSettings() {
         fit_enabled: document.getElementById('setFitEnabled').checked,
         fit_min_decisions: document.getElementById('setFitMin').value,
         fit_sure_at: document.getElementById('setFitSure').value,
-        jira_project_key: document.getElementById('setJiraProject').value,
       }),
     });
     renderFitTraining(res.fit_training);
@@ -3982,32 +3970,6 @@ async function saveBoardLink() {
   }
 }
 
-// Called every time a project's modal opens, if it has a stored jira_key —
-// confirms the issue hasn't been deleted on the Jira side since. Reverts
-// the button to "Add to Board" if it's gone; silently does nothing otherwise
-// (including if Jira is unreachable) so a network blip can't drop a real link.
-async function verifyProjectJira(p) {
-  if (!p.jira_key) return;
-  try {
-    const res = await api('/api/' + currentDivision + '/projects/jira/verify', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ project_key: p.key, jira_key: p.jira_key }),
-    });
-    if (!res.exists && currentProject === p) {
-      p.jira_key = null;
-      p.jira_url = null;
-      renderProjectJiraBtn(p);
-      if (p.bucket === 'jira') {
-        // The issue was deleted in Jira — the server moved it back to review.
-        p.bucket = 'review';
-        p.decision = null;
-        renderDecision(p);
-        loadProjects();
-      }
-    }
-  } catch (e) { /* ignore — leave the button as-is */ }
-}
-
 async function addProjectToJira(skipLinkCheck) {
   const p = currentProject;
   if (!p) return;
@@ -4034,11 +3996,6 @@ async function addProjectToJira(skipLinkCheck) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ project_key: p.key, summary: p.project, due_date: p.bid_date }),
     });
-    if (res.workflow_error) {
-      alert('Added to Jira, but it couldn\'t be added to the bid board. Add it there by hand for now.\n\nReason: ' + res.workflow_error);
-    }
-    p.jira_key = res.jira_key;
-    p.jira_url = res.jira_url;
     p.board_bid_id = res.board_bid_id || null;
     p.bucket = 'jira';
     p.decision = 'jira';
@@ -4050,7 +4007,7 @@ async function addProjectToJira(skipLinkCheck) {
     renderProjectJiraBtn(p);
     renderDecision(p);
     renderFitSuggestion(p);
-    loadProjects();  // moves to the Jira tab
+    loadProjects();  // moves to the Bid Board tab
   } catch (e) {
     alert(e.message);
   } finally {

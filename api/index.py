@@ -32,8 +32,7 @@ Routes:
   GET  /api/<division_id>/results-info       stats + latest run_date, for the Results card
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=review|jira|not_fit, project=<key>)
   POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
-  POST /api/<division_id>/projects/jira      file a project as a Jira issue (JIRA_* env vars), and as a bid on the workflow board
-  POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
+  POST /api/<division_id>/projects/jira      Add to Board: put a project on the bid board (no Jira issue any more)
   GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
   GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
   GET  /api/<division_id>/bids/<bid_id>/project-candidates  Bid Scout projects a hand-made bid might be
@@ -113,21 +112,6 @@ def _schedule_hm(text):
 
 SCHEDULE_UTC_HM = _schedule_hm(DISPLAY_SCHEDULE_UTC)
 
-# "Add to Jira" button — files a project as an issue via the Jira Cloud REST
-# API. JIRA_BASE_URL is the site root (e.g. https://yourteam.atlassian.net),
-# JIRA_EMAIL + JIRA_API_TOKEN are Basic-auth credentials for a Jira Cloud API
-# token (https://id.atlassian.com/manage-profile/security/api-tokens), and
-# JIRA_PROJECT_KEY is the default target project's short key (e.g. "GEO") —
-# a division can file somewhere else via its jira_project_key setting. New
-# issues land wherever the project's workflow puts a freshly-created issue
-# (its board's leftmost column) — nothing here sets status explicitly.
-# Stripped (and the key upper-cased) so stray spaces or "geo" in the env
-# file still work.
-JIRA_BASE_URL = (os.environ.get("JIRA_BASE_URL") or "").strip().rstrip("/")
-JIRA_EMAIL = (os.environ.get("JIRA_EMAIL") or "").strip()
-JIRA_API_TOKEN = (os.environ.get("JIRA_API_TOKEN") or "").strip()
-JIRA_PROJECT_KEY = (os.environ.get("JIRA_PROJECT_KEY") or "").strip().upper()
-JIRA_ISSUE_TYPE = (os.environ.get("JIRA_ISSUE_TYPE") or "").strip() or "Task"
 
 # The bid workflow board (workflow/index.html), served at /workflow/. Unlike
 # the dashboard it talks to Supabase straight from the browser, so it needs
@@ -934,14 +918,12 @@ def api_get_settings(division_id):
     if err:
         return err
     return jsonify({"settings": supabase_store.get_division_settings(division_id),
-                    "fit_training": supabase_store.fit_training_stats(division_id),
-                    "jira_default_project": JIRA_PROJECT_KEY})
+                    "fit_training": supabase_store.fit_training_stats(division_id)})
 
 
 @app.route("/api/<division_id>/settings", methods=["PATCH"])
 def api_save_settings(division_id):
-    """Body: any of {"fit_enabled", "fit_min_decisions", "fit_sure_at",
-    "jira_project_key"}."""
+    """Body: any of {"fit_enabled", "fit_min_decisions", "fit_sure_at"}."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -1007,94 +989,36 @@ def api_project_plan_holders(division_id):
 
 @app.route("/api/<division_id>/projects/jira", methods=["POST"])
 def api_add_project_to_jira(division_id):
-    """File a project as a Jira issue. Body: {"project_key", "summary",
-    "due_date"}. project_key is the internal scan_results.site value (used
-    to remember the created issue); summary/due_date become the issue's
-    summary/due date. Returns the created issue's key + browse URL."""
+    """Add to Board: put a project on the bid board as a new bid. Body:
+    {"project_key", "summary", "due_date"}. project_key is the internal
+    scan_results.site value; summary/due_date become the bid's title/due date.
+    Files the project under the dashboard's Bid Board tab (decision "jira",
+    its old name). Jira isn't involved any more (disconnected 2026-10-23).
+    Returns {"ok", "board_bid_id", "workflow_url"}."""
     _, err = _require_division(division_id)
     if err:
         return err
-    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN):
-        return jsonify({"error": "Jira isn't configured — set JIRA_BASE_URL, "
-                                  "JIRA_EMAIL and JIRA_API_TOKEN."}), 400
-    jira_project = (supabase_store.get_division_settings(division_id).get("jira_project_key")
-                    or JIRA_PROJECT_KEY)
-    if not jira_project:
-        return jsonify({"error": "No Jira project is picked for this tab yet — "
-                                  "set one in the settings window."}), 400
+    if not WORKFLOW_SUPABASE_URL:
+        return jsonify({"error": "The bid board isn't set up yet."}), 400
     data = request.get_json(force=True, silent=True) or {}
     key = (data.get("project_key") or "").strip()
     summary = (data.get("summary") or "").strip()
     if not key or not summary:
         return jsonify({"error": "project_key and summary are required"}), 400
-    fields = {
-        "project": {"key": jira_project},
-        "summary": summary,
-        "issuetype": {"name": JIRA_ISSUE_TYPE},
-    }
     due_date = (data.get("due_date") or "").strip()
-    if due_date:
-        fields["duedate"] = due_date
-    # Already filed once (its board bid was deleted since, or it predates the
-    # board): reuse that issue rather than file a second one in Jira.
-    existing = supabase_store.load_project_jira_keys(division_id).get(key)
-    if existing:
-        try:
-            supabase_store.set_project_decision(division_id, key, "jira")
-        except Exception as e:
-            print(f"  ! couldn't record the Jira decision for {key} ({e})")
-        return _add_to_board(division_id, key, summary, due_date, existing)
-    try:
-        resp = requests.post(
-            f"{JIRA_BASE_URL}/rest/api/3/issue",
-            auth=(JIRA_EMAIL, JIRA_API_TOKEN),
-            json={"fields": fields},
-            timeout=15,
-        )
-    except requests.RequestException as e:
-        return jsonify({"error": f"couldn't reach Jira: {e}"}), 424
-    if not resp.ok:
-        detail = resp.text
-        try:
-            body = resp.json()
-            detail = "; ".join(body.get("errorMessages") or []) or str(body.get("errors") or body)
-        except Exception:
-            pass
-        # 424, not 502: Cloudflare swaps a 502 for its own page, dropping
-        # this message — the dashboard would only say "Request failed (502)".
-        print(f"  ! Jira refused {key} ({resp.status_code}): {detail}")
-        return jsonify({"error": f"Jira error: {detail}"}), 424
-    issue_key = resp.json().get("key")
-    try:
-        supabase_store.set_project_jira_key(division_id, key, issue_key)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    # Filing it is the decision — moves it to the Jira tab.
-    try:
-        supabase_store.set_project_decision(division_id, key, "jira")
-    except ValueError as e:
-        print(f"  ! couldn't record the Jira decision for {key} ({e})")
-    return _add_to_board(division_id, key, summary, due_date, issue_key)
-
-
-def _add_to_board(division_id, key, summary, due_date, issue_key):
-    out = {"ok": True, "jira_key": issue_key, "jira_url": f"{JIRA_BASE_URL}/browse/{issue_key}"}
-    # Running side by side with Jira for now: the same project also becomes a
-    # bid on the workflow board. Never blocks the Jira filing — a failure just
-    # comes back as workflow_error for the dashboard to mention. Skipped until
-    # the board is configured (WORKFLOW_SUPABASE_URL), i.e. its SQL has been run.
-    if not WORKFLOW_SUPABASE_URL:
-        return jsonify(out)
     try:
         back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
         bid_id = supabase_store.create_workflow_bid(
-            division_id, key, summary, due=due_date or None, source_url=back, jira_key=issue_key)
-        out["workflow_url"] = f"/workflow/?bid={bid_id}"
-        out["board_bid_id"] = bid_id
+            division_id, key, summary, due=due_date or None, source_url=back,
+            jira_key=supabase_store.load_project_jira_keys(division_id).get(key))
     except Exception as e:
-        print(f"  ! couldn't add {key} to the workflow board ({e})")
-        out["workflow_error"] = str(e)
-    return jsonify(out)
+        print(f"  ! couldn't add {key} to the bid board ({e})")
+        return jsonify({"error": f"Couldn't add it to the bid board: {e}"}), 424
+    try:
+        supabase_store.set_project_decision(division_id, key, "jira")
+    except Exception as e:
+        print(f"  ! couldn't record the board decision for {key} ({e})")
+    return jsonify({"ok": True, "board_bid_id": bid_id, "workflow_url": f"/workflow/?bid={bid_id}"})
 
 
 @app.route("/api/<division_id>/projects/board-candidates", methods=["GET"])
@@ -1244,47 +1168,6 @@ def api_bid_link_project(division_id, bid_id):
     except Exception as e:
         print(f"  ! couldn't record the board decision for {key} ({e})")
     return jsonify({"ok": True, "project_key": key, "source_url": back})
-
-
-@app.route("/api/<division_id>/projects/jira/verify", methods=["POST"])
-def api_verify_project_jira(division_id):
-    """Check whether a previously-filed Jira issue still exists (it may have
-    been deleted on the Jira side since). Body: {"project_key", "jira_key"}.
-    If Jira reports it gone (404), clears the stored jira_key so the
-    dashboard's button reverts to "Add to Jira". Any other outcome (Jira
-    unreachable, not configured, auth error) leaves the stored key alone —
-    a transient failure here shouldn't make a real link disappear."""
-    _, err = _require_division(division_id)
-    if err:
-        return err
-    data = request.get_json(force=True, silent=True) or {}
-    key = (data.get("project_key") or "").strip()
-    jira_key = (data.get("jira_key") or "").strip()
-    if not (JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN) or not key or not jira_key:
-        return jsonify({"exists": True})
-    try:
-        resp = requests.get(
-            f"{JIRA_BASE_URL}/rest/api/3/issue/{jira_key}",
-            params={"fields": "summary"},
-            auth=(JIRA_EMAIL, JIRA_API_TOKEN),
-            timeout=10,
-        )
-    except requests.RequestException:
-        return jsonify({"exists": True})
-    if resp.status_code == 404:
-        try:
-            supabase_store.set_project_jira_key(division_id, key, None)
-        except ValueError:
-            pass
-        # The issue is gone, so it's no longer "in Jira" — back to review.
-        decision = (supabase_store.load_project_decisions(division_id).get(key) or {}).get("decision")
-        if decision == "jira":
-            try:
-                supabase_store.set_project_decision(division_id, key, None, source="jira_deleted")
-            except ValueError:
-                pass
-        return jsonify({"exists": False})
-    return jsonify({"exists": True})
 
 
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")

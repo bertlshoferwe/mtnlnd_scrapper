@@ -116,9 +116,6 @@ DEFAULT_SETTINGS = {
     "fit_enabled": True,
     "fit_min_decisions": int(os.environ.get("FIT_MIN_DECISIONS") or "50"),
     "fit_sure_at": 60,
-    # Jira project "Add to Jira" files into for this division (its short key,
-    # e.g. "GEO"). Blank = the JIRA_PROJECT_KEY env var.
-    "jira_project_key": "",
 }
 _SETTING_LIMITS = {"fit_min_decisions": (5, 1000), "fit_sure_at": (0, 100)}
 
