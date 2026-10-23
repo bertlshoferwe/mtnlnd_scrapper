@@ -205,6 +205,7 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cpick .who{width:24px;height:24px;font-size:10px;color:#fff}
 .meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta .who{margin-left:auto}
+.tmap{display:inline-grid;place-items:center;width:22px;height:22px;flex:0 0 auto;color:var(--muted)}
 .mv{display:flex;gap:6px;margin-top:8px}
 .mv button{flex:1;background:var(--chip);border:0;border-radius:6px;padding:5px 0;font-size:13px;color:var(--muted)}
 .mv button:disabled{opacity:.35;cursor:default}
@@ -1560,6 +1561,26 @@ img.who{object-fit:cover;background:var(--chip)}
       return (x<y?-dir:x>y?dir:0)||rk(a)-rk(b);
     };
   }
+  /* A team's state drawn as a small colored outline on the cards (left of the priority).
+     Northern / Southern Utah fill that half of Utah. Unknown teams get a plain pin. */
+  var UT="M4.3 2H13.5V6H19.7V22H4.3Z";
+  var STATE_ICONS=[
+    ["northern utah","#F76B15",UT,"M4.3 2H13.5V6H19.7V12H4.3Z"],
+    ["southern utah","#F76B15",UT,"M4.3 12H19.7V22H4.3Z"],
+    ["utah","#F76B15",UT],
+    ["arizona","#E5484D","M5.9 2H20.25V22H14.3L3.75 17.75L4.4 13L3.9 9.7L5.2 6.5L5.9 5.5Z"],
+    ["idaho","#30A46C","M5.85 2H7.9L8.4 7.7L12 12L13.5 14.5L18.15 14.9V22H5.85V14L6.9 12L5.85 10.6Z"],
+    ["nevada","#8E4EC6","M5.4 2H18.6V17.4L17.6 18.3L17.3 22L5.4 10.6Z"],
+    ["colorado","#14B8A6","M1.5 4.35H22.5V19.65H1.5Z"],
+    ["wyoming","#F2C200","M1.5 3.65H22.5V20.35H1.5Z"]];
+  function teamIcon(tid){
+    var t=tid&&(D.teams||[]).filter(function(x){return x.id===tid})[0];if(!t)return '';
+    var n=(t.name||"").trim().toLowerCase(),m=STATE_ICONS.filter(function(x){return n.indexOf(x[0])>-1})[0],svg;
+    if(!m)svg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></svg>';
+    else if(m[3])svg='<svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="'+m[2]+'" fill="'+m[1]+'" fill-opacity=".28" stroke="'+m[1]+'" stroke-width="1.5" stroke-linejoin="round"/><path d="'+m[3]+'" fill="'+m[1]+'"/></svg>';
+    else svg='<svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="'+m[2]+'" fill="'+m[1]+'" stroke="'+m[1]+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+    return '<span class="tmap" title="Team: '+esc(t.name)+'" role="img" aria-label="Team: '+esc(t.name)+'">'+svg+'</span>';
+  }
   function boardHTML(){
     var p=proj(),h='<div class="board">',folded=(state.colFold||{})[p.id]||{};
     p.statuses.forEach(function(s,ci){
@@ -1577,7 +1598,8 @@ img.who{object-fit:cover;background:var(--chip)}
           return '<button class="gopt'+(x[0]===mode?' on':'')+'" role="menuitemradio" aria-checked="'+(x[0]===mode)+'" data-colsortset="'+s.id+'|'+x[0]+'">'+esc(x[1])+'</button>';
         }).join("")+'</div>':'')+'</span>'+
         '<button class="colbtn" data-colfold="'+s.id+'" title="Collapse" aria-label="Collapse '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h7M7 8l4 4-4 4M21 12h-7M17 8l-4 4 4 4"/></svg></button></h2><div class="cards">';
-      var tkt=spaceFields(p).filter(function(x){return (x.name||"").trim().toLowerCase()==="ticket #"})[0];
+      var tkt=spaceFields(p).filter(function(x){return (x.name||"").trim().toLowerCase()==="ticket #"})[0],
+        tmf=spaceFields(p).filter(function(x){return x.type==="team"})[0];
       shown.forEach(function(is){
         // Jira-style card: title, due date, then the Ticket # on the left and priority + assignee on the right.
         // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
@@ -1586,6 +1608,7 @@ img.who{object-fit:cover;background:var(--chip)}
           (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
           echipHTML(is)+
           '<div class="cfoot">'+(tkt&&is.fields&&is.fields[tkt.id]?'<span class="kc"><span class="key" title="Ticket #">'+esc(is.fields[tkt.id])+'</span></span>':'')+'<span class="sp"></span>'+
+          (tmf?teamIcon((is.fields||{})[tmf.id]):'')+
           '<span class="cpick" title="Priority: '+is.priority+'">'+prHTML(is.priority)+'<select data-cardpri="'+is.id+'" aria-label="Priority for '+ikey(is)+'">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>'+
           '<span class="cpick" title="'+esc(is.assignee?nameOf(is.assignee):"Unassigned")+'">'+(is.assignee?nameAv(nameOf(is.assignee)):'<span class="who none">'+ic("user",14)+'</span>')+'<select data-cardwho="'+is.id+'" aria-label="Assignee for '+ikey(is)+'">'+teamOptions(is.assignee)+'</select></span>'+
           '</div></article>';
