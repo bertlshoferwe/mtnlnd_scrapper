@@ -995,7 +995,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var state=null;
   var db=null,usr=null,ME="",ORG=false,CANWRITE=true,DENIED="";
   var D={config:{templates:[]},divs:[],archived:[],people:[],spaces:[]};
-  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,HAS_PDETAILS=false,HAS_PTITLE=false,HAS_PROLE=false,HAS_FSET=false,FILE_BUCKET="bid-files";
+  var raw={config:null,divs:{},names:{},people:{},teams:{},spaces:{},bids:{}},base={},PROF={},HAS_FIELDS=false,HAS_DUETIME=false,HAS_TEAMS=false,HAS_FILES=false,HAS_PDETAILS=false,HAS_PROLE=false,HAS_FSET=false,FILE_BUCKET="bid-files";
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
@@ -1197,7 +1197,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function allDocs(){
     var m={};
     m["org/config"]={templates:D.config.templates,fieldSets:D.config.fieldSets||[]};
-    D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||"",title:p.title||"",role:p.role||""}});
+    D.people.forEach(function(p){m["people/"+p.id]={divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||"",role:p.role||""}});
     (D.teams||[]).forEach(function(t){m["teams/"+t.id]={divisionId:t.divisionId,name:t.name,members:t.members||[]}});
     D.spaces.forEach(function(sp){
       m["spaces/"+sp.id]=stripSpace(sp);
@@ -1241,7 +1241,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(p[0]==="org")return writeTemplates(data.templates,data.fieldSets);
     if(p[0]==="spaces")r=await sb.from("wf_spaces").upsert(spaceToRow(id,data));
     else if(p[0]==="bids")r=await sb.from("wf_bids").upsert(bidToRow(id,data));
-    else if(p[0]==="people"){var prow={id:id,division_id:data.divisionId,name:data.name};if(HAS_PDETAILS){prow.first_name=data.first||null;prow.last_name=data.last||null;prow.email=data.email||null}if(HAS_PTITLE)prow.job_title=data.title||null;if(HAS_PROLE)prow.role=data.role||null;r=await sb.from("wf_people").upsert(prow)}
+    else if(p[0]==="people"){var prow={id:id,division_id:data.divisionId,name:data.name};if(HAS_PDETAILS){prow.first_name=data.first||null;prow.last_name=data.last||null;prow.email=data.email||null}if(HAS_PROLE)prow.role=data.role||null;r=await sb.from("wf_people").upsert(prow)}
     else if(p[0]==="teams")r=await sb.from("wf_teams").upsert({id:id,division_id:data.divisionId,name:data.name,members:data.members||[]});
     if(r&&r.error)throw r.error;
   }
@@ -1289,13 +1289,12 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from("wf_bids").select("due_time").limit(1),sb.from("wf_teams").select("*"),
       sb.from("wf_bids").select("attachments").limit(1),sb.from("wf_people").select("email").limit(1),
       sb.from("wf_templates").select("kind").limit(1),sb.from("wf_spaces").select("field_set").limit(1),
-      sb.from("wf_people").select("job_title").limit(1),sb.from("wf_people").select("role").limit(1)]);
+      sb.from("wf_people").select("role").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     HAS_PDETAILS=!rs[11].error;   // first/last name + email need workflow/sql/007_people_details.sql
-    HAS_PTITLE=!rs[14].error;   // job title needs workflow/sql/012_job_title.sql
-    HAS_PROLE=!rs[15].error;   // role needs workflow/sql/013_role.sql
-    raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name,first:r.first_name||"",last:r.last_name||"",email:r.email||"",title:r.job_title||"",role:r.role||""}});
+    HAS_PROLE=!rs[14].error;   // role needs workflow/sql/013_role.sql
+    raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name,first:r.first_name||"",last:r.last_name||"",email:r.email||"",role:r.role||""}});
     HAS_TEAMS=!rs[9].error;
     HAS_FILES=!rs[10].error;   // attachments need workflow/sql/006_attachments.sql   // teams need workflow/sql/005_teams.sql
     raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[]}});
@@ -1344,7 +1343,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function rebuild(){
     D.config={templates:clone((raw.config&&raw.config.templates)||[]),fieldSets:clone((raw.config&&raw.config.fieldSets)||[])};
-    D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||"",title:p.title||"",role:p.role||""}}).sort(byName);
+    D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||"",role:p.role||""}}).sort(byName);
     D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[])}}).sort(byName);
     D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
     D.divs=Object.keys(raw.divs).map(function(id){return {id:id,name:raw.divs[id].name,members:[],admins:[]}}).sort(byName);
@@ -2456,7 +2455,7 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<div class="cards">';
       ids.forEach(function(id){
         var pp=D.people.filter(function(x){return x.id===id})[0]||{};
-        h+='<div class="mcard"><div class="mtop">'+avHTML(id)+'<div class="pinfo"><div class="tname">'+esc(nameOf(id))+'</div>'+(pp.role||pp.title?'<div class="ptitle">'+esc([pp.role,pp.title].filter(Boolean).join(" · "))+'</div>':'')+'<div class="pmail">'+(pp.email?esc(pp.email):'No email yet')+'</div></div></div>'+
+        h+='<div class="mcard"><div class="mtop">'+avHTML(id)+'<div class="pinfo"><div class="tname">'+esc(nameOf(id))+'</div>'+(pp.role?'<div class="ptitle">'+esc(pp.role)+'</div>':'')+'<div class="pmail">'+(pp.email?esc(pp.email):'No email yet')+'</div></div></div>'+
           '<button class="editbtn" data-pedit="'+esc(id)+'" aria-label="Edit '+esc(nameOf(id))+'" title="Edit person">'+PENCIL+'</button></div>';
       });
       h+='</div>';
@@ -2467,7 +2466,7 @@ img.who{object-fit:cover;background:var(--chip)}
   // The person window: a new person (ui.editPerson==="new") or an existing one. First name,
   // last name and email are all required; name is kept as "First Last" for display everywhere.
   function renderPersonModal(){
-    var isNew=ui.editPerson==="new",pp=isNew?{first:"",last:"",email:"",title:"",role:""}:D.people.filter(function(x){return x.id===ui.editPerson})[0];
+    var isNew=ui.editPerson==="new",pp=isNew?{first:"",last:"",email:"",role:""}:D.people.filter(function(x){return x.id===ui.editPerson})[0];
     if(!pp){closeOv("ov-person");return}
     var first=pp.first,last=pp.last;
     if(!isNew&&!first&&!last){var sp=(pp.name||"").trim().split(/\s+/);first=sp.shift()||"";last=sp.join(" ")}
@@ -2475,20 +2474,19 @@ img.who{object-fit:cover;background:var(--chip)}
     $("personBody").innerHTML='<label for="ps-first">First name</label><input id="ps-first" maxlength="40" autocomplete="off" value="'+esc(first)+'">'+
       '<label for="ps-last">Last name</label><input id="ps-last" maxlength="40" autocomplete="off" value="'+esc(last)+'">'+
       (HAS_PROLE?'<label for="ps-role">Role</label><select id="ps-role">'+['','Estimator','Inside Sales','Outside Sales'].map(function(o){return '<option value="'+o+'"'+((pp.role||'')===o?' selected':'')+'>'+(o||'No role')+'</option>'}).join('')+'</select>':'')+
-      (HAS_PTITLE?'<label for="ps-title">Job title <span class="fine" style="font-weight:400">(optional)</span></label><input id="ps-title" maxlength="60" autocomplete="off" placeholder="e.g. Branch Manager" value="'+esc(pp.title||"")+'">':'')+
       '<label for="ps-email">Email</label><input id="ps-email" type="email" maxlength="120" autocomplete="off" value="'+esc(pp.email||"")+'">'+
       '<p class="fine" id="ps-err" style="color:var(--high)"></p>';
     $("psActs").innerHTML=(isNew?'':'<button class="btn small danger" data-rmperson="'+esc(pp.id)+'">'+(ui.armPer===pp.id?'Tap to confirm':'Remove person')+'</button>')+
       '<span class="spacer"></span><button class="btn" data-close="ov-person">Cancel</button><button class="btn primary" data-psave>'+(isNew?'Add person':'Save')+'</button>';
   }
   function savePerson(){
-    var f=$("ps-first").value.trim(),l=$("ps-last").value.trim(),em=$("ps-email").value.trim(),jt=$("ps-title")?$("ps-title").value.trim():null,ro=$("ps-role")?$("ps-role").value:null,err=$("ps-err");
+    var f=$("ps-first").value.trim(),l=$("ps-last").value.trim(),em=$("ps-email").value.trim(),ro=$("ps-role")?$("ps-role").value:null,err=$("ps-err");
     if(!f||!l||!em){err.textContent="First name, last name and email are all required.";(!f?$("ps-first"):!l?$("ps-last"):$("ps-email")).focus();return}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){err.textContent="That email doesn’t look right.";$("ps-email").focus();return}
     if(!HAS_PDETAILS){err.textContent="The bid board’s database needs a quick update before it can store names and emails. Ask whoever manages it to run workflow/sql/007_people_details.sql.";return}
     var nm=f+" "+l;
-    if(ui.editPerson==="new"){var nid=uid("p");D.people.push({id:nid,divisionId:state.div,name:nm,first:f,last:l,email:em,title:jt||"",role:ro||""});PROF[nid]={name:nm,avatarUrl:""}}
-    else{var pp=D.people.filter(function(x){return x.id===ui.editPerson})[0];if(pp){pp.name=nm;pp.first=f;pp.last=l;pp.email=em;if(jt!==null)pp.title=jt;if(ro!==null)pp.role=ro;PROF[pp.id]={name:nm,avatarUrl:""}}}
+    if(ui.editPerson==="new"){var nid=uid("p");D.people.push({id:nid,divisionId:state.div,name:nm,first:f,last:l,email:em,role:ro||""});PROF[nid]={name:nm,avatarUrl:""}}
+    else{var pp=D.people.filter(function(x){return x.id===ui.editPerson})[0];if(pp){pp.name=nm;pp.first=f;pp.last=l;pp.email=em;if(ro!==null)pp.role=ro;PROF[pp.id]={name:nm,avatarUrl:""}}}
     closeOv("ov-person");save();render();
   }
   // Teams (e.g. regions): named groups of this division's members; a bid's Team field picks one
