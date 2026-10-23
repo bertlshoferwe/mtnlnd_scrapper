@@ -1585,7 +1585,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var tr=spaceTree(divId),w=tr.filter(function(x){return x.depth===0&&!isInbox(x.sp)})[0]||tr[0];
     return w?w.sp.id:"";
   }
-  // Every division gets a "<Division> Workflow" space, following the Bid pipeline
+  // Every division gets a "<Division> Bids" space (e.g. Geo Bids, key GB), following the Bid pipeline
   // workflow, if it has no space of its own yet (supabase_store._workflow_space does the same).
   var autoWs={};
   function ensureWorkflowSpaces(){
@@ -1595,7 +1595,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(d.archived||autoWs[d.id])return;
       if(divSpaces(d.id).some(function(s){return !s.parentId&&!isInbox(s)}))return;
       autoWs[d.id]=1;
-      var name=d.name+" Workflow",base=autoKey(name)||"WF",key=base,n=2;
+      var name=d.name+" Bids",base=autoKey(name)||"BID",key=base,n=2;
       while(divSpaces(d.id).some(function(s){return s.key===key}))key=base.slice(0,4)+(n++);
       var tpl=defaultTpl();
       D.spaces.push({id:newId("spaces"),divisionId:d.id,parentId:"",name:name,key:key,ci:divSpaces(d.id).length,next:1,statuses:tplStatuses(tpl?tpl.id:""),rules:[],created:today(),issues:[]});

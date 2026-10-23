@@ -1213,8 +1213,8 @@ _FIT_STATS_TTL_S = 60
 
 def _workflow_space(division_id):
     """The division's workflow space on the bid board, where Add to Jira files
-    bids: its oldest top-level space (e.g. "Bid Workflow"). Made as
-    "<Division> Workflow", following the "Bid pipeline" template, if the
+    bids: its oldest top-level space (e.g. "Geo Bids"). Made as
+    "<Division> Bids" (key from its initials, e.g. GB), following the "Bid pipeline" template, if the
     division has none yet — the board makes the same one when it loads."""
     sb = get_client()
     spaces = (
@@ -1227,7 +1227,7 @@ def _workflow_space(division_id):
     if own:
         return own[0]
     div = sb.table("divisions").select("name").eq("id", division_id).limit(1).execute().data
-    name = f"{div[0]['name'] if div else division_id} Workflow"
+    name = f"{div[0]['name'] if div else division_id} Bids"
     # workflow templates only — a field setup (kind "fields") has no columns
     tpls = [t for t in sb.table("wf_templates").select("id,name,statuses").order("created_at").execute().data
             if t.get("statuses")]
@@ -1242,9 +1242,12 @@ def _workflow_space(division_id):
             row.update({"tpl": tpl["id"], "tc": st["id"]})
         statuses.append(row)
     used = {sp["key"] for sp in spaces}
-    key, n = "WF", 2
+    # same as the board's autoKey: initials of up to 4 words, or the first 4 letters of one
+    words = re.sub(r"[^A-Z0-9 ]", "", name.upper()).split()
+    base = ("".join(w[0] for w in words[:4]) if len(words) > 1 else (words[0][:4] if words else ""))[:5] or "BID"
+    key, n = base, 2
     while key in used:
-        key, n = f"WF{n}", n + 1
+        key, n = f"{base[:4]}{n}", n + 1
     return sb.table("wf_spaces").insert({
         "division_id": division_id, "name": name, "key": key, "statuses": statuses,
     }).execute().data[0]
