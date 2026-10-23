@@ -1557,9 +1557,9 @@ BID_FILES_BUCKET = "bid-files"
 
 
 def load_workflow_bid(bid_id):
-    """One bid board bid's {"id", "division_id", "title", "source_project_id",
+    """One bid board bid's {"id", "division_id", "title", "source_project_id", "origin_bid_id",
     "attachments"}, or None."""
-    r = (get_client().table("wf_bids").select("id,division_id,title,source_project_id,attachments")
+    r = (get_client().table("wf_bids").select("id,division_id,title,source_project_id,origin_bid_id,attachments")
          .eq("id", bid_id).limit(1).execute().data)
     return r[0] if r else None
 

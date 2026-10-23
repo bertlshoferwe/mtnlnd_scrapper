@@ -1480,9 +1480,16 @@ def api_bid_zip(division_id, bid_id):
         abort(404, description="bid not found")
     uploads = [a for a in (bid.get("attachments") or []) if (a.get("kind") == "doc") == (tab == "docs")]
     jobs = []   # (path in zip, fetch -> bytes or None)
-    if tab == "docs" and bid.get("source_project_id"):
+    # a bid copied to another space uses the Bid Scout project of the bid it came from
+    src, origin = bid.get("source_project_id"), bid
+    for _ in range(5):
+        if src or not origin.get("origin_bid_id"):
+            break
+        origin = supabase_store.load_workflow_bid(origin["origin_bid_id"]) or {}
+        src = origin.get("source_project_id")
+    if tab == "docs" and src:
         lookup = supabase_store.scanned_document_lookup(division_id)
-        for f in supabase_store.load_project_files(division_id, bid["source_project_id"]):
+        for f in supabase_store.load_project_files(division_id, src):
             jobs.append((f["filename"], lambda f=f: _document_bytes(division_id, lookup.get(f["url"]), f["url"])))
     for a in uploads:
         jobs.append(((("Uploaded/" if tab == "docs" else "") + (a.get("name") or "file")),

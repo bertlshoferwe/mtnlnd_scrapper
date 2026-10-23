@@ -2675,9 +2675,14 @@ img.who{object-fit:cover;background:var(--chip)}
       (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files here or <u>'+label+'</u></span>')+
       '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
   }
+  // a bid copied to another space shows the Bid Scout project of the bid it was copied from
+  function srcKey(is){
+    for(var n=0;is&&n<6;n++){if(is.sourceProjectId)return is.sourceProjectId;var o=is.originBidId?findBid(is.originBidId):null;is=o?o.is:null}
+    return "";
+  }
   function bsState(is){
     var b=ui.bs[is.id];
-    if(!is.sourceProjectId)return {none:true};
+    if(!srcKey(is))return {none:true};
     return b||{state:"loading"};
   }
   function attachHTML(is){
@@ -2771,9 +2776,9 @@ img.who{object-fit:cover;background:var(--chip)}
   // Fetch the Bid Scout project behind a bid, then fill in its blank due time,
   // "Original RFQ" (the site it was found on) and Team (its state). Never overwrites what's there.
   function bsLoad(is){
-    if(!is||!is.sourceProjectId||ui.bs[is.id])return;
+    if(!is||!srcKey(is)||ui.bs[is.id])return;
     var id=is.id;ui.bs[id]={state:"loading"};
-    fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/bid-info?key="+encodeURIComponent(is.sourceProjectId))
+    fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/bid-info?key="+encodeURIComponent(srcKey(is)))
       .then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})
       .then(function(d){ui.bs[id]={state:"ok",data:d};if(ui.issueId===id){bsFill(byId(id),d);renderAttach()}})
       .catch(function(){ui.bs[id]={state:"err"};if(ui.issueId===id)renderAttach()});
