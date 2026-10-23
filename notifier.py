@@ -103,6 +103,17 @@ def _involved(bid, person_fields):
     return {i for i in ids if i}
 
 
+def _still_holds(bid, e, person_fields):
+    """Is the person this event put in a role still in it?"""
+    field, pid = e.get("field"), e.get("toId")
+    if field == "Assignee":
+        return bid.get("assignee") == pid
+    if field == "Reporter":
+        return bid.get("reporter") == pid
+    fields = bid.get("fields") or {}
+    return any(fields.get(fid) == pid for fid, name in person_fields.items() if name == field)
+
+
 def _lines_for(bid, events, people, person_fields):
     """{person id: [line, ...]} — what each person should hear about."""
     involved = _involved(bid, person_fields)
@@ -125,6 +136,8 @@ def _lines_for(bid, events, people, person_fields):
             for pid in involved:
                 add(pid, line, by)
         elif kind == "role":
+            if not _still_holds(bid, e, person_fields):
+                continue   # someone else got it before the email went out (e.g. an automation's pick was changed)
             role = ROLE_FIELDS.get(e.get("field")) or e.get("field")
             add(e["toId"], {"text": f"{who(by)} made you {role}"}, by)
         else:
