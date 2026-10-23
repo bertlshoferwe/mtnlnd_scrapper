@@ -1528,7 +1528,36 @@ img.who{object-fit:cover;background:var(--chip)}
     $("autoBody").innerHTML=body;
   }
   function srcLinkHTML(is){
-    return /^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="_blank" rel="noopener">Open the project</a></div>':'';
+    return (/^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="_blank" rel="noopener">Open the project</a></div>':'')+listingHTML(is);
+  }
+  // The project on the site it came from (ConstructConnect, UDOT, ...): a link pasted on the bid
+  // (fields._listing, copies carry it) wins over the one Bid Scout found. Anyone can add or change it.
+  function listingOf(is){
+    var own=((is.fields||{})._listing||"").trim();
+    if(own)return {url:own,own:true};
+    var b=ui.bs[is.id],d=b&&b.state==="ok"&&b.data&&b.data.listing;
+    return d&&d.url?{url:d.url,site:d.site,list:d.list_page}:null;
+  }
+  function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,"")}catch(e){return u}}
+  function listingHTML(is){
+    var L=listingOf(is),edit=ui.lsEdit===is.id;
+    var h='<label>'+esc(L&&L.site?L.site:"Original listing")+'</label>';
+    if(edit)return h+'<div class="ro"><input id="ls-url" type="url" placeholder="Paste the link to the project" value="'+esc(L&&L.own?L.url:"")+'"><div class="actions" style="margin-top:6px"><button class="btn primary small" data-lssave>Save</button><button class="btn small" data-lscancel>Cancel</button></div>'+
+      (L&&L.own?'<p class="fine" style="margin:4px 0 0">Clear it and save to go back to the link Bid Scout found.</p>':'')+'</div>';
+    if(!L)return canAct()?h+'<div class="ro"><button class="linkbtn" data-lsedit>Add a link to the original listing</button></div>':'';
+    var txt=L.list?'Open their advertised projects page':(L.own?'Open on '+hostOf(L.url):'Open the original listing');
+    return h+'<div class="ro"><a href="'+esc(L.url)+'" target="_blank" rel="noopener">'+esc(txt)+'</a>'+
+      (canAct()?' <button class="linkbtn" data-lsedit style="font-size:12px;margin-left:8px">Change</button>':'')+
+      (L.list?'<div class="fine" style="margin:2px 0 0">Look for '+esc(bsProjectName(is))+'</div>':'')+'</div>';
+  }
+  function bsProjectName(is){var k=srcKey(is),i=k.indexOf(" — ");return i>-1?k.slice(i+3):(is.title||"")}
+  function saveListing(is){
+    var v=($("ls-url").value||"").trim();
+    if(v&&!/^https?:\/\//i.test(v))v="https://"+v;
+    if(v){try{new URL(v)}catch(e){toast("That link doesn’t look right.");return}}
+    var old=((is.fields||{})._listing||"");ui.lsEdit=null;
+    if(v!==old){logH(is,"Original listing",old||"None",v||"None");is.fields=is.fields||{};if(v)is.fields._listing=v;else delete is.fields._listing;is.updated=Date.now();save();render()}
+    renderIssueSideOnly();
   }
 
   /* ---------- divisions and spaces ---------- */
@@ -2857,7 +2886,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var id=is.id;ui.bs[id]={state:"loading"};
     fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/bid-info?key="+encodeURIComponent(srcKey(is)))
       .then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})
-      .then(function(d){ui.bs[id]={state:"ok",data:d};if(ui.issueId===id){bsFill(byId(id),d);renderAttach()}})
+      .then(function(d){ui.bs[id]={state:"ok",data:d};if(ui.issueId===id){bsFill(byId(id),d);renderAttach();if(ui.lsEdit!==id)renderIssueSideOnly()}})
       .catch(function(){ui.bs[id]={state:"err"};if(ui.issueId===id)renderAttach()});
   }
   function bsFill(is,d){
@@ -3222,6 +3251,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-scrim]")){$("side").classList.remove("open");$("scrim").classList.remove("open");return}
     if((el=t.closest("[data-close]"))){closeOv(el.getAttribute("data-close"));return}
     if(t.closest("[data-hosave]")){saveHandoff();return}
+    if(t.closest("[data-lsedit]")){ui.lsEdit=ui.issueId;renderIssueSideOnly();var li=$("ls-url");if(li)li.focus();return}
+    if(t.closest("[data-lscancel]")){ui.lsEdit=null;renderIssueSideOnly();return}
+    if(t.closest("[data-lssave]")){var lb=byId(ui.issueId);if(lb)saveListing(lb);return}
     if(t.classList&&t.classList.contains("overlay")){closeOv(t.id);return}
     if((el=t.closest("[data-space]"))){switchSpace(el.getAttribute("data-space"));return}
     if((el=t.closest("[data-div]"))){switchDiv(el.getAttribute("data-div"));return}
@@ -3699,6 +3731,11 @@ img.who{object-fit:cover;background:var(--chip)}
     },0);
   });
   document.addEventListener("keydown",function(e){
+    if(e.target.id==="ls-url"&&(e.key==="Enter"||e.key==="Escape")){
+      e.preventDefault();e.stopPropagation();var lb=byId(ui.issueId);
+      if(e.key==="Enter"&&lb)saveListing(lb);else{ui.lsEdit=null;renderIssueSideOnly()}
+      return;
+    }
     if(ui.lEdit&&e.target.closest&&e.target.closest("td.ledon")){
       if(e.key==="Escape"){
         e.preventDefault();e.stopPropagation();

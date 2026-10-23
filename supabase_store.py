@@ -1646,6 +1646,14 @@ def _udot_region(project_name):
     return _udot_regions["map"].get((project_name or "").strip().lower())
 
 
+def project_source_url(division_id, project_key):
+    """The page the project was found on (newest scanned file's source_url), or None."""
+    res = (get_client().table("scan_results").select("source_url")
+           .eq("division_id", division_id).eq("site", project_key)
+           .not_.is_("source_url", "null").order("run_date", desc=True).limit(1).execute())
+    return (res.data[0].get("source_url") or None) if res.data else None
+
+
 def project_team_name(division_id, project_key):
     """The bid board team a project belongs to: its state, with Utah split at
     the south edge of Utah County. Uses the project's saved location when

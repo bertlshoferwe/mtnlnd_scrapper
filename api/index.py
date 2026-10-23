@@ -953,11 +953,21 @@ def api_save_settings(division_id):
     return jsonify({"settings": saved, "fit_training": supabase_store.fit_training_stats(division_id)})
 
 
+def _project_listing(division_id, key, site):
+    """{"url", "site", "list_page"} for the bid window's link to the original listing, or None.
+    list_page: the site only has one page of advertised projects (ITD, WYDOT), not one per project."""
+    url = supabase_store.project_source_url(division_id, key)
+    if not url or not re.match(r"https?://", url, re.I):
+        return None
+    pages = {getattr(c, "PAGE", None) for c in adapters.ADAPTERS.values()} - {None}
+    return {"url": url, "site": site or None, "list_page": url in pages}
+
+
 @app.route("/api/<division_id>/projects/bid-info", methods=["GET"])
 def api_project_bid_info(division_id):
     """What the bid board's bid window shows from the Bid Scout project it
     came from. ?key=<project_key>. Returns {"site", "bid_date", "due_time"
-    ("HH:MM" or null), "team" (team name or null), "files": [...], "holders",
+    ("HH:MM" or null), "team" (team name or null), "listing" (see _project_listing), "files": [...], "holders",
     "holders_refreshed_at"} —
     files open through /api/<division_id>/pdf, holders as in plan-holders."""
     _, err = _require_division(division_id)
@@ -973,6 +983,7 @@ def api_project_bid_info(division_id):
         "bid_date": supabase_store.load_project_bid_dates(division_id).get(key),
         "due_time": supabase_store.bid_time_hm(supabase_store.load_project_bid_times(division_id).get(key)),
         "team": supabase_store.project_team_name(division_id, key),
+        "listing": _project_listing(division_id, key, site),
         "files": supabase_store.load_project_files(division_id, key),
         "holders": holders, "holders_refreshed_at": refreshed_at,
     })
