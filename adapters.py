@@ -150,6 +150,9 @@ class UDOTMasterworksAdapter(SiteAdapter):
     # same section. "project-files" = the plan set / NTC / items; "addendum" =
     # addenda issued after advertisement.
     FILE_SECTIONS = ("project-files", "addendum")
+    # UDOT opens every bid at 2:00 PM Mountain: its API only gives the date,
+    # and the Contractor Zone site itself prints "at 2:00 PM MST" after it.
+    BID_TIME = "2:00pm MT"
 
     def _get_json(self, path, **params):
         r = requests.get(f"{self.BASE}{path}", params=params or None,
@@ -190,7 +193,7 @@ class UDOTMasterworksAdapter(SiteAdapter):
                            f"?file_name={requests.utils.quote(fn)}")
                     # Same `label` for every section so addenda group under the
                     # same project as the plan set (rather than as a new project).
-                    out.append((label, url, fn, project_url, bid_date))
+                    out.append((label, url, fn, project_url, bid_date, self.BID_TIME if bid_date else None))
         return out
 
     def _load_plan_holders(self, uuid, label):

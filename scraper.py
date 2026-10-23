@@ -601,8 +601,9 @@ def scan_site(site, ai_client):
         print(f"  Adapter: {adapter.label}")
         found = adapter.find_documents(site)
         _save_plan_holders(site, adapter)
-        return [(lbl, url, fn, None, src, bid, None)
-                for lbl, url, fn, src, bid in found], {}, None
+        # (label, url, filename, source_url, bid_date[, bid_time])
+        return [(t[0], t[1], t[2], None, t[3], t[4], t[5] if len(t) > 5 else None)
+                for t in found], {}, None
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
         return [], {}, None
