@@ -3933,7 +3933,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!col||!ui.dragId){clearDropBar();return}
     e.preventDefault();
     Array.prototype.forEach.call(view.querySelectorAll(".col.over"),function(x){if(x!==col)x.classList.remove("over")});
-    if(col.classList.contains("folded")){clearDropBar();col.classList.add("over");return}
+    // folded and sorted columns take the card wherever its sort puts it: outline the whole column
+    if(col.classList.contains("folded")||colSort(proj(),col.getAttribute("data-col"))!=="rank"){clearDropBar();col.classList.add("over");return}
     col.classList.remove("over");
     // the first card whose middle is below the pointer is the one the dragged card would go before
     var box=col.querySelector(".cards");if(!box)return;
@@ -3964,17 +3965,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var sid=col.getAttribute("data-col"),before=ui.dropCol===sid?ui.dropBefore:null;
     var id=ui.dragId;ui.dragId=null;clearDropBar();
     var p=proj(),mv=byId(id),mode=colSort(p,sid);
+    // a sorted column keeps its sort: the card goes where it belongs, not where it was dropped
+    if(mode!=="rank"){
+      if(mv&&mv.status===sid){render();toast("“"+stat(p,sid).name+"” is sorted by "+CSORTS.filter(function(x){return x[0]===mode})[0][1].split(":")[0].toLowerCase()+". To arrange it by hand, choose Manual in its sort menu.");return}
+      moveTo(id,sid,null);return;
+    }
     if(mv&&mv.status===sid){   // dropped right back where it was: nothing to do
       var all=p.issues.filter(function(x){return x.status===sid}).sort(mode==="rank"?function(a,b){return rk(a)-rk(b)}:colCmp(mode)),nx=all[all.indexOf(mv)+1];
       if((before||null)===(nx?nx.id:null)){render();return}
-    }
-    // a card dropped at a particular spot in a sorted column: the column becomes Manual so it stays there
-    // (its cards first get ranks in the order they were showing, so nothing else jumps around)
-    if(mv&&mode!=="rank"&&!col.classList.contains("folded")&&(before||mv.status===sid)){
-      var shown=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(colCmp(mode));
-      shown.forEach(function(x,i){x.rank=(i+1)*1000});
-      state.colSort=state.colSort||{};state.colSort[p.id]=state.colSort[p.id]||{};state.colSort[p.id][sid]="rank";savePrefs();
-      toast("“"+stat(p,sid).name+"” is now sorted by hand, so the card stays where you dropped it.");
     }
     moveTo(id,sid,before);
   });
@@ -3995,6 +3993,8 @@ img.who{object-fit:cover;background:var(--chip)}
   $("p-save").addEventListener("click",submitSpace);
 
   state=loadPrefs();
+  // drops used to switch a sorted column to Manual on their own; put those back on the default sort once
+  if(!state.csReset1){Object.keys(state.colSort||{}).forEach(function(sp){var m=state.colSort[sp];Object.keys(m).forEach(function(c){if(m[c]==="rank")delete m[c]})});state.csReset1=true;savePrefs()}
   if(state.defaultView)state.view=defaultView();   // each visit opens on the default view
   ORG=true;CANWRITE=true;ME="Someone";
   // Same switch as Bid Scout (served from the same site, so same localStorage).
