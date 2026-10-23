@@ -545,6 +545,20 @@ textarea{min-height:90px;resize:vertical}
 .dlbtn:hover{background:var(--chip);color:var(--ink)}
 .ftabs .pt{font-weight:500;color:var(--muted);margin-left:4px}
 .fnote{color:var(--muted);font-size:13.5px;margin:4px 0 10px}
+.bsl{border:1px solid color-mix(in srgb,var(--c1) 45%,var(--line));background:color-mix(in srgb,var(--c1) 7%,var(--surface));border-radius:10px;padding:12px 14px;margin:0 0 14px}
+.bslh{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.bsl .bsn{display:block;font-weight:700;color:var(--ink);font-size:15px;overflow-wrap:anywhere}
+.bsl .bss{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.bsl .fnote{margin:8px 0 0}
+.bsact{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.bsact .sp{flex:1}
+.bsact .btn{padding:6px 12px}
+.bsq{width:100%;box-sizing:border-box;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;background:var(--surface);margin:0 0 8px}
+.bsopts{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto}
+.bsopt{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;text-transform:none;letter-spacing:normal;font-weight:400}
+.bsopt:hover{border-color:var(--line2);background:var(--chip)}
+.bsopt.sel{border-color:var(--c1);background:color-mix(in srgb,var(--c1) 12%,var(--surface))}
+.bsopt .bsn{font-size:14px}
 .att a.attn{text-decoration:none}
 .att a.attn:hover{text-decoration:underline}
 .dtree{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;padding:4px 0}
@@ -984,7 +998,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var loaded={config:false,divs:false,spaces:false,bids:false},scopeKey=null,unsubs=[],scopeUnsubs=[];
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},fileTab:"att"};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att"};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -1006,7 +1020,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var d=Math.floor(h/24);if(d<30)return d+(d===1?" day ago":" days ago");
     return new Date(ms).toLocaleDateString();
   }
-  function toast(msg){var el=$("toast");el.textContent=msg;el.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(function(){el.style.display="none"},2000)}
+  function toast(msg,ms){var el=$("toast");el.textContent=msg;el.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(function(){el.style.display="none"},ms||2000)}
   function uid(p){return uuid()}
 
   /* ---------- model ---------- */
@@ -1865,6 +1879,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var title=(q.title||"").trim();if(!title){focusQC();return}
     var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due});
     q.title="";render();focusQC();toast(ikey(is)+" created");
+    offerBsLink(is);
   }
   function setCalMode(cmode){
     state.calMode=cmode;
@@ -2625,7 +2640,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- issue modal ---------- */
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
-    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;delete ui.bs[id];
+    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
     renderIssue();openOv("ov-issue");
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
@@ -2636,6 +2651,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("i-side").innerHTML=issueSideHTML(is);
     renderIssueAct();
     bsLoad(is);
+    bscLoad(is);
   }
   function renderIssueHead(is){
     var par=is.parent?byId(is.parent):null;
@@ -2691,13 +2707,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var tab=ui.fileTab||"att";
     var tabs=[["att","Supporting Docs",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]];
     var n=tab==="docs"?src.length+docs.length:tab==="att"?atts.length:0;
-    var h='<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
+    var h=bsLinkHTML(is)+'<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
     }).join("")+'</div>'+
       (n?'<button class="fmore" data-fmore aria-haspopup="menu" aria-expanded="'+!!ui.fmenu+'" aria-label="More" title="More">'+ic("more",18)+'</button>'+
         (ui.fmenu?'<div class="fmenu" role="menu"><a role="menuitem" data-dlall href="/api/'+encodeURIComponent(is.divisionId)+'/bids/'+encodeURIComponent(is.id)+'/zip?tab='+tab+'" download>'+DL_IC+'Download all</a></div>':''):'')+'</div>';
     if(tab==="docs"){
-      if(b.state==="loading")h+='<p class="fnote">Loading the documents from Bid Scout…</p>';
+      if(b.none)h+='<p class="fnote">Bid Scout’s documents show here once this bid is linked to its Bid Scout project.'+bsLinkBtn(is)+'</p>';
+      else if(b.state==="loading")h+='<p class="fnote">Loading the documents from Bid Scout…</p>';
       else if(b.state==="err")h+='<p class="fnote">Couldn’t load the documents from Bid Scout. Close the bid and open it again to retry.</p>';
       else if(d){
         if(src.length)h+='<div class="dtree" role="tree">'+treeHTML(docTree(src),"",0,is)+'</div>';
@@ -2710,7 +2727,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No supporting docs.</p>';
       h+=dropzHTML("att","add a supporting doc");
     }else{
-      if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they only show on bids added from Bid Scout.</p>';
+      if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they show once this bid is linked to its Bid Scout project.'+bsLinkBtn(is)+'</p>';
       else if(b.state==="loading")h+='<p class="fnote">Loading plan holders from Bid Scout…</p>';
       else if(b.state==="err")h+='<p class="fnote">Couldn’t load the plan holders from Bid Scout. Close the bid and open it again to retry.</p>';
       else if(!hold)h+='<p class="fnote">No plan holders list for this project yet. If the bid site publishes one, it shows up here after Bid Scout’s next daily check.</p>';
@@ -2797,6 +2814,82 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ch){renderIssueSideOnly();renderIssueAct()}
   }
   function renderAttach(){var is=byId(ui.issueId),el=$("i-att");if(is&&el)el.innerHTML=attachHTML(is)}
+  /* ---------- a bid typed in by hand: find its Bid Scout project and link the two ---------- */
+  // Bid Scout's projects that aren't on the board yet, most alike first. A close one is offered above
+  // the files; any can be picked from a searchable list. Linking brings in the project's Bid Docs,
+  // plan holders, due date and time, site and team, and files the project under Bid Scout's Bid Board tab.
+  var BS_SUGGEST_AT=.71;
+  var BS_IC='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>';
+  function canLinkBs(is){return !!is&&is.type!=="Subtask"&&!srcKey(is)&&canAct()}
+  function bscLoad(is,then){
+    if(!canLinkBs(is))return;
+    var c=ui.bsc[is.id];
+    if(c&&c.title===is.title&&c.due===is.due&&c.state!=="err"){if(then&&c.state==="ok")then(c);return}
+    var id=is.id;c=ui.bsc[id]={state:"loading",title:is.title,due:is.due};
+    fetch("/api/"+encodeURIComponent(is.divisionId)+"/bids/"+encodeURIComponent(id)+"/project-candidates?title="+encodeURIComponent(is.title)+"&due="+encodeURIComponent(is.due||""))
+      .then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})
+      .then(function(d){if(ui.bsc[id]!==c)return;c.state="ok";c.list=d.projects||[];if(ui.issueId===id)renderAttach();if(then)then(c)})
+      .catch(function(){if(ui.bsc[id]===c){c.state="err";if(ui.issueId===id)renderAttach()}});
+  }
+  function bsSuggest(is){
+    var c=ui.bsc[is.id];if(!c||c.state!=="ok")return null;
+    var no=(state.bsNo||{})[is.id]||[];
+    return c.list.filter(function(x){return x.score>=BS_SUGGEST_AT&&no.indexOf(x.key)<0})[0]||null;
+  }
+  function bsSub(x){return [x.site,x.bid_date?"due "+shortDate(x.bid_date):"",x.status].filter(Boolean).join(" · ")}
+  function bsLinkBtn(is){return canLinkBs(is)&&!(ui.bsPick&&ui.bsPick.id===is.id)?' <button class="linkbtn" data-bsother>Link a Bid Scout project</button>':''}
+  function bsLinkHTML(is){
+    if(!canLinkBs(is))return "";
+    var c=ui.bsc[is.id]||{},busy=ui.bsBusy===is.id;
+    if(ui.bsPick&&ui.bsPick.id===is.id){
+      var q=(ui.bsPick.q||"").trim().toLowerCase(),L=c.list||[],pk=ui.bsPick.key;
+      var shown=(q?L.filter(function(x){return (x.name+" "+x.site).toLowerCase().indexOf(q)>-1}):L).slice(0,q?25:8);
+      var h='<div class="bsl"><div class="bslh">'+BS_IC+'Link a Bid Scout project</div>'+
+        '<input type="search" class="bsq" id="bs-q" placeholder="Search Bid Scout projects" value="'+esc(ui.bsPick.q||"")+'" aria-label="Search Bid Scout projects" autocomplete="off">';
+      if(c.state==="loading")h+='<p class="fnote">Loading Bid Scout’s projects…</p>';
+      else if(c.state==="err")h+='<p class="fnote">Couldn’t reach Bid Scout. Close the bid and open it again to retry.</p>';
+      else if(!shown.length)h+='<p class="fnote">'+(L.length?'No projects match that search.':'Every Bid Scout project is already on the board.')+'</p>';
+      else h+='<div class="bsopts" role="listbox" aria-label="Bid Scout projects">'+shown.map(function(x){
+        return '<button type="button" role="option" class="bsopt'+(pk===x.key?' sel':'')+'" aria-selected="'+(pk===x.key)+'" data-bspick="'+esc(x.key)+'"><span class="bsn">'+esc(x.name)+'</span><span class="bss">'+esc(bsSub(x))+'</span></button>';
+      }).join("")+'</div>';
+      return h+'<div class="bsact"><span class="sp"></span><button class="btn" data-bscancel>Cancel</button>'+
+        '<button class="btn primary" data-bslink="'+esc(pk||"")+'"'+(pk&&!busy?'':' disabled')+'>'+(busy?'Linking…':'Link')+'</button></div></div>';
+    }
+    var s=bsSuggest(is);
+    if(!s)return "";
+    return '<div class="bsl"><div class="bslh">'+BS_IC+'Looks like a project in Bid Scout</div>'+
+      '<span class="bsn">'+esc(s.name)+'</span><span class="bss">'+esc(bsSub(s))+'</span>'+
+      '<p class="fnote">Link them to bring in its Bid Docs, plan holders, due time, site and team. The project moves to Bid Scout’s Bid Board tab.</p>'+
+      '<div class="bsact"><button class="linkbtn" data-bsother>Pick a different project</button><span class="sp"></span>'+
+        '<button class="btn" data-bsno="'+esc(s.key)+'">Not this one</button>'+
+        '<button class="btn primary" data-bslink="'+esc(s.key)+'"'+(busy?' disabled':'')+'>'+(busy?'Linking…':'Link')+'</button></div></div>';
+  }
+  // after a bid is made by hand: if it looks like a Bid Scout project, open it to offer the link
+  // (or say so, when someone's still typing in bids)
+  function offerBsLink(is){
+    bscLoad(is,function(){
+      if(!bsSuggest(is)||!byId(is.id))return;
+      if(!ui.qc&&!ui.issueId&&!document.querySelector(".overlay.open"))openIssue(is.id);
+      else toast(ikey(is)+" looks like a project in Bid Scout. Open it to link them.",5000);
+    });
+  }
+  function bsLink(id,key){
+    var is=byId(id);if(!is||!key||ui.bsBusy)return;
+    if(pendingLocal||flushing){setTimeout(function(){bsLink(id,key)},400);return}   // a bid just made is saved first
+    // a copy links the bid it was copied from, so the original and every copy show the project
+    var root=is;for(var n=0;n<6&&root.originBidId;n++){var o=findBid(root.originBidId);if(!o)break;root=o.is}
+    ui.bsBusy=id;renderAttach();
+    fetch("/api/"+encodeURIComponent(is.divisionId)+"/bids/"+encodeURIComponent(root.id)+"/link-project",
+      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_key:key})})
+      .then(function(r){return r.json().catch(function(){return {}}).then(function(d){if(!r.ok)throw new Error(d.error||("error "+r.status));return d})})
+      .then(function(){return loadAll()})   // the bid as Bid Scout just updated it
+      .then(function(){
+        ui.bsBusy=null;ui.bsPick=null;delete ui.bsc[id];delete ui.bs[id];
+        if(ui.issueId===id){ui.fileTab="docs";renderIssue()}
+        toast("Linked to Bid Scout");
+      })
+      .catch(function(err){ui.bsBusy=null;if(ui.issueId===id)renderAttach();toast("Couldn’t link: "+((err&&err.message)||"unknown error"))});
+  }
   async function uploadFiles(files,kind){
     var is=byId(ui.issueId);if(!is||!sb||!files||!files.length)return;
     files=Array.prototype.slice.call(files);
@@ -3015,6 +3108,7 @@ img.who{object-fit:cover;background:var(--chip)}
       assignee:$("c-who").value,due:$("c-due").value,dueTime:HAS_DUETIME?$("c-due-time").value:"",parent:$("c-parent").value,
       labels:$("c-labels").value.split(",").map(function(s){return s.trim()}).filter(Boolean)});
     closeOv("ov-create");render();toast(ikey(is)+" created");
+    offerBsLink(is);
   }
   function quickAdd(parentId){
     var inp=document.querySelector('[data-quick="'+parentId+'"]');if(!inp)return;
@@ -3317,6 +3411,19 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-acttab]"))){ui.actTab=el.getAttribute("data-acttab");renderIssueAct();return}
     if(t.closest("[data-assignme]")){var ai=byId(ui.issueId);setField(ai,"assignee",ME);renderIssueSideOnly();return}
+    if((el=t.closest("[data-bspick]"))){if(ui.bsPick){ui.bsPick.key=el.getAttribute("data-bspick");renderAttach()}return}
+    if(t.closest("[data-bsother]")){
+      var boi=byId(ui.issueId);if(!boi)return;
+      ui.bsPick={id:boi.id,q:"",key:null};bscLoad(boi);renderAttach();
+      var bq=$("bs-q");if(bq)bq.focus();
+      return;
+    }
+    if(t.closest("[data-bscancel]")){ui.bsPick=null;renderAttach();return}
+    if((el=t.closest("[data-bsno]"))){
+      state.bsNo=state.bsNo||{};var bni=ui.issueId;
+      state.bsNo[bni]=(state.bsNo[bni]||[]).concat([el.getAttribute("data-bsno")]);savePrefs();renderAttach();return;
+    }
+    if((el=t.closest("[data-bslink]"))){if(el.getAttribute("data-bslink"))bsLink(ui.issueId,el.getAttribute("data-bslink"));return}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");ui.fmenu=false;renderAttach();return}
     if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
     if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
@@ -3511,6 +3618,11 @@ img.who{object-fit:cover;background:var(--chip)}
     var el=e.target;
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
+    if(el.id==="bs-q"&&ui.bsPick){
+      ui.bsPick.q=el.value;var pos=el.selectionStart;renderAttach();
+      var nq=$("bs-q");if(nq){nq.focus();try{nq.setSelectionRange(pos,pos)}catch(_){}}
+      return;
+    }
     if(el.id==="rname"){state.rcfg.name=el.value;el.style.borderColor="";save();return}
     if(el.id==="c-new"||el.id==="c-edit"){if(el.id==="c-new")ui.draft=el.value;updateMention(el);return}
     if(el.id==="p-name"&&!ui.keyTouched){$("p-key").value=autoKey(el.value);return}

@@ -36,6 +36,8 @@ Routes:
   POST /api/<division_id>/projects/jira/verify   check the filed issue still exists in Jira; clears jira_key if it was deleted
   GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
   GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
+  GET  /api/<division_id>/bids/<bid_id>/project-candidates  Bid Scout projects a hand-made bid might be
+  POST /api/<division_id>/bids/<bid_id>/link-project        tie a hand-made bid to a Bid Scout project
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
   GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
@@ -1173,6 +1175,103 @@ def api_board_link(division_id):
     except Exception as e:
         print(f"  ! couldn't record the board decision for {key} ({e})")
     return jsonify({"ok": True, "bid_id": bid_id})
+
+
+# words too common in bid names to say two are the same project
+_TITLE_FILLER = {"the", "and", "for", "city", "town", "county", "project", "projects", "improvement",
+                 "construction", "phase", "road", "street", "ave", "avenue", "drive", "replacement",
+                 "rfp", "rfq", "bid", "bids", "itb", "new", "west", "east", "north", "south", "udot",
+                 "wydot", "itd", "cdot", "idot", "ndot", "job", "district", "water", "system", "upgrade"}
+
+
+def _title_words(s):
+    words = set()
+    for w in re.findall(r"[a-z0-9]+", (s or "").lower()):
+        w = w[:-1] if len(w) > 4 and w.endswith("s") else w
+        if (len(w) > 2 or w.isdigit()) and w not in _TITLE_FILLER:
+            words.add(w)
+    return words
+
+
+def _title_score(a, b):
+    """0-1: how alike two bid names are — the closer of the whole-name
+    similarity and how many of the shorter name's words the other one has
+    (a bid typed by hand is often a shortened project name). Common words
+    like "Road" or "Improvements" don't count."""
+    a, b = (a or "").lower().strip(), (b or "").lower().strip()
+    if not a or not b:
+        return 0.0
+    ratio = difflib.SequenceMatcher(None, a, b).ratio()
+    wa, wb = _title_words(a), _title_words(b)
+    short = min(wa, wb, key=len)
+    words = len(wa & wb) / len(short) * 0.95 if len(short) >= 2 else 0.0
+    return max(ratio, words)
+
+
+@app.route("/api/<division_id>/bids/<bid_id>/project-candidates", methods=["GET"])
+def api_bid_project_candidates(division_id, bid_id):
+    """The other way round from board-candidates: Bid Scout projects a bid
+    typed in by hand on the board might be, most alike first:
+    {"projects": [{"key", "name", "site", "bid_date", "status", "score"}]}
+    (score 0-1; ?due=YYYY-MM-DD counts a matching bid date; ?title= the bid's name). Projects already
+    on the board are left out; every other one is listed, so the picker can search."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    # ?title= the bid's name as the board has it now (a bid just made may not be saved yet)
+    title = (request.args.get("title") or "").strip()
+    if not title:
+        bid = supabase_store.load_workflow_bid(bid_id)
+        if not bid or str(bid["division_id"]) != division_id:
+            return jsonify({"error": "bid not found"}), 404
+        title = bid.get("title")
+    due = request.args.get("due") or ""
+    try:
+        keys = {r["site"] for r in supabase_store._fetch_all_scan_results(division_id, "site") if r.get("site")}
+        board = supabase_store.board_links(division_id)
+        decisions = supabase_store.load_project_decisions(division_id)
+        dates = supabase_store.load_project_bid_dates(division_id)
+    except Exception as e:
+        return jsonify({"error": f"couldn't read Bid Scout's projects: {e}"}), 424
+    labels = {"jira": "Bid Board", "not_fit": "Not a Fit", "duplicate": "Duplicate"}
+    out = []
+    for key in keys - set(board):
+        site, name = supabase_store._split_site(key)
+        score = _title_score(title, name)
+        if due and dates.get(key) == due and score >= 0.6:   # same bid date: likelier, never enough alone
+            score = min(1.0, score + 0.15)
+        out.append({"key": key, "name": name, "site": site, "bid_date": dates.get(key),
+                    "status": labels.get((decisions.get(key) or {}).get("decision"), "To Review"),
+                    "score": round(score, 3)})
+    out.sort(key=lambda p: (-p["score"], p["name"].lower()))
+    return jsonify({"projects": out})
+
+
+@app.route("/api/<division_id>/bids/<bid_id>/link-project", methods=["POST"])
+def api_bid_link_project(division_id, bid_id):
+    """Body {"project_key"}: the board side of board-link — tie a bid typed in
+    by hand to a Bid Scout project. The bid takes the project's due date and
+    time, site and team, its Bid Docs and Plan Holders follow the project,
+    and the project moves to Bid Scout's Bid Board tab."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    if not key:
+        return jsonify({"error": "project_key is required"}), 400
+    back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
+    try:
+        supabase_store.link_workflow_bid(division_id, bid_id, key, source_url=back)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"couldn't update the bid board: {e}"}), 424
+    try:
+        supabase_store.set_project_decision(division_id, key, "jira")
+    except Exception as e:
+        print(f"  ! couldn't record the board decision for {key} ({e})")
+    return jsonify({"ok": True, "project_key": key, "source_url": back})
 
 
 @app.route("/api/<division_id>/projects/jira/verify", methods=["POST"])
