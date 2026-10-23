@@ -1575,14 +1575,15 @@ img.who{object-fit:cover;background:var(--chip)}
           return '<button class="gopt'+(x[0]===mode?' on':'')+'" role="menuitemradio" aria-checked="'+(x[0]===mode)+'" data-colsortset="'+s.id+'|'+x[0]+'">'+esc(x[1])+'</button>';
         }).join("")+'</div>':'')+'</span>'+
         '<button class="colbtn" data-colfold="'+s.id+'" title="Collapse" aria-label="Collapse '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h7M7 8l4 4-4 4M21 12h-7M17 8l-4 4 4 4"/></svg></button></h2><div class="cards">';
+      var tkt=spaceFields(p).filter(function(x){return (x.name||"").trim().toLowerCase()==="ticket #"})[0];
       shown.forEach(function(is){
-        // Jira-style card: title, due date, then type + key on the left and priority + assignee on the right.
+        // Jira-style card: title, due date, then the Ticket # on the left and priority + assignee on the right.
         // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
         h+='<article class="card" draggable="true" data-id="'+is.id+'" data-open="'+is.id+'">'+
           '<div class="ctitle">'+esc(is.title)+'</div>'+
           (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
           echipHTML(is)+
-          '<div class="cfoot"><span class="kc">'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span></span><span class="sp"></span>'+
+          '<div class="cfoot">'+(tkt&&is.fields&&is.fields[tkt.id]?'<span class="kc"><span class="key" title="Ticket #">'+esc(is.fields[tkt.id])+'</span></span>':'')+'<span class="sp"></span>'+
           '<span class="cpick" title="Priority: '+is.priority+'">'+prHTML(is.priority)+'<select data-cardpri="'+is.id+'" aria-label="Priority for '+ikey(is)+'">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>'+
           '<span class="cpick" title="'+esc(is.assignee?nameOf(is.assignee):"Unassigned")+'">'+(is.assignee?nameAv(nameOf(is.assignee)):'<span class="who none">'+ic("user",14)+'</span>')+'<select data-cardwho="'+is.id+'" aria-label="Assignee for '+ikey(is)+'">'+teamOptions(is.assignee)+'</select></span>'+
           '</div></article>';
