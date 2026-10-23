@@ -71,6 +71,26 @@ def get_client():
     return _client
 
 
+class _Rows:
+    def __init__(self, data):
+        self.data = data
+
+
+def _all_pages(make_query, order="project_key", page=1000):
+    """Runs a select through every page. The REST API hands back at most 1000
+    rows per request, so a plain .execute() over a whole division silently
+    drops the rest once a table grows past that (project_flags did, and
+    bid dates went missing). `make_query` builds a fresh query each time.
+    Returns an object with .data, like .execute()."""
+    out, start = [], 0
+    while True:
+        rows = make_query().order(order).range(start, start + page - 1).execute().data or []
+        out.extend(rows)
+        if len(rows) < page:
+            return _Rows(out)
+        start += page
+
+
 def _slugify(name):
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     return slug or "division"
@@ -715,8 +735,8 @@ def already_scanned_urls(division_id):
     that failed once (oversized, unreachable, etc.) is not retried; delete
     its scan_results row if you want it picked up again."""
     res = (
-        get_client().table("scan_results").select("document_url,source_url")
-        .eq("division_id", division_id).execute()
+        _all_pages(lambda: get_client().table("scan_results").select("document_url,source_url")
+        .eq("division_id", division_id), order="id")
     )
     return {
         r["document_url"]: r.get("source_url")
@@ -834,8 +854,8 @@ def reconcile_seen(division_id, advertised_by_site, run_date):
     client = get_client()
     try:
         rows = (
-            client.table("scan_results").select("id,site,document_url,misses,status")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: client.table("scan_results").select("id,site,document_url,misses,status")
+            .eq("division_id", division_id), order="id")
         ).data
     except Exception as e:
         print(f"  ! seen-tracking skipped ({e})")
@@ -879,8 +899,8 @@ def closed_project_keys(division_id):
     Empty set if the misses column isn't there yet."""
     try:
         rows = (
-            get_client().table("scan_results").select("site,filename,misses,status")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("scan_results").select("site,filename,misses,status")
+            .eq("division_id", division_id), order="id")
         ).data
     except Exception:
         return set()
@@ -930,8 +950,8 @@ def load_project_decisions(division_id):
                  "project_key,decision,decision_reason,decision_note,decided_at"):
         try:
             res = (
-                get_client().table("project_flags").select(cols)
-                .eq("division_id", division_id).not_.is_("decision", "null").execute()
+                _all_pages(lambda: get_client().table("project_flags").select(cols)
+                .eq("division_id", division_id).not_.is_("decision", "null"))
             )
             return {r["project_key"]: {"decision": r["decision"], "reason": r.get("decision_reason"),
                                        "note": r.get("decision_note"), "decided_at": r.get("decided_at"),
@@ -941,8 +961,8 @@ def load_project_decisions(division_id):
             pass
     try:
         res = (
-            get_client().table("project_flags").select("project_key,done,jira_key")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,done,jira_key")
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
@@ -1158,10 +1178,10 @@ def load_project_fit(division_id):
     Empty if the columns aren't there yet."""
     try:
         res = (
-            get_client().table("project_flags")
+            _all_pages(lambda: get_client().table("project_flags")
             .select("project_key,fit_verdict,fit_reason,fit_confidence,fit_explanation,"
                     "fit_predicted_at,fit_basis_count")
-            .eq("division_id", division_id).not_.is_("fit_verdict", "null").execute()
+            .eq("division_id", division_id).not_.is_("fit_verdict", "null"))
         )
     except Exception:
         return {}
@@ -1771,9 +1791,9 @@ def load_docs_ack(division_id):
     isn't there yet."""
     try:
         res = (
-            get_client().table("project_flags")
+            _all_pages(lambda: get_client().table("project_flags")
             .select("project_key,docs_ack_through")
-            .eq("division_id", division_id).execute()
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
@@ -1786,8 +1806,8 @@ def load_project_bid_dates(division_id):
     Empty if the column/table isn't there yet."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key,bid_date")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,bid_date")
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
@@ -1821,8 +1841,8 @@ def load_project_jira_keys(division_id):
     to Jira"). Empty if the column/table isn't there yet."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key,jira_key")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,jira_key")
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
@@ -1851,8 +1871,8 @@ def load_project_bid_times(division_id):
     only ConstructConnect. Empty if the column/table isn't there yet."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key,bid_time")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,bid_time")
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
@@ -1955,8 +1975,8 @@ def load_plan_holders_at(division_id):
     that has a saved list — lets a browser adapter re-read stale ones."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key,plan_holders_at")
-            .eq("division_id", division_id).not_.is_("plan_holders_at", "null").execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,plan_holders_at")
+            .eq("division_id", division_id).not_.is_("plan_holders_at", "null"))
         )
     except Exception:
         return {}
@@ -1972,8 +1992,8 @@ def load_project_last_updated(division_id):
     column/table isn't there yet."""
     try:
         res = (
-            get_client().table("project_flags").select("project_key,cc_last_updated")
-            .eq("division_id", division_id).execute()
+            _all_pages(lambda: get_client().table("project_flags").select("project_key,cc_last_updated")
+            .eq("division_id", division_id))
         )
     except Exception:
         return {}
