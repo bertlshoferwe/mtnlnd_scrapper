@@ -1571,14 +1571,15 @@ img.who{object-fit:cover;background:var(--chip)}
     ["arizona","#E5484D","M5.9 2H20.25V22H14.3L3.75 17.75L4.4 13L3.9 9.7L5.2 6.5L5.9 5.5Z"],
     ["idaho","#30A46C","M5.85 2H7.9L8.4 7.7L12 12L13.5 14.5L18.15 14.9V22H5.85V14L6.9 12L5.85 10.6Z"],
     ["nevada","#8E4EC6","M5.4 2H18.6V17.4L17.6 18.3L17.3 22L5.4 10.6Z"],
-    ["colorado","#14B8A6","M1.5 4.35H22.5V19.65H1.5Z"],
-    ["wyoming","#F2C200","M1.5 3.65H22.5V20.35H1.5Z"]];
+    ["colorado","#14B8A6","M1.5 4.35H22.5V19.65H1.5Z","","CO","#fff"],
+    ["wyoming","#F2C200","M1.5 3.65H22.5V20.35H1.5Z","","WY","#1d1d1d"]];
   function teamIcon(tid){
     var t=tid&&(D.teams||[]).filter(function(x){return x.id===tid})[0];if(!t)return '';
     var n=(t.name||"").trim().toLowerCase(),m=STATE_ICONS.filter(function(x){return n.indexOf(x[0])>-1})[0],svg;
     if(!m)svg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></svg>';
     else if(m[3])svg='<svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="'+m[2]+'" fill="'+m[1]+'" fill-opacity=".28" stroke="'+m[1]+'" stroke-width="1.5" stroke-linejoin="round"/><path d="'+m[3]+'" fill="'+m[1]+'"/></svg>';
-    else svg='<svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="'+m[2]+'" fill="'+m[1]+'" stroke="'+m[1]+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+    else svg='<svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="'+m[2]+'" fill="'+m[1]+'" stroke="'+m[1]+'" stroke-width="1.5" stroke-linejoin="round"/>'+
+      (m[4]?'<text x="12" y="12.5" text-anchor="middle" dominant-baseline="central" font-size="10.5" font-weight="800" font-family="system-ui,sans-serif" fill="'+m[5]+'">'+m[4]+'</text>':'')+'</svg>';
     return '<span class="tmap" title="Team: '+esc(t.name)+'" role="img" aria-label="Team: '+esc(t.name)+'">'+svg+'</span>';
   }
   function boardHTML(){
