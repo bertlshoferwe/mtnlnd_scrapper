@@ -1523,8 +1523,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function echipHTML(is){
     var par=is.parent?byId(is.parent):null,out='';
     if(par)out+='<span class="echip" style="--ec:var(--c5)" title="'+esc(par.title)+'">'+ikey(par)+' '+esc(par.title)+'</span>';
-    var o=is.originBidId?findBid(is.originBidId):null;
-    if(o)out+='<span class="echip" style="--ec:var(--c1)" title="Copied from '+esc(o.is.title)+'">From '+esc(o.sp.key+"-"+o.is.num)+'</span>';
+    // copies look like any other card; the bid window still says where they were copied from
     return out;
   }
   function dueChip(is){return is.due?'<span class="chip'+(overdue(is)?' over':'')+'">Due '+shortDate(is.due)+(is.dueTime?' '+fmtTime(is.dueTime):'')+'</span>':''}
