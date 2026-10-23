@@ -1124,7 +1124,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- preferences (this device only) ---------- */
   function defaultPrefs(){
     var T=today();
-    return {view:"board",div:"",cur:"",calMonth:T.slice(0,7),calSel:T,calMode:"month",listCols:null,theme:"auto",
+    return {view:"board",div:"",cur:"",calMonth:T.slice(0,7),calSel:T,calMode:"month",listCols2:null,theme:"auto",
       rcfg:{groupBy:"status",chart:"bar",scope:"all",type:"",pri:"",who:"",label:"",name:""},
       reports:[
         {name:"Workload by assignee",cfg:{groupBy:"assignee",chart:"bar",scope:"open",type:"",pri:"",who:"",label:""}},
@@ -1615,15 +1615,24 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function cmp(a,b){var x=sortVal(a,ui.sort),y=sortVal(b,ui.sort);return (x<y?-1:x>y?1:0)*ui.dir}
   // List view, laid out like Jira's: Work (type, key, summary) then the bid's details.
-  var LCOLS={title:"Work",due:"Due date",assignee:"Assignee",reporter:"Reporter",priority:"Priority",status:"Status",resolution:"Resolution",created:"Created",updated:"Updated"};
-  var LDEF=["title","due","assignee","reporter","priority","status","resolution","created","updated"];
+  var LCOLS={title:"Work",due:"Due date",assignee:"Assignee",reporter:"Reporter",priority:"Priority",status:"Status",type:"Type",labels:"Labels",resolution:"Resolution",created:"Created",updated:"Updated"};
+  // the default order follows the bid window's pinned fields, then everything else in the Details
+  var LFRONT=["ticket #","original rfq","@due","@assignee","@reporter","team","co-assignee","contractor name","date quoted","quoted amount"];
   function lcolName(k){
     if(k.indexOf("cf:")===0){var fd=spaceFields(proj()).filter(function(x){return "cf:"+x.id===k})[0];return fd?fd.name:""}
     return LCOLS[k];
   }
-  function listDef(){return LDEF.concat(spaceFields(proj()).map(function(fd){return "cf:"+fd.id}))}
+  function listDef(){
+    var cf=spaceFields(proj()),out=["title"];
+    LFRONT.forEach(function(n){
+      if(n.charAt(0)==="@"){out.push(n.slice(1));return}
+      var fd=cf.filter(function(x){return (x.name||"").trim().toLowerCase()===n})[0];if(fd)out.push("cf:"+fd.id);
+    });
+    cf.forEach(function(fd){if(out.indexOf("cf:"+fd.id)<0)out.push("cf:"+fd.id)});
+    return out.concat(["status","type","labels","priority","resolution","created","updated"]);
+  }
   function listOrder(){
-    var def=listDef(),o=(state.listCols||[]).filter(function(k){return def.indexOf(k)>-1});
+    var def=listDef(),o=(state.listCols2||[]).filter(function(k){return def.indexOf(k)>-1});
     def.forEach(function(k){if(o.indexOf(k)<0)o.push(k)});
     return o;
   }
@@ -1632,7 +1641,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var o=listOrder(),i=o.indexOf(from),j=o.indexOf(to);
     if(i<0||j<0)return;
     o.splice(i,1);o.splice(j,0,from);
-    state.listCols=o;save();render();
+    state.listCols2=o;save();render();
   }
   // a person's initials in a colored circle; the color is fixed per name
   // bright colors only: no grey, blue or dark shades
@@ -1653,7 +1662,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function fmtStamp(ms){return ms?new Date(ms).toLocaleString(undefined,{month:"short",day:"2-digit",year:"numeric",hour:"numeric",minute:"2-digit"}):""}
   /* List cells edit in place: click a cell and it turns into its control (the bid's name keeps
      opening the bid; its pencil renames it). ui.lEdit = {id, k} is the cell being edited. */
-  var LEDIT={title:1,due:1,assignee:1,reporter:1,priority:1};
+  var LEDIT={title:1,due:1,assignee:1,reporter:1,priority:1,type:1};
   function listEditable(k){return canAct()&&(LEDIT[k]||k.indexOf("cf:")===0)}
   function listEditor(k,is){
     var p=proj(),a=' data-lid="'+is.id+'" data-lf="'+esc(k)+'"';
@@ -1662,6 +1671,7 @@ img.who{object-fit:cover;background:var(--chip)}
       (HAS_DUETIME&&is.due?'<input class="lin" type="time" data-lid="'+is.id+'" data-lf="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>';
     if(k==="assignee")return '<select class="lin"'+a+' aria-label="Assignee">'+teamOptions(is.assignee)+'</select>';
     if(k==="reporter")return '<select class="lin"'+a+' aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select>';
+    if(k==="type")return '<select class="lin"'+a+' aria-label="Type">'+TYPES.map(function(x){return opt(x,x,is.type)}).join("")+'</select>';
     if(k==="priority")return '<select class="lin"'+a+' aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select>';
     var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===k})[0];
     return fd?cfInput(fd,is).replace(' data-f="cf:'+fd.id+'"',a).replace('class="bare','class="lin'):'';
@@ -1691,6 +1701,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(k==="reporter"){var rn=is.reporter?nameOf(is.reporter):"";return '<td><span class="kc">'+nameAv(rn)+'<span class="tr">'+(rn?esc(rn):'<span class="none">None</span>')+'</span></span></td>'}
     if(k==="priority")return '<td><span class="kc">'+prHTML(is.priority)+' '+is.priority+'</span></td>';
     if(k==="status"){var st=stat(p,is.status);return '<td><select class="lz cat-'+st.cat+'" data-status="'+is.id+'" aria-label="Status for '+ikey(is)+'">'+p.statuses.map(function(s){return opt(s.id,s.name,is.status)}).join("")+'</select></td>'}
+    if(k==="type")return '<td><span class="kc">'+tiHTML(is.type)+' '+esc(is.type)+'</span></td>';
+    if(k==="labels")return '<td>'+(is.labels.length?'<span class="tr" title="'+esc(is.labels.join(", "))+'">'+esc(is.labels.join(", "))+'</span>':'<span class="none">None</span>')+'</td>';
     if(k==="resolution")return '<td>'+(done?'Done':'Unresolved')+'</td>';
     if(k==="created")return '<td>'+fmtDay(is.created)+'</td>';
     return '<td>'+fmtStamp(is.updated)+'</td>';
@@ -3222,10 +3234,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-calmode]"))){setCalMode(el.getAttribute("data-calmode"));return}
     if(t.closest("[data-unsch]")){ui.unsch=!ui.unsch;render();return}
     if(t.closest("[data-colsbtn]")){ui.colsOpen=!ui.colsOpen;render();return}
-    if(t.closest("[data-colreset]")){state.listCols=null;save();render();return}
+    if(t.closest("[data-colreset]")){state.listCols2=null;save();render();return}
     if((el=t.closest("[data-colmv]"))){
       var lo=listOrder(),li=lo.indexOf(el.getAttribute("data-colmv")),lj=li+parseInt(el.getAttribute("data-d"),10);
-      if(lj>=0&&lj<lo.length){var lt=lo[li];lo[li]=lo[lj];lo[lj]=lt;state.listCols=lo;save();render()}
+      if(lj>=0&&lj<lo.length){var lt=lo[li];lo[li]=lo[lj];lo[lj]=lt;state.listCols2=lo;save();render()}
       return;
     }
     if((el=t.closest("[data-add]"))){var qs=el.getAttribute("data-add");openQC("col",qs,{status:qs});return}
