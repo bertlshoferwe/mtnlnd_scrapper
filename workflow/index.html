@@ -1049,27 +1049,52 @@ img.who{object-fit:cover;background:var(--chip)}
     is.status=sid;
     if(stat(p,sid).cat==="done"){if(!is.doneAt)is.doneAt=today()}else is.doneAt="";
   }
-  // Moving a bid into a "Quoted" column fills a blank "Date Quoted" date field with today.
-  function stampQuoted(p,is,sid){
-    var st=stat(p,sid);if(!st||(st.name||"").trim().toLowerCase()!=="quoted")return;
-    var fd=spaceFields(p).filter(function(x){return x.type==="date"&&(x.name||"").trim().toLowerCase()==="date quoted"})[0];
-    if(!fd)return;
-    is.fields=is.fields||{};if(is.fields[fd.id])return;
-    var v=today();logH(is,fd.name,"None",cfShow(fd,v));is.fields[fd.id]=v;
-  }  // An automation set to "ask" (rule.ask): the database still makes the copy and picks the team's
-  // person for the role (taking turns); once it exists, this window lets whoever moved the bid keep
-  // that pick or choose someone else. Closing it keeps the pick.
-  function queueHandoff(p,is,sid){
-    if(is.type==="Subtask"||!HAS_PROLE)return;
-    var st=stat(p,sid);if(!st)return;
-    (p.rules||[]).forEach(function(r){
-      if(!r.ask||!r.assign||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
-      var t=D.spaces.filter(function(x){return x.id===r.to&&x.parentId===p.id})[0];if(!t)return;
-      if((t.issues||[]).some(function(x){return x.originBidId===is.id}))return;
-      ui.handoffQ=(ui.handoffQ||[]).concat([{bid:is.id,title:is.title,to:t.id,toName:t.name,role:r.assign,tries:0}]);
-    });
-    if(ui.handoffQ&&ui.handoffQ.length)setTimeout(nextHandoff,600);
+  // "Fill in a field" automations (rules with kind "fill"): when a bid enters the rule's column, set
+  // a field: a custom field, Assignee, Reporter or Priority. value "@today" (dates) and "@me" (whoever
+  // moved it) are filled in at the time; rule.blank means only when the field is still empty.
+  function fillTargets(p){
+    var o=[["assignee","Assignee","person"],["reporter","Reporter","person"],["priority","Priority","priority"]];
+    spaceFields(p).forEach(function(fd){o.push(["cf:"+fd.id,fd.name,fd.type])});
+    return o;
   }
+  function applyFills(p,is,sid){
+    var st=stat(p,sid);if(!st||is.type==="Subtask")return;
+    (p.rules||[]).forEach(function(r){
+      if(r.kind!=="fill"||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
+      var v=r.value==="@today"?today():r.value==="@me"?ME:String(r.value||"");if(!v)return;
+      if(r.field.indexOf("cf:")===0){
+        var fid=r.field.slice(3),fd=spaceFields(p).filter(function(x){return x.id===fid})[0];if(!fd)return;
+        is.fields=is.fields||{};var old=is.fields[fid]||"";
+        if((r.blank&&old)||old===v)return;
+        logH(is,fd.name,cfShow(fd,old),cfShow(fd,v),fd.type==="person"?v:"");is.fields[fid]=v;
+      }else if(r.field==="assignee"){
+        if((r.blank&&is.assignee)||is.assignee===v)return;
+        logH(is,"Assignee",is.assignee||"",v);is.assignee=v;
+      }else if(r.field==="reporter"){
+        if((r.blank&&is.reporter)||is.reporter===v)return;
+        logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",nameOf(v),v);is.reporter=v;
+      }else if(r.field==="priority"){
+        if(r.blank&&is.priority&&is.priority!=="Medium")return;
+        if(is.priority===v)return;
+        logH(is,"Priority",is.priority,v);is.priority=v;
+      }
+    });
+  }
+  // The built-in "Date Quoted" stamp became a fill rule: add it once to spaces that have both a Quoted
+  // column and a Date Quoted date field (and no fill rules yet), so nothing stops working.
+  function seedFillRules(){
+    if(!CANWRITE||state.fillSeed1)return;
+    var made=false;
+    D.spaces.forEach(function(sp){
+      if((sp.rules||[]).some(function(r){return r.kind==="fill"}))return;
+      var q=sp.statuses.filter(function(x){return (x.name||"").trim().toLowerCase()==="quoted"})[0];
+      var fd=spaceFields(sp).filter(function(x){return x.type==="date"&&(x.name||"").trim().toLowerCase()==="date quoted"})[0];
+      if(!q||!fd)return;
+      sp.rules=(sp.rules||[]).concat([{id:uid("r"),kind:"fill",status:q.name,field:"cf:"+fd.id,value:"@today",blank:true}]);made=true;
+    });
+    state.fillSeed1=true;savePrefs();if(made)save();
+  }
+
   async function nextHandoff(){
     if(ui.handoff||!ui.handoffQ||!ui.handoffQ.length)return;
     if(flushing||pendingLocal){setTimeout(nextHandoff,400);return}
@@ -1142,7 +1167,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
-    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);stampQuoted(p,is,v);queueHandoff(p,is,v)}
+    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);applyFills(p,is,v);queueHandoff(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
     else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None",v);is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
@@ -1172,7 +1197,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var is={id:newId("bids"),num:num,rank:mr+1000,spaceId:p.id,divisionId:p.divisionId,type:data.type,title:data.title,desc:data.desc||"",status:data.status||p.statuses[0].id,
       priority:data.priority||"Medium",assignee:data.assignee||"",reporter:ME,labels:data.labels||[],due:data.due||"",dueTime:data.due&&data.dueTime||"",
       created:today(),doneAt:"",updated:Date.now(),parent:data.parent||"",comments:[],history:[{by:ME,at:Date.now(),field:"created"}],fields:{},attachments:[]};
-    applyStatus(p,is,is.status);stampQuoted(p,is,is.status);
+    applyStatus(p,is,is.status);applyFills(p,is,is.status);
     p.issues.push(is);save();return is;
   }
   function deleteIssue(id){
@@ -1183,7 +1208,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function moveTo(id,sid,beforeId){
     var p=proj(),is=byId(id);if(!is)return;
-    if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);stampQuoted(p,is,sid);queueHandoff(p,is,sid);is.updated=Date.now()}
+    if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);applyFills(p,is,sid);queueHandoff(p,is,sid);is.updated=Date.now()}
     var col=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(function(a,b){return rk(a)-rk(b)});
     var j=beforeId?col.findIndex(function(x){return x.id===beforeId}):-1;
     if(j<0)is.rank=(col.length?rk(col[col.length-1]):0)+1000;
@@ -1420,6 +1445,7 @@ img.who{object-fit:cover;background:var(--chip)}
     Object.keys(snapshotDocs).forEach(function(p){base[p]=canon(snapshotDocs[p])});
     if(syncTemplates())scheduleFlush();   // a template changed elsewhere, or a space can start following one
     ensureWorkflowSpaces();
+    seedFillRules();
     fixSelection();
     render();
     handoff();
@@ -1491,9 +1517,10 @@ img.who{object-fit:cover;background:var(--chip)}
   function automationsHTML(p){
     var rules=p.rules||[];
     var h='<section class="panel"><div class="phead"><h3>Automations</h3><button class="addbtn" data-arnew aria-label="Add an automation" title="Add an automation">'+ic("plus",16)+'</button></div>'+
-      '<p class="fine" style="margin:0 0 8px">Add a copy of a bid to a sub-space when it reaches a column. The original stays here. The copy is made once, and the two bids don’t stay in sync afterward.</p>';
+      '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
     if(rules.length)h+='<div class="cards arcards">';
     rules.forEach(function(r){
+      if(r.kind==="fill"){h+=fillCardHTML(p,r);return}
       var t=D.spaces.filter(function(x){return x.id===r.to})[0];
       var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
       var warn=!t?'That space no longer exists, so this does nothing.':(t.parentId!==p.id?'That space is no longer a sub-space of this one, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':''));
@@ -1506,17 +1533,56 @@ img.who{object-fit:cover;background:var(--chip)}
     h+=rules.length?'</div>':'<p class="fine">No automations yet. Use + to add one.</p>';
     return h+'</section>';
   }
+  function fillValueLabel(p,r){
+    var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0],ty=tg?tg[2]:"text";
+    if(r.value==="@today")return "Today’s date";
+    if(r.value==="@me")return "Whoever moved it";
+    if(ty==="person")return nameOf(r.value);
+    if(ty==="team"){var tm=(D.teams||[]).filter(function(x){return x.id===r.value})[0];return tm?tm.name:"a deleted team"}
+    if(ty==="money")return "$"+r.value;
+    return r.value;
+  }
+  function fillCardHTML(p,r){
+    var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
+    var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
+    var warn=!tg?'That field is no longer in this space, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':'');
+    return '<div class="mcard arcard"><div class="arl">When a bid enters</div><div class="tname">'+esc(r.status)+'</div>'+
+      '<button class="editbtn" data-aredit="'+esc(r.id)+'" aria-label="Edit automation" title="Edit automation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>'+
+      '<div class="arl">Fill in</div><div class="arto"><b>'+esc(tg?tg[1]:"a deleted field")+'</b><br>'+esc(fillValueLabel(p,r))+(r.blank?'<br>Only if it’s empty':'')+'</div>'+
+      (warn?'<div class="fine" style="color:var(--high);margin:0">'+warn+'</div>':'')+'</div>';
+  }
+  // the value picker for a fill rule, by the field's type
+  function fillValueHTML(p,f){
+    var tg=fillTargets(p).filter(function(x){return x[0]===f.field})[0];if(!tg)return '';
+    var ty=tg[2],v=f.value||"",lab='<label for="ar-v">Fill it with</label>';
+    if(ty==="date")return lab+'<select id="ar-v" data-ar="value">'+opt("@today","Today’s date","@today")+'</select>';
+    if(ty==="person")return lab+'<select id="ar-v" data-ar="value">'+opt("@me","Whoever moved it",v||"@me")+teamOptions(v==="@me"?"":v).replace('<option value="">Unassigned</option>','')+'</select>';
+    if(ty==="team")return lab+'<select id="ar-v" data-ar="value">'+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>';
+    if(ty==="priority")return lab+'<select id="ar-v" data-ar="value">'+PRI.map(function(x){return opt(x,x,v||"High")}).join("")+'</select>';
+    return lab+'<input id="ar-v" data-ar="value" '+(ty==="number"||ty==="money"?'type="number" step="any"':'')+' value="'+esc(v.charAt(0)==="@"?"":v)+'" placeholder="What to put in it">';
+  }
   // New automation modal (the + on the Automations panel)
   function renderAutoModal(){
     var p=proj();if(!p){closeOv("ov-auto");return}
     var kids=childSpaces(p),body,editing=!!ui.editRule;
     $("autoTitle").textContent=editing?"Edit automation":"New automation";
-    if(!kids.length){
+    if(ui.ar.kind==="fill"||!kids.length){
+      var ff=ui.ar,tgs=fillTargets(p);ff.kind="fill";
+      if(!tgs.some(function(x){return x[0]===ff.field}))ff.field=tgs.filter(function(x){return x[2]==="date"})[0]?tgs.filter(function(x){return x[2]==="date"})[0][0]:tgs[0][0];
+      body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,ff.status||p.statuses[0].name)}).join("")+'</select>'+
+        (editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field","fill")+(kids.length?opt("copy","Add a copy to a sub-space","fill"):'')+'</select>')+
+        '<label for="ar-f">Field</label><select id="ar-f" data-ar="field">'+tgs.map(function(x){return opt(x[0],x[1],ff.field)}).join("")+'</select>'+
+        fillValueHTML(p,ff)+
+        '<label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:400"><input type="checkbox" data-ar="blank" style="width:auto"'+(ff.blank!==false?' checked':'')+'> Only if it’s empty (don’t replace what’s there)</label>';
+      $("autoActs").innerHTML=(editing?'<button class="btn small danger" data-delrule="'+esc(ui.editRule)+'">'+(ui.armR?'Tap to confirm':'Delete automation')+'</button>':'')+
+        '<span class="spacer"></span><button class="btn" data-close="ov-auto">Cancel</button><button class="btn primary" data-addrule>'+(editing?'Save':'Add automation')+'</button>';
+    }else if(!kids.length){
       body='<p class="fine">Create a sub-space first (Space details → Create sub-space), then you can send bids to it.</p>';
       $("autoActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-auto">Close</button>';
     }else{
       var f=ui.ar,tgt=kids.filter(function(k){return k.id===f.to})[0]||kids[0];
       body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,f.status||p.statuses[0].name)}).join("")+'</select>'+
+        (editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field","copy")+opt("copy","Add a copy to a sub-space","copy")+'</select>')+
         '<label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select>'+
         '<label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select>'+
         (HAS_PROLE?'<label for="ar-a">Assign the copy to</label><select id="ar-a" data-ar="assign">'+opt("","Keep the same people",f.assign||"")+ROLES.map(function(o){return opt(o,"The team’s "+o,f.assign||"")}).join("")+'</select>'+
@@ -3316,6 +3382,22 @@ img.who{object-fit:cover;background:var(--chip)}
       if(sb)Promise.resolve(sb.from("wf_division_names").delete().eq("division_id",pgid)).then(function(){},function(){});
       delete raw.names[pgid];render();toast("Archived division deleted");return;
     }
+    if(t.closest("[data-addrule]")&&ui.ar.kind==="fill"){
+      var fp=proj();if(!fp)return;
+      var fa=ui.ar,fs=fa.status||fp.statuses[0].name,fv=fa.value;
+      var ftg=fillTargets(fp).filter(function(x){return x[0]===fa.field})[0];if(!ftg)return;
+      if(ftg[2]==="date")fv="@today";
+      else if(ftg[2]==="person")fv=fv||"@me";
+      else if(ftg[2]==="priority")fv=fv||"High";
+      else if(ftg[2]==="team")fv=fv||((divTeams(curDiv())[0]||{}).id||"");
+      else{var fin=$("ar-v");fv=fin?fin.value.trim():""}
+      if(!fv){toast("Choose what to fill it with.");return}
+      fp.rules=fp.rules||[];
+      var fex=fp.rules.filter(function(x){return x.id===ui.editRule})[0],frule={kind:"fill",status:fs,field:fa.field,value:fv,blank:fa.blank!==false};
+      if(fp.rules.some(function(x){return x!==fex&&x.kind==="fill"&&x.status===fs&&x.field===fa.field})){toast("There’s already an automation filling that field in that column.");return}
+      if(fex)Object.assign(fex,frule);else fp.rules.push(Object.assign({id:uid("r")},frule));
+      ui.ar={status:"",to:"",col:"",assign:""};closeOv("ov-auto");save();render();toast(fex?"Automation saved":"Automation added");return;
+    }
     if(t.closest("[data-addrule]")){
       var rp=proj(),rkids=childSpaces(rp);
       if(!rp||!rkids.length)return;
@@ -3330,7 +3412,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-arnew]")){ui.editRule=null;ui.armR=false;ui.ar={status:"",to:"",col:"",assign:""};renderAutoModal();openOv("ov-auto");return}
     if((el=t.closest("[data-aredit]"))){
       var ep=proj(),er=((ep&&ep.rules)||[]).filter(function(x){return x.id===el.getAttribute("data-aredit")})[0];if(!er)return;
-      ui.editRule=er.id;ui.armR=false;ui.ar={status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
+      ui.editRule=er.id;ui.armR=false;ui.ar=er.kind==="fill"?{kind:"fill",status:er.status,field:er.field,value:er.value,blank:!!er.blank}:{status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
     }
     if((el=t.closest("[data-delrule]"))){
       var dp=proj(),did=el.getAttribute("data-delrule");
@@ -3669,7 +3751,9 @@ img.who{object-fit:cover;background:var(--chip)}
       if(nm&&nm!==s2.name){unfollow(proj());s2.name=nm;save();render()}else el.value=s2.name;return;
     }
     if(el.id==="pname"&&!isDefaultSpace(proj())){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
-    if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.type==="checkbox"?el.checked:el.value;if(v==="to")ui.ar.col="";renderAutoModal();return}
+    if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.type==="checkbox"?el.checked:el.value;
+      if(v==="value"||v==="blank")return;   // nothing else depends on these; re-drawing would swallow a click on Save
+      if(v==="to")ui.ar.col="";if(v==="field")ui.ar.value="";if(v==="kind"&&ui.ar.kind==="copy")delete ui.ar.kind;renderAutoModal();return}
     if((v=el.getAttribute("data-tname"))){
       var tt=tplById(v),tv=el.value.trim();
       if(tt&&tv){tt.name=tv;save()}else if(tt)el.value=tt.name;return;
