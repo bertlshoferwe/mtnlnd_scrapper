@@ -1469,7 +1469,7 @@ img.who{object-fit:cover;background:var(--chip)}
         '<label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select>'+
         '<label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select>'+
         (HAS_PROLE?'<label for="ar-a">Assign the copy to</label><select id="ar-a" data-ar="assign">'+opt("","Keep the same people",f.assign||"")+ROLES.map(function(o){return opt(o,"The team’s "+o,f.assign||"")}).join("")+'</select>'+
-          (f.assign?'<p class="fine" style="margin:6px 0 0">The '+esc(f.assign)+' person on the bid’s team becomes the copy’s assignee and reporter. With no team, or nobody with that role, they’re left unknown.</p>':''):'');
+          (f.assign?'<p class="fine" style="margin:6px 0 0">The '+esc(f.assign)+' person on the bid’s team becomes the copy’s assignee and reporter. If the team has more than one, they take turns. With no team, or nobody with that role, they’re left unknown.</p>':''):'');
       $("autoActs").innerHTML=(editing?'<button class="btn small danger" data-delrule="'+esc(ui.editRule)+'">'+(ui.armR?'Tap to confirm':'Delete automation')+'</button>':'')+
         '<span class="spacer"></span><button class="btn" data-close="ov-auto">Cancel</button><button class="btn primary" data-addrule>'+(editing?'Save':'Add automation')+'</button>';
     }
