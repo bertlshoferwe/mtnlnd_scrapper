@@ -1716,6 +1716,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===k})[0],fv=fd?(is.fields||{})[fd.id]:"";
       if(!fd||!fv)return '<td><span class="none">None</span></td>';
       if(fd.type==="person"){var fpn=nameOf(fv);return '<td><span class="kc">'+nameAv(fpn)+'<span class="tr">'+esc(fpn)+'</span></span></td>'}
+      if(fd.type==="team")return '<td><span class="kc">'+teamIcon(fv)+'<span class="tr">'+esc(cfShow(fd,fv))+'</span></span></td>';
       if(fd.type==="date")return '<td>'+fmtDay(fv)+'</td>';
       if(fd.type==="money"||fd.type==="number")return '<td class="num">'+esc(cfShow(fd,fv))+'</td>';
       return '<td><span class="tr" title="'+esc(cfShow(fd,fv))+'">'+esc(cfShow(fd,fv))+'</span></td>';
