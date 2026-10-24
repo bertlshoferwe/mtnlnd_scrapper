@@ -11,6 +11,7 @@
   --accent:#222B57; --accent-ink:#FFFFFF; --col:#E7E9F0; --high:#B8362B; --med:#A8701A; --low:#2F7A47;
   --highbg:#FBE6E3; --medbg:#F7EBD3; --lowbg:#E3F1E6; --chip:#E9ECF3; --shadow:none;
   --c1:#3D4DA3; --c2:#2F8F7B; --c3:#B8761F; --c4:#A2447F; --c5:#7A809B; --c6:#6B57C7;
+  --mast-bg:#202C54; --mast-ink:#FFFFFF; --mast-mute:rgba(255,255,255,.72);
   --side-bg:#161B33; --side-ink:#DDE1F0; --side-mute:#8E96B8; --side-hi:rgba(255,255,255,.1);
   --head:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -22,7 +23,7 @@
     --accent:#8E9AD6; --accent-ink:#10142B; --col:#20253D; --high:#F08A80; --med:#D2A24E; --low:#6FBF86;
     --highbg:#3A1D21; --medbg:#2C2517; --lowbg:#16291F; --chip:#232944; --shadow:none;
     --c1:#8E9AD6; --c2:#5CC4AE; --c3:#D9A257; --c4:#D98BBF; --c5:#9AA0BC; --c6:#A99AF0;
-    --side-bg:#090C1A; color-scheme:dark;
+    --side-bg:#090C1A; --mast-bg:#171D33; --mast-ink:#EDF0F8; --mast-mute:rgba(237,240,248,.66); color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
@@ -30,7 +31,7 @@
     --accent:#8E9AD6; --accent-ink:#10142B; --col:#20253D; --high:#F08A80; --med:#D2A24E; --low:#6FBF86;
     --highbg:#3A1D21; --medbg:#2C2517; --lowbg:#16291F; --chip:#232944; --shadow:none;
     --c1:#8E9AD6; --c2:#5CC4AE; --c3:#D9A257; --c4:#D98BBF; --c5:#9AA0BC; --c6:#A99AF0;
-    --side-bg:#090C1A; color-scheme:dark;
+    --side-bg:#090C1A; --mast-bg:#171D33; --mast-ink:#EDF0F8; --mast-mute:rgba(237,240,248,.66); color-scheme:dark;
 }
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -79,9 +80,19 @@ button{cursor:pointer}
 @media (min-width:900px) and (prefers-reduced-motion:no-preference){.side{transition:width .18s,flex-basis .18s}}
 @media (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
 
-.top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+/* Top bar: the same floating rounded bar as Bid Scout's masthead, title on the left. Sizes are divided
+   by --z so it comes out the same size on screen as Bid Scout's (the board is zoomed to 80% on computers). */
+.top{display:flex;align-items:center;gap:calc(12px / var(--z));margin:calc(12px / var(--z)) calc(16px / var(--z)) calc(8px / var(--z));
+  min-height:calc(60px / var(--z));padding:calc(8px / var(--z)) calc(10px / var(--z)) calc(8px / var(--z)) calc(18px / var(--z));
+  background:var(--mast-bg);color:var(--mast-ink);border:1px solid rgba(255,255,255,.07);border-radius:calc(16px / var(--z));box-shadow:0 6px 20px rgba(16,22,46,.12)}
 .top .crumb{flex:1;min-width:0}
-.top small{display:block;font-size:12px;color:var(--muted)}
+.top h1{font-size:calc(17px / var(--z));font-weight:800;letter-spacing:.01em;line-height:1.25;color:var(--mast-ink)}
+.top small{display:block;font-size:calc(12px / var(--z));line-height:1.35;margin-top:1px;color:var(--mast-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.top .btn,header.top .icon{display:inline-flex;align-items:center;gap:calc(6px / var(--z));flex-shrink:0;background:rgba(255,255,255,.08);color:var(--mast-mute);
+  border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:calc(7px / var(--z)) calc(13px / var(--z));font-size:calc(12.5px / var(--z));font-weight:600;line-height:1.2;white-space:nowrap}
+header.top .icon{justify-content:center;width:calc(36px / var(--z));height:calc(36px / var(--z));padding:0;margin-left:calc(-8px / var(--z))}
+header.top .btn:hover,header.top .icon:hover{color:var(--mast-ink);background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.34)}
+@media (max-width:640px){.top{margin:10px 10px 6px;padding:8px 8px 8px 14px}.top .icon{margin-left:-6px}}
 h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon{background:var(--surface);border:1px solid var(--line);border-radius:8px;width:38px;height:38px;display:grid;place-items:center;padding:0}
 .tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto}
@@ -790,7 +801,7 @@ img.who{object-fit:cover;background:var(--chip)}
   <div class="main">
     <header class="top">
       <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
-      <div class="crumb"><small id="pkey"></small><h1 id="ptitle"></h1></div>
+      <div class="crumb"><h1 id="ptitle"></h1><small id="pkey"></small></div>
       <button class="btn small" id="me" type="button" data-me hidden></button>
       <button class="btn small" id="theme" type="button"></button>
     </header>

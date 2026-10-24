@@ -107,17 +107,29 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
+  /* Top bar: the same floating rounded bar as the bid board (/workflow/ .top), title on the left. */
   .masthead {
+    margin: 12px 16px 0;
     background: var(--masthead-bg);
     color: var(--masthead-text);
-    border-bottom: 3px solid var(--accent-soft-text);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(16,22,46,.12);
   }
   .masthead-inner {
-    max-width: 880px; margin: 0 auto; padding: 22px 20px;
-    display: flex; justify-content: space-between; align-items: flex-start;
-    gap: 14px 16px; flex-wrap: wrap;
+    min-height: 60px; padding: 8px 10px 8px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px;
   }
   .masthead-inner > div { min-width: 0; }
+  .masthead h1 {
+    font-size: 17px; font-weight: 800; letter-spacing: .01em; line-height: 1.25;
+    text-transform: none; margin: 0;
+  }
+  .masthead .subtitle {
+    font-size: 12px; line-height: 1.35; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .wrap { max-width: 880px; margin: 0 auto; padding: 26px 20px 80px; }
   h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 5px; text-transform: uppercase; }
   .masthead h1 { color: var(--masthead-text); }
@@ -127,13 +139,13 @@
   .theme-toggle {
     flex-shrink: 0;
     display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(255,255,255,.09); color: var(--masthead-muted);
-    border: 1px solid rgba(255,255,255,.22); border-radius: 999px;
-    padding: 6px 12px; font-size: 12.5px; font-weight: 600;
-    white-space: nowrap;
+    background: rgba(255,255,255,.08); color: var(--masthead-muted);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+    padding: 7px 13px; font-size: 12.5px; font-weight: 600; line-height: 1.2;
+    white-space: nowrap; text-decoration: none; cursor: pointer;
   }
-  .theme-toggle:hover { color: var(--masthead-text); border-color: rgba(255,255,255,.4); }
-  .masthead-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .theme-toggle:hover { color: var(--masthead-text); background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.34); }
+  .masthead-actions { display: flex; gap: 8px; flex-shrink: 0; }
   a.theme-toggle { text-decoration: none; }
   .card {
     background: var(--card);
@@ -857,7 +869,9 @@
   @media (max-width: 640px) {
     /* Rows stack on phones, so an empty New slot would just leave a gap. */
     .project-list .p-badge-slot:empty { display: none; }
-    .masthead-inner { padding: 16px 14px; }
+    .masthead { margin: 10px 10px 0; }
+    .masthead-inner { padding: 8px 8px 8px 14px; }
+    .masthead .subtitle { display: none; }
     .wrap { padding: 16px 13px 44px; }
     h1 { font-size: 19px; }
     .subtitle { font-size: 12.5px; }
