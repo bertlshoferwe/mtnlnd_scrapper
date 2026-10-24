@@ -1483,13 +1483,17 @@ img.who{object-fit:cover;background:var(--chip)}
   function handoff(){
     if(handoffDone)return;
     handoffDone=true;
-    var q=new URLSearchParams(location.search),bid=q.get("bid"),div=q.get("division"),pk=q.get("project");
-    if(!bid&&!div&&!pk){   // a refresh reopens the bid that was open
+    var q=new URLSearchParams(location.search);
+    if(!q.get("bid")&&!q.get("division")&&!q.get("project")){   // a refresh reopens the bid that was open
       var hb=HERE&&HERE.bid,hi=hb&&byId(hb);
       if(hi&&hi.spaceId===state.cur)openIssue(hb);else if(hb&&D.spaces.some(function(s){return s.issues.some(function(i){return i.id===hb})}))gotoBid(hb);
       return;
     }
     try{history.replaceState(null,"",location.pathname)}catch(e){}
+    openLink(q);
+  }
+  function openLink(q){
+    var bid=q.get("bid"),div=q.get("division"),pk=q.get("project");
     if(pk&&!bid){
       D.spaces.forEach(function(s){s.issues.forEach(function(i){
         if(i.sourceProjectId===pk&&(!bid||(div&&i.divisionId===String(div))))bid=i.id;
@@ -1501,8 +1505,28 @@ img.who{object-fit:cover;background:var(--chip)}
       if(found){gotoBid(bid);return}
       toast("That bid wasn’t found.");
     }
-    if(div&&D.divs.some(function(d){return d.id===String(div)}))switchDiv(String(div));
+    if(div&&String(div)!==state.div&&D.divs.some(function(d){return d.id===String(div)}))switchDiv(String(div));
   }
+
+  /* Bid Scout and the board each keep one browser tab: this one is named "bidboard", Bid Scout's
+     "bidscout". Opening the other side reuses its tab when one is open (and opens the link there
+     without reloading when it can), otherwise opens a new tab. Bid Scout calls wfOpenLink below. */
+  window.name="bidboard";
+  function openInTab(name,url,fn){
+    var w=null;try{w=window.open("",name)}catch(e){}
+    if(!w){window.open(url,"_blank");return}
+    var live=false;try{live=w.location.href!=="about:blank"&&w.location.host===new URL(url,location.href).host}catch(e){}
+    try{if(live&&typeof w[fn]==="function"&&w[fn](url)){w.focus();return}}catch(e){}
+    w.location.href=url;try{w.focus()}catch(e){}
+  }
+  window.wfOpenLink=function(href){
+    var u=new URL(href,location.href);if(u.pathname!==location.pathname||!READY)return false;
+    var q=u.searchParams,b=q.get("bid"),pk=q.get("project");
+    // a bid just added in Bid Scout may not have reached this tab yet: load first
+    var have=D.spaces.some(function(s){return s.issues.some(function(i){return i.id===b||(pk&&i.sourceProjectId===pk)})});
+    if((b||pk)&&!have)loadAll().then(function(){setTimeout(function(){openLink(q)},400)}).catch(function(){openLink(q)});else openLink(q);
+    return true;
+  };
 
   /* ---------- people ---------- */
   function nameOf(id){
@@ -1612,7 +1636,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("autoBody").innerHTML=body;
   }
   function srcLinkHTML(is){
-    return (/^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="_blank" rel="noopener">Open the project</a></div>':'')+listingHTML(is);
+    return (/^https?:\/\//i.test(is.sourceUrl||"")?'<label>Bid Scout</label><div class="ro"><a href="'+esc(is.sourceUrl)+'" target="bidscout" data-scout>Open the project</a></div>':'')+listingHTML(is);
   }
   // The project on the site it came from (ConstructConnect, UDOT, ...): a link pasted on the bid
   // (fields._listing, copies carry it) wins over the one Bid Scout found. Anyone can add or change it.
@@ -3273,6 +3297,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- events ---------- */
   document.addEventListener("click",function(e){
     var el,t=e.target;
+    if((el=t.closest("a[data-scout]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();openInTab("bidscout",el.href,"bsOpenLink");return}
     if((el=t.closest("[data-ledit]"))&&!t.closest("[data-open]")&&!t.closest("[data-lf]")){
       var lp=el.getAttribute("data-ledit").split("|");
       ui.lEdit={id:lp[0],k:lp.slice(1).join("|")};render();

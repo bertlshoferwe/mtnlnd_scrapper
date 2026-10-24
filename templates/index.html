@@ -940,8 +940,8 @@
       <p class="subtitle">Scans planning sites daily and flags the plans that match your keywords.</p>
     </div>
     <div class="masthead-actions">
-      <a class="theme-toggle" id="bidBoardLink" href="/workflow/" target="_blank" rel="noopener"
-         onclick="this.href = '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : '')"
+      <a class="theme-toggle" id="bidBoardLink" href="/workflow/" target="bidboard"
+         onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
          title="Track the projects this division is bidding on">Bid board</a>
       <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
         <span id="themeToggleIcon" style="display:inline-flex"></span><span id="themeToggleLabel">Auto</span>
@@ -3974,8 +3974,8 @@ async function addProjectToJira(skipLinkCheck) {
   const p = currentProject;
   if (!p) return;
   if (onBoard(p)) {
-    window.open('/workflow/?division=' + encodeURIComponent(currentDivision)
-      + (p.board_bid_id ? '&bid=' + encodeURIComponent(p.board_bid_id) : '&project=' + encodeURIComponent(p.key)), '_blank');
+    openInTab('bidboard', '/workflow/?division=' + encodeURIComponent(currentDivision)
+      + (p.board_bid_id ? '&bid=' + encodeURIComponent(p.board_bid_id) : '&project=' + encodeURIComponent(p.key)), 'wfOpenLink');
     return;
   }
   // A bid typed in by hand that looks like this project? Offer to link it first.
@@ -4394,6 +4394,10 @@ async function openLinkedProject() {
   url.searchParams.delete('project');
   history.replaceState(null, '', url);
   if (!currentDivision) return;
+  openProjectByKey(key);
+}
+
+async function openProjectByKey(key) {
   try {
     const params = new URLSearchParams({ project: key, include_closed: '1', page_size: 1 });
     const data = await api('/api/' + currentDivision + '/results-grouped?' + params.toString());
@@ -4403,6 +4407,30 @@ async function openLinkedProject() {
     openProjectModal(projectsData.length - 1);
   } catch (e) { /* leave the dashboard as it is */ }
 }
+
+// Bid Scout and the bid board each keep one browser tab: this one is named "bidscout", the board's
+// "bidboard". Opening the other side reuses its tab when one is open (and opens the link there
+// without reloading when it can), otherwise opens a new tab. The board calls bsOpenLink below.
+window.name = 'bidscout';
+function openInTab(name, url, fn) {
+  let w = null;
+  try { w = window.open('', name); } catch (e) { /* blocked */ }
+  if (!w) { window.open(url, '_blank'); return; }
+  let live = false;
+  try { live = w.location.href !== 'about:blank' && w.location.host === new URL(url, location.href).host; } catch (e) { /* another site */ }
+  try { if (live && typeof w[fn] === 'function' && w[fn](url)) { w.focus(); return; } } catch (e) { /* fall back to loading the link */ }
+  w.location.href = url;
+  try { w.focus(); } catch (e) { /* ignore */ }
+}
+// A link from the board, opened in this tab as it is. Another division reloads the page on it.
+window.bsOpenLink = function (href) {
+  const u = new URL(href, location.href);
+  if (u.pathname !== location.pathname) return false;
+  const div = u.searchParams.get('division'), key = u.searchParams.get('project');
+  if ((div && div !== currentDivision) || !currentDivision) return false;
+  if (key) openProjectByKey(key);
+  return true;
+};
 
 init();
 </script>
