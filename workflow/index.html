@@ -2564,7 +2564,14 @@ img.who{object-fit:cover;background:var(--chip)}
       $("tplActs").innerHTML=(t.kind==="fields"&&!isDefaultFieldSet(t)&&ORG?'<button class="btn small danger" data-delfs="'+t.id+'">'+(ui.armDT===t.id?'Tap to confirm':'Delete setup')+'</button>':'')+
         '<span class="spacer"></span><button class="btn primary" data-close="ov-tpl">Done</button>';
     }
-    $("tplBody").innerHTML=h;
+    // redraws (saves, live updates) keep the column strip's sideways scroll and the box being typed in
+    var tb=$("tplBody"),ow=tb.querySelector(".wedit"),osl=ow?ow.scrollLeft:0,ost=tb.closest(".sheet")?tb.closest(".sheet").scrollTop:0;
+    var ae=document.activeElement,fk=null,fs=null,fe=null;
+    if(ae&&tb.contains(ae)){["data-tcname","data-tccat","data-tname","data-tfname","data-tftype","id"].some(function(n){var v=ae.getAttribute(n);if(v){fk=[n,v];return true}});try{fs=ae.selectionStart;fe=ae.selectionEnd}catch(x){}}
+    tb.innerHTML=h;
+    var nw=tb.querySelector(".wedit");if(nw&&osl)nw.scrollLeft=osl;
+    if(tb.closest(".sheet"))tb.closest(".sheet").scrollTop=ost;
+    if(fk){var nf=tb.querySelector("["+fk[0]+'="'+fk[1].replace(/"/g,'\\"')+'"]');if(nf){nf.focus({preventScroll:true});try{if(fs!=null)nf.setSelectionRange(fs,fe)}catch(x){}}}
   }
   function orgSettingsHTML(){
     var p=proj(),d=curDiv(),tab=ui.setTab||"space";
@@ -2735,7 +2742,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(nbd&&osl){nbd.style.scrollSnapType="none";nbd.scrollLeft=osl;requestAnimationFrame(function(){nbd.style.scrollSnapType=""})}
     $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
     if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
-    if($("ov-tpl").classList.contains("open"))renderTplModal();
+    // not while a name is being typed there: it only saves on leaving the box, so a redraw would undo it
+    var tae=document.activeElement;
+    if($("ov-tpl").classList.contains("open")&&!(tae&&tae.tagName==="INPUT"&&$("tplBody").contains(tae)))renderTplModal();
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
     maybeAskMe(loading);
