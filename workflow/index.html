@@ -1240,7 +1240,12 @@ img.who{object-fit:cover;background:var(--chip)}
     try{var r=localStorage.getItem(PKEY);if(r)return Object.assign(defaultPrefs(),JSON.parse(r))}catch(e){}
     return defaultPrefs();
   }
-  function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(state))}catch(e){}}
+  function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(state))}catch(e){}saveHere()}
+  // Where this browser tab is (division, space, view and the open bid), kept for this tab only, so a
+  // refresh comes back to the same place. A new visit still starts on the default space and view.
+  var HKEY="wf_here",HERE=null;
+  function saveHere(){try{sessionStorage.setItem(HKEY,JSON.stringify({div:state.div||"",cur:state.cur||"",view:state.view||"",bid:ui.issueId||""}))}catch(e){}}
+  function loadHere(){try{var r=sessionStorage.getItem(HKEY);return r?JSON.parse(r):null}catch(e){return null}}
   function orgView(v){return v==="overview"||v==="orgsettings"}
   function archivedBlocked(){
     if(orgView(state.view)||!isArchived(state.div))return false;
@@ -1465,8 +1470,9 @@ img.who{object-fit:cover;background:var(--chip)}
       state.div=vis.length?vis[0].id:"";state.cur="";
       if(!state.div)state.view="board";
     }
-    // each page load starts on the division's workflow space; after that, keep where the user is
-    if(!selDone||!divSpaces(state.div).some(function(s){return s.id===state.cur})){
+    // a new visit starts on the division's workflow space (a refresh keeps this tab's space); after that, keep where the user is
+    if(!selDone&&HERE&&HERE.div===state.div&&divSpaces(state.div).some(function(s){return s.id===HERE.cur}))state.cur=HERE.cur;
+    else if(!selDone||!divSpaces(state.div).some(function(s){return s.id===state.cur})){
       state.cur=defaultSpace(state.div);
     }
     selDone=true;
@@ -1478,7 +1484,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if(handoffDone)return;
     handoffDone=true;
     var q=new URLSearchParams(location.search),bid=q.get("bid"),div=q.get("division"),pk=q.get("project");
-    if(!bid&&!div&&!pk)return;
+    if(!bid&&!div&&!pk){   // a refresh reopens the bid that was open
+      var hb=HERE&&HERE.bid,hi=hb&&byId(hb);
+      if(hi&&hi.spaceId===state.cur)openIssue(hb);else if(hb&&D.spaces.some(function(s){return s.issues.some(function(i){return i.id===hb})}))gotoBid(hb);
+      return;
+    }
     try{history.replaceState(null,"",location.pathname)}catch(e){}
     if(pk&&!bid){
       D.spaces.forEach(function(s){s.issues.forEach(function(i){
@@ -2737,7 +2747,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -2756,7 +2766,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
     ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
-    renderIssue();openOv("ov-issue");
+    renderIssue();openOv("ov-issue");saveHere();
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
   }
   function renderIssue(){
@@ -4024,10 +4034,12 @@ img.who{object-fit:cover;background:var(--chip)}
   $("c-save").addEventListener("click",submitCreate);
   $("p-save").addEventListener("click",submitSpace);
 
-  state=loadPrefs();
+  state=loadPrefs();HERE=loadHere();
   // drops used to switch a sorted column to Manual on their own; put those back on the default sort once
   if(!state.csReset1){Object.keys(state.colSort||{}).forEach(function(sp){var m=state.colSort[sp];Object.keys(m).forEach(function(c){if(m[c]==="rank")delete m[c]})});state.csReset1=true;savePrefs()}
   if(state.defaultView)state.view=defaultView();   // each visit opens on the default view
+  if(HERE){   // ...but a refresh stays where this tab was
+    if(HERE.div)state.div=HERE.div;if(HERE.view)state.view=HERE.view}
   ORG=true;CANWRITE=true;ME="Someone";
   // Same switch as Bid Scout (served from the same site, so same localStorage).
   try{var bt=localStorage.getItem("bidscout_theme");if(THEMES.indexOf(bt)>=0)state.theme=bt}catch(e){}
