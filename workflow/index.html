@@ -36,7 +36,7 @@
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;min-height:calc(100vh / var(--z))}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;min-height:calc(100vh / var(--z));-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 /* Default size: computers show the board at 80% (like browser zoom at 80%); phones stay at 100%.
    Full-height sizes divide by --z so they still fill the window. */
 :root{--z:1}
