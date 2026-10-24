@@ -1089,6 +1089,20 @@ img.who{object-fit:cover;background:var(--chip)}
     state.fillSeed1=true;savePrefs();if(made)save();
   }
 
+  // An automation set to "ask" (rule.ask): the database still makes the copy and picks the team's
+  // person for the role (taking turns); once it exists, this window lets whoever moved the bid keep
+  // that pick or choose someone else. Closing it keeps the pick.
+  function queueHandoff(p,is,sid){
+    if(is.type==="Subtask"||!HAS_PROLE)return;
+    var st=stat(p,sid);if(!st)return;
+    (p.rules||[]).forEach(function(r){
+      if(r.kind==="fill"||!r.ask||!r.assign||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
+      var t=D.spaces.filter(function(x){return x.id===r.to&&x.parentId===p.id})[0];if(!t)return;
+      if((t.issues||[]).some(function(x){return x.originBidId===is.id}))return;
+      ui.handoffQ=(ui.handoffQ||[]).concat([{bid:is.id,title:is.title,to:t.id,toName:t.name,role:r.assign,tries:0}]);
+    });
+    if(ui.handoffQ&&ui.handoffQ.length)setTimeout(nextHandoff,600);
+  }
   async function nextHandoff(){
     if(ui.handoff||!ui.handoffQ||!ui.handoffQ.length)return;
     if(flushing||pendingLocal){setTimeout(nextHandoff,400);return}
