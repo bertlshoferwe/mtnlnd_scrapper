@@ -1382,11 +1382,11 @@ class ConstructConnectAdapter(SiteAdapter):
     @staticmethod
     def _infer_event_date(day_text, month_abbr):
         """EventItem_date gives only a day + 3-letter month ("1"/"Oct") —
-        no year anywhere on the page. Infers the nearest occurrence: this
-        year, unless that would be more than a week in the past, in which
-        case it's next year's (events are always upcoming, and ConstructConnect
-        presumably omits the year because within-a-year is assumed obvious).
-        Returns an ISO date string, or None if unparseable."""
+        no year anywhere on the page. Infers the year that puts the date
+        closest to today — a project stays listed after its bid opens, so
+        "Oct 1" seen on Oct 26 is this October (already past), not next
+        year's; "Jan 5" seen in November is next January. Returns an ISO
+        date string, or None if unparseable."""
         if not day_text or not month_abbr:
             return None
         try:
@@ -1395,16 +1395,15 @@ class ConstructConnectAdapter(SiteAdapter):
         except (ValueError, TypeError):
             return None
         today = datetime.now()
-        try:
-            candidate = datetime(today.year, month_num, day_num)
-        except ValueError:
-            return None
-        if candidate < today - timedelta(days=7):
+        candidates = []
+        for year in (today.year - 1, today.year, today.year + 1):
             try:
-                candidate = datetime(today.year + 1, month_num, day_num)
+                candidates.append(datetime(year, month_num, day_num))
             except ValueError:
-                return None
-        return candidate.date().isoformat()
+                pass  # Feb 29 outside a leap year
+        if not candidates:
+            return None
+        return min(candidates, key=lambda c: abs(c - today)).date().isoformat()
 
     # ConstructConnect dropped the old single "View/Download Documents"
     # button in favor of a per-category Documents panel on the project page

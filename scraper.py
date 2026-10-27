@@ -966,6 +966,11 @@ def _scan_division(division):
             print(f"Skipping {len(inactive)} inactive site(s): {', '.join(inactive)}")
         sites = [s for s in sites if s.get("active", True)]
 
+        # ConstructConnect bid dates once got pushed a year ahead (a past
+        # "Oct 1" read as next October); put any saved that way back.
+        supabase_store.fix_bumped_bid_years(
+            division_id, [s["name"] for s in sites if s.get("adapter") == "constructconnect"])
+
         if not keywords:
             print(f"No keywords configured for division '{division_id}' — nothing to check for.")
         run_date = datetime.now(timezone.utc).isoformat()

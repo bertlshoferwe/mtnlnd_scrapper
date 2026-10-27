@@ -1841,6 +1841,32 @@ def save_project_bid_dates(division_id, mapping):
         sync_workflow_bid_due(division_id, dates=changed)
 
 
+def fix_bumped_bid_years(division_id, site_names):
+    """ConstructConnect shows bid dates without a year, and the adapter used
+    to read any date more than a week past as next year's — so a project
+    still listed after its bid opened got a date a year out and dropped out
+    of the bid-date filters. Moves a saved date from those sites back a
+    year when that lands closer to today (what the adapter now infers),
+    through save_project_bid_dates so board due dates follow."""
+    if not site_names:
+        return
+    today = date.today()
+    fixed = {}
+    for key, bd in load_project_bid_dates(division_id).items():
+        if _split_site(key)[0] not in site_names:
+            continue
+        try:
+            d = date.fromisoformat(bd)
+            back = d.replace(year=d.year - 1)
+        except ValueError:
+            continue
+        if abs((back - today).days) < abs((d - today).days):
+            fixed[key] = back.isoformat()
+    if fixed:
+        print(f"  fixing {len(fixed)} ConstructConnect bid date(s) saved a year ahead")
+        save_project_bid_dates(division_id, fixed)
+
+
 def load_project_jira_keys(division_id):
     """{project_key: 'GEO-23'} for projects already filed to Jira (via "Add
     to Jira"). Empty if the column/table isn't there yet."""
