@@ -96,6 +96,11 @@ class SiteAdapter:
         # {label: "City, ST 12345"} — where a project is, for portals that
         # show it per project (ConstructConnect). Saved like plan_holders.
         self.locations = {}
+        # Every project label still on the portal's listing this run, even
+        # ones skipped without fetching documents (ConstructConnect skips
+        # unchanged projects) — so seen-tracking doesn't count a skipped
+        # project as gone and hide it as closed.
+        self.listed_labels = set()
 
     @classmethod
     def matches_url(cls, url):
@@ -925,6 +930,8 @@ class ConstructConnectAdapter(SiteAdapter):
             for label, doc_status, project_id, last_updated in rows:
                 if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
                     break
+                if label:
+                    self.listed_labels.add(label)
                 if project_id and last_updated:
                     current_updated[project_id] = last_updated
                 if doc_status in self.NO_DOCS_STATUSES:

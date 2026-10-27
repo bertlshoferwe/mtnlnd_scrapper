@@ -597,16 +597,16 @@ def scan_site(site, ai_client):
                 supabase_store.save_project_last_updated(division_id, current_updated)
             _save_plan_holders(site, adapter)
             _save_locations(site, adapter)
-            return doc_links, {}, login_result
+            return doc_links, {}, login_result, adapter.listed_labels
         print(f"  Adapter: {adapter.label}")
         found = adapter.find_documents(site)
         _save_plan_holders(site, adapter)
         # (label, url, filename, source_url, bid_date[, bid_time])
         return [(t[0], t[1], t[2], None, t[3], t[4], t[5] if len(t) > 5 else None)
-                for t in found], {}, None
+                for t in found], {}, None, adapter.listed_labels
     if (site.get("adapter") or "").strip():
         print(f"  ! Site '{site['name']}' has unknown adapter '{site['adapter']}' — skipping")
-        return [], {}, None
+        return [], {}, None, set()
 
     listing = site.get("listing") or {}
     if listing.get("link_selector") or listing.get("link_pattern"):
@@ -614,10 +614,10 @@ def scan_site(site, ai_client):
         # targeted listing crawl. An empty {} — left over from the old
         # "let AI find the links" checkbox — falls through to the browser crawler.
         return [(lbl, url, fn, None, None, None, None)
-                for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}, None
+                for lbl, url, fn in find_document_links_via_listing(site, ai_client)], {}, None, set()
     if site.get("tabs"):
         return [(lbl, url, fn, None, None, None, None)
-                for lbl, url, fn in find_document_links_across_tabs(site)], {}, None
+                for lbl, url, fn in find_document_links_across_tabs(site)], {}, None, set()
 
     # Default: a real browser crawl — renders JS, follows links, clicks
     # "Documents/Plans" tabs, captures JS downloads, logs in first if the
@@ -626,9 +626,9 @@ def scan_site(site, ai_client):
     crawled, cookies, login_result = browser_crawl.crawl_site(site["url"], login=_site_login(site))
     if crawled is not None:
         return [(lbl, url, fn, content, page_url, None, None)
-                for lbl, url, fn, content, page_url in crawled], cookies, login_result
+                for lbl, url, fn, content, page_url in crawled], cookies, login_result, set()
     return [(None, doc_url, fn, None, site["url"], None, None)
-            for doc_url, fn in find_document_links(site["url"])], {}, login_result
+            for doc_url, fn in find_document_links(site["url"])], {}, login_result, set()
 
 
 def download_document(url, cookies=None):
@@ -1004,6 +1004,7 @@ def _scan_division(division):
         deadline = time.monotonic() + SCAN_DIVISION_BUDGET_S
         stopped_early = False
         advertised_by_site = {}  # site name -> {doc_key} for seen-tracking reconcile
+        listed_by_site = {}  # site name -> {project site key} listed but not re-fetched
         for site_i, site in enumerate(sites, start=1):
             name = site["name"]
             url = site.get("url") or ""
@@ -1031,7 +1032,7 @@ def _scan_division(division):
                 run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
                 done=0, total=0, overall=overall_done,
             )
-            doc_links, site_cookies, login_result = scan_site(site, ai_client)
+            doc_links, site_cookies, login_result, listed_labels = scan_site(site, ai_client)
             if login_result is not None:
                 supabase_store.record_login_result(
                     division_id, site["id"], login_result["ok"], login_result["message"]
@@ -1042,10 +1043,11 @@ def _scan_division(division):
             # Seen-tracking: only reconcile a site whose discovery actually
             # returned something — an empty result may just mean the adapter
             # broke, and we don't want that to mark projects "no longer listed".
-            if SEEN_TRACKING and site.get("active", True) and doc_links:
+            if SEEN_TRACKING and site.get("active", True) and (doc_links or listed_labels):
                 advertised_by_site[name] = {
                     (du or f"{url}#{fn}") for _, du, fn, _, _, _, _ in doc_links
                 }
+                listed_by_site[name] = {f"{name} — {lbl}" for lbl in listed_labels}
 
             # Bid-opening dates/times (portal adapters + ConstructConnect), one
             # per project — saved immediately per site, same reasoning as
@@ -1181,7 +1183,7 @@ def _scan_division(division):
 
         if SEEN_TRACKING and advertised_by_site:
             supabase_store.update_run_progress(run_id, label="Checking listings")
-            supabase_store.reconcile_seen(division_id, advertised_by_site, run_date)
+            supabase_store.reconcile_seen(division_id, advertised_by_site, run_date, listed_by_site)
 
         # "Likely fit / not a fit" suggestions for whatever's in To Review,
         # learned from past decisions — off until there are enough of them

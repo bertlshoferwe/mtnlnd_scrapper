@@ -834,7 +834,7 @@ def _split_site(site):
 # "Still advertised?" tracking
 # ---------------------------------------------------------------------------
 
-def reconcile_seen(division_id, advertised_by_site, run_date):
+def reconcile_seen(division_id, advertised_by_site, run_date, listed_by_site=None):
     """After a scan, refresh the 'still advertised' state on scan_results.
 
     advertised_by_site: {site_name: {doc_key, ...}} — one entry per site whose
@@ -842,7 +842,10 @@ def reconcile_seen(division_id, advertised_by_site, run_date):
     that errored or came back empty is left out, so a broken adapter can't
     mark projects closed). For those sites: rows whose document_url is still
     in the listing get last_seen_at=run_date, misses=0; rows that aren't get
-    misses += 1. No-ops if the columns aren't there yet."""
+    misses += 1. listed_by_site: {site_name: {project site key, ...}} for
+    projects still on the listing whose documents weren't re-fetched this
+    run (ConstructConnect skips unchanged ones) — their rows count as seen.
+    No-ops if the columns aren't there yet."""
     if not advertised_by_site:
         return
     client = get_client()
@@ -867,7 +870,7 @@ def reconcile_seen(division_id, advertised_by_site, run_date):
         if name is None:
             continue
         du = r.get("document_url")
-        if du and du in advertised_by_site[name]:
+        if (du and du in advertised_by_site[name]) or r.get("site") in (listed_by_site or {}).get(name, ()):
             seen_ids.append(r["id"])
         elif r.get("status") != "Download failed":
             missed.append(r)
