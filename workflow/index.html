@@ -2745,8 +2745,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if(v!=="calendar")ui.calPop=null;
     if(!DENIED&&!loading&&!CANWRITE)html='<p class="note">You have view-only access, so changes won’t be saved.</p>'+html;
     if(!DENIED&&!loading&&!orgView(v)&&isArchived(state.div))html='<p class="note">Archived: this division was deleted in Bid Scout. Its data is kept for reference and can’t be changed.</p>'+html;
-    // re-drawing the same board (collapsing a column, sorting, editing a card…) keeps its sideways scroll
-    var obd=document.querySelector("#view .board"),okey=state.cur+"|"+v,osl=obd&&ui.boardKey===okey?obd.scrollLeft:0;
+    // re-drawing the same board (collapsing a column, sorting, editing a card, a refresh…) keeps its
+    // sideways scroll and how far down each column is scrolled
+    var obd=document.querySelector("#view .board"),okey=state.cur+"|"+v,same=obd&&ui.boardKey===okey,osl=same?obd.scrollLeft:0,ost={};
+    if(same)obd.querySelectorAll(".col[data-col] .cards").forEach(function(c){if(c.scrollTop)ost[c.closest(".col").getAttribute("data-col")]=c.scrollTop});
     $("view").innerHTML=html;
     var nbd=document.querySelector("#view .board");
     ui.boardKey=nbd?okey:null;
@@ -2760,6 +2762,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
     maybeAskMe(loading);
     sizeColumns();
+    // columns only get their height limit in sizeColumns, so their scroll goes back after it
+    if(nbd)nbd.querySelectorAll(".col[data-col] .cards").forEach(function(c){var t=ost[c.closest(".col").getAttribute("data-col")];if(t)c.scrollTop=t});
     updateMinimap();
   }
   function openOrgSettings(){closeDrawer();$("orgSetBody").innerHTML=orgSettingsHTML();openOv("ov-settings");renderSide()}
