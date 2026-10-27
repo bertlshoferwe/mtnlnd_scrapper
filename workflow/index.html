@@ -542,10 +542,12 @@ textarea{min-height:90px;resize:vertical}
 .attn{flex:1;min-width:0;background:none;border:0;padding:0;text-align:left;color:var(--ink);font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attn:hover{text-decoration:underline}
 .atm{font-size:12px;flex:0 0 auto}
+.att.in{margin-left:calc(10px + var(--d,0) * 18px)}
 .att .danger{color:var(--high);font-size:12px}
 .dropz{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px;border:1.5px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:14px;cursor:pointer;padding:10px}
 .dropz:hover,.dropz.over{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 6%,transparent)}
 .dropz.busy{cursor:progress}
+.dropz .dzf{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;text-transform:none;letter-spacing:normal;font-weight:inherit;cursor:pointer;min-height:0}
 .ftabs{margin:0}
 .ftabbar{display:flex;align-items:center;gap:8px;margin:0 0 10px;position:relative}
 .ftabbar .ftabs{margin:0}
@@ -2861,17 +2863,30 @@ img.who{object-fit:cover;background:var(--chip)}
   // kind "doc"; Attachments = other uploads; Plan Holders = the project's list from Bid Scout.
   var DL_IC='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
   var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
-  function attRow(f){
-    return '<div class="att">'+FILE_IC+'<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(f.name)+'</button>'+
+  function attRow(f,depth){
+    var nm=depth!=null?f.name.split("/").pop():f.name;
+    return '<div class="att'+(depth!=null?' in" style="--d:'+depth:'')+'">'+FILE_IC+'<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(nm)+'</button>'+
       '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
       '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'</button>'+
       '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
   }
+  // Uploaded files; ones that came in a folder ("Plans/Civil/C-101.pdf") nest
+  // under closed folders like Bid Scout's documents.
+  function attListHTML(list,kind,is){
+    var h="",t=docTree(list,function(f){return f.name});
+    if(Object.keys(t.dirs).length){
+      var only={dirs:t.dirs,files:[],n:0};
+      h+='<div class="dtree" role="tree">'+treeHTML(only,"/"+kind+":",0,is,function(f,d){return attRow(f,d)})+'</div>';
+    }
+    t.files.forEach(function(x){h+=attRow(x.f)});
+    return h;
+  }
   function dropzHTML(kind,label){
     if(!HAS_FILES)return '';
     return '<label class="dropz'+(ui.uploading?' busy':'')+'" data-dropz="'+kind+'">'+
-      (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files here or <u>'+label+'</u></span>')+
-      '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
+      (ui.uploading?'Uploading '+ui.uploading+' file'+(ui.uploading===1?'':'s')+'…':'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files or folders here, <u>'+label+'</u> or <button type="button" class="dzf" data-attfolder="'+kind+'">add a folder</button></span>')+
+      '<input type="file" multiple data-attinput="'+kind+'" hidden>'+
+      '<input type="file" webkitdirectory data-attinput="'+kind+'" data-attdir hidden></label>';
   }
   // a bid copied to another space shows the Bid Scout project of the bid it was copied from
   function srcKey(is){
@@ -2902,10 +2917,10 @@ img.who{object-fit:cover;background:var(--chip)}
         if(src.length)h+='<div class="dtree" role="tree">'+treeHTML(docTree(src),"",0,is)+'</div>';
         else if(!docs.length)h+='<p class="fnote">Bid Scout has no documents for this project.</p>';
       }
-      docs.forEach(function(f){h+=attRow(f)});
+      h+=attListHTML(docs,"doc",is);
       h+=dropzHTML("doc","add a document");
     }else if(tab==="att"){
-      atts.forEach(function(f){h+=attRow(f)});
+      h+=attListHTML(atts,"att",is);
       if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No supporting docs.</p>';
       h+=dropzHTML("att","add a supporting doc");
     }else{
@@ -2920,10 +2935,10 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // Bid Docs as a folder tree built from the file paths ("plans/Civil/C-101.pdf").
   // Folders start closed and show how many files they hold.
-  function docTree(files){
+  function docTree(files,nameOf){
     var root={dirs:{},files:[],n:0};
     files.forEach(function(f){
-      var parts=f.filename.split("/"),node=root;
+      var parts=(nameOf?nameOf(f):f.filename).split("/"),node=root;
       root.n++;
       for(var i=0;i<parts.length-1;i++){
         var k=parts[i].trim()||"(no folder)";
@@ -2937,15 +2952,16 @@ img.who{object-fit:cover;background:var(--chip)}
   var CHEV='<svg class="tchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
   var DIR_IC='<svg class="tic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
   var DOC_IC='<svg class="tic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
-  function treeHTML(node,path,depth,is){
+  function treeHTML(node,path,depth,is,leaf){
     var open=ui.docOpen||{},h="",nat=function(a,b){return a.localeCompare(b,undefined,{numeric:true})};
     Object.keys(node.dirs).sort(nat).forEach(function(k){
       var c=node.dirs[k],p=path+"/"+k,o=!!open[p];
       h+='<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
         '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>';
-      if(o)h+=treeHTML(c,p,depth+1,is);
+      if(o)h+=treeHTML(c,p,depth+1,is,leaf);
     });
     node.files.slice().sort(function(a,b){return nat(a.name,b.name)}).forEach(function(x){
+      if(leaf){h+=leaf(x.f,depth);return}
       var f=x.f,href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
       h+='<div class="dtn" style="--d:'+depth+'" role="treeitem"><span class="tsp"></span>'+DOC_IC+
         '<a class="tnm" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(x.name)+'</a>'+
@@ -3072,20 +3088,40 @@ img.who{object-fit:cover;background:var(--chip)}
       })
       .catch(function(err){ui.bsBusy=null;if(ui.issueId===id)renderAttach();toast("Couldn’t link: "+((err&&err.message)||"unknown error"))});
   }
+  // Files from a drop as [{file, rel}], opening any dropped folders so their
+  // files keep their place ("Plans/Civil/C-101.pdf").
+  function droppedFiles(dt){
+    var items=Array.prototype.slice.call(dt.items||[]).map(function(it){return it.webkitGetAsEntry&&it.webkitGetAsEntry()});
+    if(!items.length||items.some(function(x){return !x}))
+      return Promise.resolve(Array.prototype.map.call(dt.files,function(f){return {file:f,rel:f.name}}));
+    var out=[];
+    function walk(entry,dir){
+      if(entry.isFile)return new Promise(function(res){entry.file(function(f){out.push({file:f,rel:dir+f.name});res()},function(){res()})});
+      var rd=entry.createReader();
+      return new Promise(function(res){
+        var all=[];
+        (function more(){rd.readEntries(function(b){if(!b.length)res(all);else{all=all.concat(Array.prototype.slice.call(b));more()}},function(){res(all)})})();
+      }).then(function(kids){return Promise.all(kids.map(function(k){return walk(k,dir+entry.name+"/")}))});
+    }
+    return Promise.all(items.map(function(x){return walk(x,"")})).then(function(){
+      return out.filter(notHidden);
+    });
+  }
+  function notHidden(x){return !/^\.|\/\./.test(x.rel)}   // skip .DS_Store and other hidden files
   async function uploadFiles(files,kind){
     var is=byId(ui.issueId);if(!is||!sb||!files||!files.length)return;
     files=Array.prototype.slice.call(files);
     ui.uploading=(ui.uploading||0)+files.length;renderAttach();
     for(var i=0;i<files.length;i++){
-      var f=files[i],id=uuid(),path=is.id+"/"+id+"-"+f.name.replace(/[^\w.\-]+/g,"_");
+      var f=files[i].file,rel=files[i].rel,id=uuid(),path=is.id+"/"+id+"-"+f.name.replace(/[^\w.\-]+/g,"_");
       try{
         var r=await sb.storage.from(FILE_BUCKET).upload(path,f,{contentType:f.type||undefined});
         if(r.error)throw r.error;
         var cur=byId(is.id);if(!cur)continue;
-        var rec={id:id,name:f.name,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME};if(kind==="doc")rec.kind="doc";
+        var rec={id:id,name:rel,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME};if(kind==="doc")rec.kind="doc";
         cur.attachments=(cur.attachments||[]).concat([rec]);
-        logH(cur,kind==="doc"?"Bid doc":"Supporting doc","",f.name);cur.updated=Date.now();save();
-      }catch(err){toast("Couldn’t upload "+f.name+": "+((err&&err.message)||"unknown error"))}
+        logH(cur,kind==="doc"?"Bid doc":"Supporting doc","",rel);cur.updated=Date.now();save();
+      }catch(err){toast("Couldn’t upload "+rel+": "+((err&&err.message)||"unknown error"))}
       ui.uploading--;renderAttach();renderIssueAct();
     }
   }
@@ -3623,6 +3659,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-bslink]"))){if(el.getAttribute("data-bslink"))bsLink(ui.issueId,el.getAttribute("data-bslink"));return}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");ui.fmenu=false;renderAttach();return}
+    if((el=t.closest("[data-attfolder]"))){e.preventDefault();var dz=el.closest("[data-dropz]"),fi=dz&&dz.querySelector("[data-attdir]");if(fi)fi.click();return}
     if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
     if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
     if(t.closest("[data-fmore]")){ui.fmenu=!ui.fmenu;renderAttach();return}
@@ -3978,7 +4015,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
   });
   document.addEventListener("change",function(e){
-    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=e.target.files;uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
+    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
   });
   (function(){
     var box=$("ov-issue");
@@ -3989,7 +4026,7 @@ img.who{object-fit:cover;background:var(--chip)}
     box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz]");if(z)z.classList.remove("over")});
     box.addEventListener("drop",function(e){
       var z=e.target.closest&&e.target.closest("[data-dropz]");
-      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");uploadFiles(e.dataTransfer.files,z.getAttribute("data-dropz"))}
+      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");var k=z.getAttribute("data-dropz");droppedFiles(e.dataTransfer).then(function(fl){uploadFiles(fl,k)})}
     });
   })();
   (function(){
