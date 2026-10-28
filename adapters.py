@@ -984,7 +984,7 @@ class ConstructConnectAdapter(SiteAdapter):
             rows = self._project_rows(page)
             if not rows:
                 break
-            for label, doc_status, project_id, last_updated in rows:
+            for label, doc_status, project_id, last_updated, project_url in rows:
                 if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
                     break
                 if label:
@@ -1002,12 +1002,12 @@ class ConstructConnectAdapter(SiteAdapter):
                     if contacts_refreshed < self.MAX_CONTACT_REFRESH and self._contacts_stale(label):
                         contacts_refreshed += 1
                         try:
-                            self._refresh_contacts(page, label)
+                            self._refresh_contacts(page, label, project_url)
                         except Exception as e:
                             print(f"  ! ConstructConnect: couldn't refresh plan holders for '{label}': {e}")
                     continue
                 try:
-                    out.extend(self._download_project(page, label))
+                    out.extend(self._download_project(page, label, project_url))
                 except Exception as e:
                     print(f"  ! ConstructConnect: project '{label}' failed: {e}")
                 project_count += 1
@@ -1039,12 +1039,14 @@ class ConstructConnectAdapter(SiteAdapter):
             print(f"  ! ConstructConnect: couldn't save debug screenshot ({tag}): {e}")
 
     def _project_rows(self, page):
-        """Returns (label, doc_status, project_id, last_updated) for every
-        row on the current results page:
+        """Returns (label, doc_status, project_id, last_updated, project_url)
+        for every row on the current results page:
         - label / doc_status: the Project Name column's link text and the
           Documents column's status text.
         - project_id: parsed out of the project link's own href
           (/project2/<id>/...) — no separate column needed for this one.
+        - project_url: that href made absolute, for opening the project in
+          its own tab (see _open_project).
         - last_updated: the grid's own "Last Updated" column text (e.g.
           "Oct 4, 2026"), used by _scan_results_page to skip re-downloading
           an unchanged project.
@@ -1111,12 +1113,14 @@ class ConstructConnectAdapter(SiteAdapter):
             if not label:
                 continue
 
-            project_id = None
+            project_id, project_url = None, None
             try:
                 href = a.get_attribute("href") or ""
                 m = re.search(r"/project2?/(\d+)", href)
                 if m:
                     project_id = m.group(1)
+                if href:
+                    project_url = urljoin(self.BASE, href)
             except Exception:
                 pass
 
@@ -1130,7 +1134,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 updated_cell = cells[updated_col]
             last_updated = (updated_cell.inner_text() or "").strip() if updated_cell else ""
 
-            rows.append((label, doc_status, project_id, last_updated))
+            rows.append((label, doc_status, project_id, last_updated, project_url))
         return rows
 
     def _go_to_next_page(self, page):
@@ -1155,34 +1159,57 @@ class ConstructConnectAdapter(SiteAdapter):
             return True
         return (datetime.now(timezone.utc) - seen).total_seconds() > self.CONTACTS_STALE_S
 
-    def _refresh_contacts(self, page, label):
-        """Opens an unchanged project from the results list just to re-read
-        its Contacts (plan holders), then comes back to the list."""
-        self._dismiss_cookie_banner(page)
-        page.click(f"text={label}", timeout=8000)
+    def _open_project(self, page, label, project_url):
+        """Opens a project from the results list in its own tab and returns
+        that tab — the caller closes it when done. The results tab itself
+        never navigates, so it keeps its filters and page: ConstructConnect
+        doesn't keep either in the URL, and the old click-name-then-
+        page.go_back() came back to a reset list often enough that the next
+        project's name wasn't on screen (8s click timeouts on random
+        projects, 2026-10-27 run). A row with no link parsed falls back to
+        Ctrl-clicking its name, which also opens a new tab."""
+        if not project_url:
+            self._dismiss_cookie_banner(page)
+            with page.context.expect_page(timeout=8000) as info:
+                page.click(f"text={label}", modifiers=["Control"], timeout=8000)
+            tab = info.value
+        else:
+            tab = page.context.new_page()
         try:
-            page.wait_for_selector("text=Documents", timeout=self.PAGE_TIMEOUT_MS)
-            self._extract_contacts(page, label, page.url)
-        finally:
-            page.go_back()
-            page.wait_for_timeout(1200)
+            if project_url:
+                tab.goto(project_url, timeout=self.PAGE_TIMEOUT_MS)
+            tab.wait_for_load_state("domcontentloaded")
+            self._dismiss_cookie_banner(tab)
+        except Exception:
+            tab.close()
+            raise
+        return tab
 
-    def _download_project(self, page, label):
-        """Navigates to `label`'s project from the current results list,
-        downloads its documents, and returns to the list. For a live
+    def _refresh_contacts(self, page, label, project_url):
+        """Opens an unchanged project just to re-read its Contacts (plan
+        holders)."""
+        tab = self._open_project(page, label, project_url)
+        try:
+            tab.wait_for_selector("text=Documents", timeout=self.PAGE_TIMEOUT_MS)
+            self._extract_contacts(tab, label, tab.url)
+        finally:
+            tab.close()
+
+    def _download_project(self, page, label, project_url):
+        """Opens `label`'s project from the current results list in its own
+        tab (see _open_project) and downloads its documents. For a live
         re-fetch of an already-known project (expired cache, see
         refetch_project_documents), use _download_current_project directly
-        instead — there's no list to come back to in that case."""
-        self._dismiss_cookie_banner(page)
+        instead — there's no list in that case."""
         try:
-            page.click(f"text={label}", timeout=8000)
+            tab = self._open_project(page, label, project_url)
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't open '{label}': {e}")
             return []
-        out = self._download_current_project(page, label)
-        page.go_back()
-        page.wait_for_timeout(1200)
-        return out
+        try:
+            return self._download_current_project(tab, label)
+        finally:
+            tab.close()
 
     def _download_current_project(self, page, label):
         """Assumes `page` is already on a project's detail page (just
@@ -1271,7 +1298,6 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_selector('[role="tablist"][aria-label="Contacts"]', timeout=10000)
         except Exception as e:
             print(f"  ! ConstructConnect: no Contacts tab for '{label}' ({e})")
-            self._return_to(page, project_url)
             return
         try:
             # Card view (the List/Card toggle may remember List per account).
@@ -1317,7 +1343,6 @@ class ConstructConnectAdapter(SiteAdapter):
                 self._saved_contacts_debug = True
                 self._save_debug_screenshot(page, "contacts_failed")
         self.plan_holders[label] = holders
-        self._return_to(page, project_url)
 
     @staticmethod
     def _read_contact_card(card, role):
@@ -1366,19 +1391,6 @@ class ConstructConnectAdapter(SiteAdapter):
             return True
         except Exception:
             return False
-
-    def _return_to(self, page, project_url):
-        """Clicking the Contacts tab may push its own history entry —
-        _download_project's page.go_back() has to land on the results list,
-        not back on the project's Overview tab."""
-        try:
-            for _ in range(4):
-                if page.url == project_url:
-                    break
-                page.go_back()
-                page.wait_for_timeout(800)
-        except Exception:
-            pass
 
     # Each event on the project page ("Bid Date", "Start Date", "End Date",
     # ...) is one of these blocks — matched on a partial class name since the
