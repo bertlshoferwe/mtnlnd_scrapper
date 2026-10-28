@@ -494,16 +494,15 @@ def load_keyword_rows(division_id):
 
 def save_keyword_embeddings(division_id, embedded_rows):
     """Persist freshly-computed embedding vectors. `embedded_rows` is a list
-    of {"id", "keyword", "embedding"} dicts. Uses upsert so it's one round
-    trip for the whole batch (the first scan after a big upload embeds
-    hundreds at once)."""
-    rows = [
-        {"id": r["id"], "division_id": division_id,
-         "keyword": r["keyword"], "embedding": r["embedding"]}
-        for r in embedded_rows
-    ]
-    if rows:
-        get_client().table("keywords").upsert(rows).execute()
+    of {"id", "keyword", "embedding"} dicts. One update per row: an upsert
+    would be one round trip, but keywords.id is GENERATED ALWAYS, so Postgres
+    rejects any insert that names it — even one that only ever conflicts
+    (this failed every scan on 2026-10-28, the first time a big list got as
+    far as saving)."""
+    table = get_client().table("keywords")
+    for r in embedded_rows:
+        (table.update({"embedding": r["embedding"]})
+         .eq("id", r["id"]).eq("division_id", division_id).execute())
 
 
 # ---------------------------------------------------------------------------

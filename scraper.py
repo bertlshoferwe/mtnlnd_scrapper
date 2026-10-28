@@ -841,7 +841,12 @@ def ensure_keyword_embeddings(division_id, embedder):
         r["embedding"] = v
         have[r["keyword"]] = v
     if done:
-        supabase_store.save_keyword_embeddings(division_id, done)
+        # A failed save only costs re-embedding these next run — this run
+        # still uses the vectors — so it must never take the scan down.
+        try:
+            supabase_store.save_keyword_embeddings(division_id, done)
+        except Exception as e:
+            print(f"  ! Couldn't save {len(done)} keyword embedding(s): {e}")
     left = len(missing) - len(done)
     print(f"  Embedded {len(done)} new keyword(s)"
           + (f"; {left} still to do (next run picks them up)" if left else ""))
