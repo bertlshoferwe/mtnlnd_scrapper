@@ -1880,8 +1880,27 @@ img.who{object-fit:cover;background:var(--chip)}
     var tr=spaceTree(divId),w=tr.filter(function(x){return x.depth===0&&!isInbox(x.sp)})[0]||tr[0];
     return w?w.sp.id:"";
   }
-  // Every division gets a "<Division> Bids" space (e.g. Geo Bids, key GB), following the Bid pipeline
-  // workflow, if it has no space of its own yet (supabase_store._workflow_space does the same).
+  // Every division gets a "<Division> Bids" space (e.g. Geo Bids, key GB) if it has no space of its own
+  // yet (supabase_store._workflow_space does the same). It copies Geo's setup — Geo else the first
+  // division whose main space has sub-spaces: the main space and each sub-space (Geo Follow-Up →
+  // "<Division> Follow-Up"), with the same workflows, field setup, Date on cards and automations.
+  // Copy automations point at the new division's own sub-spaces; fill automations that put in a
+  // particular person or team are left out (they're the other division's people).
+  function modelMain(){
+    var mains=D.spaces.filter(function(s){return !s.parentId&&!isInbox(s)&&childSpaces(s).length});
+    return mains.filter(function(s){var d=D.divs.filter(function(x){return x.id===s.divisionId})[0];return d&&/^geo$/i.test(d.name)})[0]||mains[0]||null;
+  }
+  function copyRules(src,ids){
+    return (src.rules||[]).filter(function(r){
+      if(r.to&&!ids[r.to])return false;
+      if(r.kind!=="fill"||String(r.value||"").charAt(0)==="@")return true;
+      var tg=fillTargets(src).filter(function(x){return x[0]===r.field})[0];return !(tg&&(tg[2]==="person"||tg[2]==="team"));
+    }).map(function(r){var c=clone(r);c.id=uid("r");if(c.to)c.to=ids[c.to];if(c.kind==="remind")c.since=Date.now();return c});
+  }
+  function copyStatuses(src){
+    var t=followedTpl(src);if(t)return tplStatuses(t.id);
+    return src.statuses.map(function(x){return {id:uid("s"),name:x.name,cat:x.cat}});
+  }
   var autoWs={};
   function ensureWorkflowSpaces(){
     if(!CANWRITE)return;
@@ -1890,10 +1909,23 @@ img.who{object-fit:cover;background:var(--chip)}
       if(d.archived||autoWs[d.id])return;
       if(divSpaces(d.id).some(function(s){return !s.parentId&&!isInbox(s)}))return;
       autoWs[d.id]=1;
-      var name=d.name+" Bids",base=autoKey(name)||"BID",key=base,n=2;
-      while(divSpaces(d.id).some(function(s){return s.key===key}))key=base.slice(0,4)+(n++);
-      var tpl=defaultTpl();
-      D.spaces.push({id:newId("spaces"),divisionId:d.id,parentId:"",name:name,key:key,ci:divSpaces(d.id).length,next:1,statuses:tplStatuses(tpl?tpl.id:""),rules:[],created:today(),issues:[]});
+      var m=modelMain(),md=m&&D.divs.filter(function(x){return x.id===m.divisionId})[0],ids={},list=[];
+      function freeKey(name){var base=autoKey(name)||"BID",key=base,n=2;while(divSpaces(d.id).some(function(s){return s.key===key}))key=base.slice(0,4)+(n++);return key}
+      function rename(nm){return md&&nm.toLowerCase().indexOf(md.name.toLowerCase())===0?d.name+nm.slice(md.name.length):d.name+" "+nm}
+      function add(sp){sp.key=freeKey(sp.name);sp.ci=divSpaces(d.id).length;D.spaces.push(sp);return sp}
+      if(!m){
+        var tpl=defaultTpl();
+        add({id:newId("spaces"),divisionId:d.id,parentId:"",name:d.name+" Bids",next:1,statuses:tplStatuses(tpl?tpl.id:""),rules:[],created:today(),issues:[]});
+      }else{
+        // the model's main space, then its sub-spaces (parents first, so each saves after its parent)
+        (function walk(src,parentId){
+          var sp={id:newId("spaces"),divisionId:d.id,parentId:parentId,name:parentId?rename(src.name):d.name+" Bids",next:1,statuses:copyStatuses(src),rules:[],
+            fieldSet:src.fieldSet||"",cardDate:src.cardDate||"",created:today(),issues:[]};
+          ids[src.id]=sp.id;list.push([src,sp]);add(sp);
+          childSpaces(src).forEach(function(k){walk(k,sp.id)});
+        })(m,"");
+        list.forEach(function(x){x[1].rules=copyRules(x[0],ids)});
+      }
       made=true;
     });
     if(made)save();

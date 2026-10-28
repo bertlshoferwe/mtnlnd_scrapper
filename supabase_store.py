@@ -1223,7 +1223,11 @@ def _workflow_space(division_id):
     if own:
         return own[0]
     div = sb.table("divisions").select("name").eq("id", division_id).limit(1).execute().data
-    name = f"{div[0]['name'] if div else division_id} Bids"
+    div_name = div[0]["name"] if div else division_id
+    copied = _copy_model_spaces(division_id, div_name, spaces)
+    if copied:
+        return copied
+    name = f"{div_name} Bids"
     # workflow templates only — a field setup (kind "fields") has no columns
     tpls = [t for t in sb.table("wf_templates").select("id,name,statuses").order("created_at").execute().data
             if t.get("statuses")]
@@ -1247,6 +1251,93 @@ def _workflow_space(division_id):
     return sb.table("wf_spaces").insert({
         "division_id": division_id, "name": name, "key": key, "statuses": statuses,
     }).execute().data[0]
+
+
+def _space_key(name, used):
+    """Same as the board's autoKey: initials of up to 4 words, or the first 4
+    letters of one; a number on the end if the division already uses it."""
+    words = re.sub(r"[^A-Z0-9 ]", "", name.upper()).split()
+    base = ("".join(w[0] for w in words[:4]) if len(words) > 1 else (words[0][:4] if words else ""))[:5] or "BID"
+    key, n = base, 2
+    while key in used:
+        key, n = f"{base[:4]}{n}", n + 1
+    used.add(key)
+    return key
+
+
+def _copy_model_spaces(division_id, div_name, existing):
+    """A new division copies Geo's setup (else the first division whose main
+    space has sub-spaces) — the board's ensureWorkflowSpaces does the same:
+    the main space as "<Division> Bids" and each sub-space ("Geo Follow-Up" →
+    "<Division> Follow-Up") with the same columns, field setup, Date on cards
+    and automations. Copy automations point at the new sub-spaces; fill
+    automations that put in a particular person or team are left out. Returns
+    the new main space, or None when there's nothing to copy."""
+    sb = get_client()
+    rows = sb.table("wf_spaces").select("*").order("created_at").execute().data or []
+    kids = {}
+    for r in rows:
+        if r.get("parent_id"):
+            kids.setdefault(r["parent_id"], []).append(r)
+    mains = [r for r in rows if not r.get("parent_id") and r.get("key") != "BS" and kids.get(r["id"])]
+    if not mains:
+        return None
+    names = {str(d["id"]): d.get("name") or "" for d in sb.table("divisions").select("id,name").execute().data or []}
+    model = next((r for r in mains if names.get(str(r["division_id"]), "").lower() == "geo"), mains[0])
+    model_name = names.get(str(model["division_id"]), "")
+
+    # person / team custom fields, to drop fill automations naming the other division's people
+    people_fields = {"assignee", "reporter"}
+    for t in sb.table("wf_templates").select("fields").execute().data or []:
+        for f in t.get("fields") or []:
+            if f.get("type") in ("person", "team") and f.get("id"):
+                people_fields.add("cf:" + f["id"])
+
+    order, ids = [], {}
+
+    def walk(src, depth):
+        ids[src["id"]] = str(uuid.uuid4())
+        order.append((src, depth))
+        for k in kids.get(src["id"], []):
+            walk(k, depth + 1)
+    walk(model, 0)
+
+    used = {sp["key"] for sp in existing}
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    made = []
+    for i, (src, depth) in enumerate(order):
+        if depth == 0:
+            name = f"{div_name} Bids"
+        elif model_name and src["name"].lower().startswith(model_name.lower()):
+            name = div_name + src["name"][len(model_name):]
+        else:
+            name = f"{div_name} {src['name']}"
+        rules = []
+        for r in src.get("rules") or []:
+            if not r:
+                continue
+            if r.get("to") and r["to"] not in ids:
+                continue
+            if (r.get("kind") == "fill" and not str(r.get("value") or "").startswith("@")
+                    and r.get("field") in people_fields):
+                continue
+            c = dict(r)
+            if c.get("kind") != "card":
+                c["id"] = "r" + uuid.uuid4().hex[:10]
+            if c.get("to"):
+                c["to"] = ids[c["to"]]
+            if c.get("kind") == "remind":
+                c["since"] = now_ms
+            rules.append(c)
+        row = {
+            "id": ids[src["id"]], "division_id": division_id,
+            "parent_id": ids.get(src.get("parent_id")) if depth else None,
+            "name": name, "key": _space_key(name, used), "ci": len(existing) + i,
+            "statuses": [dict(st, id=str(uuid.uuid4())) for st in src.get("statuses") or []],
+            "rules": rules, "field_set": src.get("field_set"),
+        }
+        made.append(sb.table("wf_spaces").insert(row).execute().data[0])   # parents first
+    return made[0]
 
 
 def _rank_by_due(col, due, last):
