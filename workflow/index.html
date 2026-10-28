@@ -459,6 +459,12 @@ td.over{color:var(--high);font-weight:600}
 .rep{padding:12px 16px 32px;display:grid;gap:14px;max-width:1400px}
 .rdash{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:14px;align-items:start}
 .rcard .rbcap{margin:0 0 10px}
+.rcard{position:relative}
+.rcard .phead{cursor:grab}
+.rcard.dragging{opacity:.45}
+.rcard.rbefore{box-shadow:-3px 0 0 var(--accent),var(--shadow)}
+.rcard.rafter{box-shadow:3px 0 0 var(--accent),var(--shadow)}
+.rgrip{color:var(--muted);display:inline-flex;margin-right:2px}
 .rcbtn{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted)}
 .rcbtn:hover{background:var(--chip);color:var(--text)}
 .ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
@@ -2480,7 +2486,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var map={};
     list.forEach(function(t){groupKeys(t,g).forEach(function(k){(map[k]=map[k]||[]).push(t)})});
     var keys=Object.keys(map);
-    if(g==="status")keys=proj().statuses.map(function(s){return s.id});
+    // by status: a "done only" / "open only" report lists just those columns
+    if(g==="status")keys=proj().statuses.filter(function(s){var sc=state.rcfg.scope;return sc==="done"?s.cat==="done":sc==="open"?s.cat!=="done":true}).map(function(s){return s.id});
     else if(g==="priority")keys=PRI.slice();
     else if(g==="type")keys=TYPES.slice();
     else if(isTimeG(g)){
@@ -2493,7 +2500,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function colorFor(g,k,i){
     if(g==="priority")return PCOLOR[k];
     if(g==="type")return TCOLOR[k];
-    if(g==="status"){var c=stat(proj(),k).cat;return c==="done"?"var(--low)":c==="doing"?"var(--accent)":"var(--c5)"}
+    if(g==="status"){var st0=stat(proj(),k),c=st0.cat;if(/^lost$/i.test((st0.name||"").trim()))return "var(--high)";return c==="done"?"var(--low)":c==="doing"?"var(--accent)":"var(--c5)"}
     if(isTimeG(g))return "var(--accent)";
     return "var(--c"+(i%6+1)+")";
   }
@@ -2603,7 +2610,7 @@ img.who{object-fit:cover;background:var(--chip)}
           var L=scoped(),G=buildGroups(L,state.rcfg.groupBy),keep=ui.rsel;
           if(sel&&sel.card===i&&G[sel.gi])drill={name:r.name,gr:G[sel.gi]};
           ui.rsel=sel&&sel.card===i?sel.gi:null;
-          var out='<section class="panel rcard"><div class="phead"><h3 style="margin:0">'+esc(r.name)+'</h3><span class="spacer" style="flex:1"></span>'+
+          var out='<section class="panel rcard" draggable="true" data-repdrag="'+i+'"><div class="phead"><span class="rgrip" title="Drag to reorder" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span><h3 style="margin:0">'+esc(r.name)+'</h3><span class="spacer" style="flex:1"></span>'+
             '<button class="icon rcbtn" data-editrep="'+i+'" aria-label="Edit '+esc(r.name)+'" title="Edit">'+PEN_SVG+'</button>'+
             '<button class="icon rcbtn" data-delrep="'+i+'" aria-label="Delete '+esc(r.name)+'" title="'+(ui.armRep===i?'Tap again to delete':'Delete')+'"'+(ui.armRep===i?' style="color:var(--high)"':'')+'>'+ic("x",16)+'</button></div>'+
             '<div class="rbcap">'+L.length+' bid'+(L.length===1?'':'s')+(measureField()?' · Total '+esc(measureField().name)+' '+fmtM(mval(L)):'')+'</div>'+
@@ -4491,7 +4498,32 @@ img.who{object-fit:cover;background:var(--chip)}
     });
     box.addEventListener("dragend",function(){dragF=null;clearF()});
   })();
+  // Reports dashboard: drag a report card onto another to put it before (left half) or after (right
+  // half) that one; the order is the order of state.reports, saved with the reports.
+  function clearRepDrop(){Array.prototype.forEach.call(view.querySelectorAll(".rcard.rbefore,.rcard.rafter"),function(x){x.classList.remove("rbefore","rafter")})}
   view.addEventListener("dragstart",function(e){
+    var rcd=e.target.closest&&e.target.closest("[data-repdrag]");
+    if(rcd){ui.dragRep=+rcd.getAttribute("data-repdrag");rcd.classList.add("dragging");try{e.dataTransfer.setData("text/plain","report");e.dataTransfer.effectAllowed="move"}catch(x){}return}
+  });
+  view.addEventListener("dragover",function(e){
+    if(ui.dragRep==null)return;
+    var tc=e.target.closest(".rcard[data-repdrag]");clearRepDrop();
+    if(!tc||+tc.getAttribute("data-repdrag")===ui.dragRep)return;
+    e.preventDefault();var rc=tc.getBoundingClientRect();tc.classList.add(e.clientX<rc.left+rc.width/2?"rbefore":"rafter");
+  });
+  view.addEventListener("drop",function(e){
+    if(ui.dragRep==null)return;
+    var tc=e.target.closest(".rcard[data-repdrag]"),from=ui.dragRep;ui.dragRep=null;
+    if(!tc){clearRepDrop();return}
+    e.preventDefault();
+    var to=+tc.getAttribute("data-repdrag"),after=tc.classList.contains("rafter"),r=state.reports[from];clearRepDrop();
+    if(!r||from===to)return;
+    state.reports.splice(from,1);var j=to>from?to-1:to;   // the target's index once the dragged one is out
+    state.reports.splice(after?j+1:j,0,r);ui.rsel=null;save();render();
+  });
+  view.addEventListener("dragend",function(){if(ui.dragRep!=null){ui.dragRep=null;clearRepDrop();render()}});
+  view.addEventListener("dragstart",function(e){
+    if(ui.dragRep!=null)return;
     var rg=e.target.closest&&e.target.closest("[data-rowdrag]");
     if(rg){ui.dragRow=rg.getAttribute("data-rowdrag");var rtr=rg.closest("tr");if(rtr)rtr.classList.add("dragging");
       try{e.dataTransfer.setData("text/plain",ui.dragRow);e.dataTransfer.effectAllowed="move";if(rtr)e.dataTransfer.setDragImage(rtr,12,12)}catch(x){}return}
