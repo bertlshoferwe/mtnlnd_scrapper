@@ -702,8 +702,13 @@ class ConstructConnectAdapter(SiteAdapter):
             return None, None, None, {"ok": False, "message": str(e)}
 
         try:
+            # --disable-dev-shm-usage: Docker's default 64MB /dev/shm is too
+            # small for the docviewer on a big project — the tab crashed
+            # ("Target crashed", Superelevation Improvements - I-17,
+            # 2026-10-27); this makes Chromium use /tmp instead.
             browser = pw.chromium.launch(
-                headless=True, args=["--disable-blink-features=AutomationControlled"],
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
             )
         except Exception as e:
             print(f"  ! ConstructConnect: Chromium not available ({e})")
