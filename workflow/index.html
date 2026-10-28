@@ -456,7 +456,11 @@ td.over{color:var(--high);font-weight:600}
 .kids>.kh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 
 /* reports + settings */
-.rep{padding:12px 16px 32px;display:grid;gap:14px;max-width:1000px}
+.rep{padding:12px 16px 32px;display:grid;gap:14px;max-width:1400px}
+.rdash{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:14px;align-items:start}
+.rcard .rbcap{margin:0 0 10px}
+.rcbtn{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted)}
+.rcbtn:hover{background:var(--chip);color:var(--text)}
 .ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .ctrl label{margin:0 0 4px}
 .ctrl select,.ctrl input{width:100%}
@@ -2554,11 +2558,9 @@ img.who{object-fit:cover;background:var(--chip)}
     });
     whos.sort();labels.sort();
     var h='<div class="rep">';
-    var B=ui.repBuild;
-    h+='<div class="saved-row"><span class="fine" style="margin:0">Saved reports</span>'+
-      (state.reports.some(function(r){return !r.space||r.space===p.id})?state.reports.map(function(r,i){if(r.space&&r.space!==p.id)return "";return '<span class="saved'+(!B&&r.name===c.name?' on':'')+'"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">'+ic("x",18)+'</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Use + to make one.</span>')+
-      (B?'':'<button class="addbtn" data-act="newReport" aria-label="New report" title="New report">'+ic("plus",16)+'</button>')+
-      '<span class="spacer" style="flex:1"></span><button class="btn small" data-act="copy">Copy summary</button></div>';
+    var B=ui.repBuild,mine=[];
+    state.reports.forEach(function(r,i){if(!r.space||r.space===p.id)mine.push(i)});
+    h+='<div class="saved-row"><h3 style="margin:0">Reports</h3>'+(B?'':'<button class="addbtn" data-act="newReport" aria-label="New report" title="New report">'+ic("plus",16)+'</button>')+'</div>';
     // the builder (+ or Edit): its settings on the left and the chart on the right, redrawn on every
     // change so you see the report before saving it
     var title=esc(c.name||((measureField()?"Total "+measureField().name:"Bids")+" by "+groupLabel(c.groupBy).toLowerCase()));
@@ -2582,7 +2584,8 @@ img.who{object-fit:cover;background:var(--chip)}
       }).join("")+
       '</div></div><div class="rbprev"><div class="rbcap">Preview · '+list.length+' bid'+(list.length===1?'':'s')+'</div><h3>'+title+'</h3>'+chartHTML(groups,s.total)+'</div></div>'+
       '<div class="rbfoot"><div class="rbname"><label for="rname">Report name</label><input id="rname" maxlength="60" placeholder="Name this report to save it" value="'+esc(c.name||"")+'"></div>'+
-      '<button class="btn" data-act="cancelReport">Cancel</button><button class="btn primary" data-act="saveReport">Save report</button></div></section>';
+      '<button class="btn" data-act="copy">Copy summary</button><button class="btn" data-act="cancelReport">Cancel</button><button class="btn primary" data-act="saveReport">Save report</button></div></section>';
+    if(!B){list=withCfg({groupBy:"status",scope:"all"},scoped);s=stats(list)}   // dashboard tiles: the whole space
     h+='<div class="stats">'+
       '<div class="stat"><b>'+s.total+'</b><span>Bids</span></div>'+
       '<div class="stat"><b>'+pct(s.done,s.total)+'%</b><span>Done ('+s.done+')</span></div>'+
@@ -2590,8 +2593,29 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div class="stat"><b>'+s.soon+'</b><span>Due in 7 days</span></div>'+
       '<div class="stat"><b>'+s.un+'</b><span>Unassigned</span></div>'+
       winRateHTML(p,list)+
-      (measureField()?'<div class="stat"><b>'+fmtM(mval(list))+'</b><span>Total '+esc(measureField().name)+'</span></div>':'')+'</div>';
-    if(!B)h+='<section class="panel"><div class="phead"><h3 style="margin:0">'+title+'</h3><span class="spacer" style="flex:1"></span><button class="btn small" data-act="editReport">Edit</button></div>'+chartHTML(groups,s.total)+'</section>';
+      (B&&measureField()?'<div class="stat"><b>'+fmtM(mval(list))+'</b><span>Total '+esc(measureField().name)+'</span></div>':'')+'</div>';
+    // the dashboard: every saved report for this space as its own chart; a bar opens its bids below
+    if(!B){
+      var sel=ui.rsel&&typeof ui.rsel==="object"?ui.rsel:null,drill=null;
+      h+=mine.length?'<div class="rdash">'+mine.map(function(i){
+        var r=state.reports[i];
+        return withCfg(r.cfg,function(){
+          var L=scoped(),G=buildGroups(L,state.rcfg.groupBy),keep=ui.rsel;
+          if(sel&&sel.card===i&&G[sel.gi])drill={name:r.name,gr:G[sel.gi]};
+          ui.rsel=sel&&sel.card===i?sel.gi:null;
+          var out='<section class="panel rcard"><div class="phead"><h3 style="margin:0">'+esc(r.name)+'</h3><span class="spacer" style="flex:1"></span>'+
+            '<button class="icon rcbtn" data-editrep="'+i+'" aria-label="Edit '+esc(r.name)+'" title="Edit">'+PEN_SVG+'</button>'+
+            '<button class="icon rcbtn" data-delrep="'+i+'" aria-label="Delete '+esc(r.name)+'" title="'+(ui.armRep===i?'Tap again to delete':'Delete')+'"'+(ui.armRep===i?' style="color:var(--high)"':'')+'>'+ic("x",16)+'</button></div>'+
+            '<div class="rbcap">'+L.length+' bid'+(L.length===1?'':'s')+(measureField()?' · Total '+esc(measureField().name)+' '+fmtM(mval(L)):'')+'</div>'+
+            '<div data-rcard="'+i+'">'+chartHTML(G,L.length)+'</div></section>';
+          ui.rsel=keep;return out;
+        });
+      }).join("")+'</div>':'<section class="panel"><p class="fine" style="margin:0">No reports yet. Use + to make one.</p></section>';
+      if(drill)h+='<section class="panel"><h3>'+esc(drill.name)+' · '+esc(drill.gr.label)+' ('+drill.gr.items.length+')</h3>'+
+        (drill.gr.items.length?kidRows(drill.gr.items):'<div class="empty">No bids in this group.</div>')+
+        '<div style="margin-top:10px"><button class="btn small" data-act="clearSel">Close list</button></div></section>';
+      return h+'</div>';
+    }
     if(ui.rsel!==null&&groups[ui.rsel]){
       var gr=groups[ui.rsel];
       h+='<section class="panel"><h3>'+esc(gr.label)+' ('+gr.items.length+')</h3>'+
@@ -2600,6 +2624,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     return h+'</div>';
   }
+  // run fn with a saved report's settings in place of the builder's (scoped/measureField read state.rcfg)
+  function withCfg(cfg,fn){var keep=state.rcfg;state.rcfg=Object.assign({type:"",pri:"",who:"",label:"",scope:"all"},cfg);try{return fn()}finally{state.rcfg=keep}}
   function summaryText(){
     var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy);
     var lines=[(c.name||(proj().name+" report"))+": by "+groupLabel(c.groupBy).toLowerCase(),
@@ -4019,9 +4045,18 @@ img.who{object-fit:cover;background:var(--chip)}
       save();render();return;
     }
     if((el=t.closest("[data-day]"))){state.calSel=el.getAttribute("data-day");savePrefs();return}
-    if((el=t.closest("[data-gi]"))){var gi=parseInt(el.getAttribute("data-gi"),10);ui.rsel=ui.rsel===gi?null:gi;render();return}
+    if((el=t.closest("[data-gi]"))){
+      var gi=parseInt(el.getAttribute("data-gi"),10),rc=el.closest("[data-rcard]");
+      if(rc){var ci=parseInt(rc.getAttribute("data-rcard"),10);ui.rsel=ui.rsel&&ui.rsel.card===ci&&ui.rsel.gi===gi?null:{card:ci,gi:gi}}
+      else ui.rsel=ui.rsel===gi?null:gi;
+      render();return;
+    }
+    if((el=t.closest("[data-editrep]"))){var er2=+el.getAttribute("data-editrep"),rr=state.reports[er2];if(!rr)return;
+      ui.repPrev=clone(state.rcfg);state.rcfg=Object.assign({type:""},clone(rr.cfg),{name:rr.name});ui.repEdit=er2;ui.repBuild="edit";ui.rsel=null;ui.armRep=null;render();return}
     if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},clone(r.cfg),{name:r.name});ui.rsel=null;ui.repBuild=false;ui.repPrev=null;save();render();return}
-    if((el=t.closest("[data-delrep]"))){state.reports.splice(parseInt(el.getAttribute("data-delrep"),10),1);save();render();return}
+    if((el=t.closest("[data-delrep]"))){var dri=parseInt(el.getAttribute("data-delrep"),10);
+      if(ui.armRep!==dri){ui.armRep=dri;render();return}
+      state.reports.splice(dri,1);ui.armRep=null;ui.rsel=null;save();render();toast("Report deleted");return}
     
     if((el=t.closest("[data-quickadd]"))){quickAdd(el.getAttribute("data-quickadd"));return}
     if(t.closest("[data-addsub]")){
@@ -4094,17 +4129,17 @@ img.who{object-fit:cover;background:var(--chip)}
         is4.comments.push(nc);is4.updated=Date.now();closeMention();
         ui.draft="";save();renderIssueAct();
       }
-      if(a==="newReport"){ui.repPrev=clone(state.rcfg);state.rcfg={groupBy:"status",chart:"bar",scope:"all",type:"",pri:"",who:"",label:"",name:""};ui.repBuild="new";ui.rsel=null;render()}
+      if(a==="newReport"){ui.repEdit=null;ui.armRep=null;ui.repPrev=clone(state.rcfg);state.rcfg={groupBy:"status",chart:"bar",scope:"all",type:"",pri:"",who:"",label:"",name:""};ui.repBuild="new";ui.rsel=null;render()}
       if(a==="editReport"){ui.repPrev=clone(state.rcfg);ui.repBuild="edit";ui.rsel=null;render()}
-      if(a==="cancelReport"){if(ui.repPrev)state.rcfg=ui.repPrev;ui.repPrev=null;ui.repBuild=false;ui.rsel=null;save();render()}
+      if(a==="cancelReport"){if(ui.repPrev)state.rcfg=ui.repPrev;ui.repPrev=null;ui.repBuild=false;ui.repEdit=null;ui.rsel=null;save();render()}
       if(a==="saveReport"){
         var name=state.rcfg.name.trim(),sp=proj();
         if(!name){var inp=$("rname");inp.focus();inp.style.borderColor="var(--high)";inp.placeholder="Enter a name first";return}
         var cfg=clone(state.rcfg);delete cfg.name;
         // same name in this space (or an all-spaces report) = update it; a new one belongs to this space
-        var ix=state.reports.findIndex(function(r){return r.name===name&&(!r.space||r.space===sp.id)});
-        if(ix>-1)state.reports[ix].cfg=cfg;else state.reports.push({name:name,cfg:cfg,space:sp.id});
-        ui.repBuild=false;ui.repPrev=null;
+        var ix=ui.repEdit!=null&&state.reports[ui.repEdit]?ui.repEdit:state.reports.findIndex(function(r){return r.name===name&&(!r.space||r.space===sp.id)});
+        if(ix>-1){state.reports[ix].cfg=cfg;state.reports[ix].name=name}else state.reports.push({name:name,cfg:cfg,space:sp.id});
+        ui.repBuild=false;ui.repEdit=null;if(ui.repPrev)state.rcfg=ui.repPrev;ui.repPrev=null;
         save();render();toast("Report saved");
       }
       return;
