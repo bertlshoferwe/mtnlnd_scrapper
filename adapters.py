@@ -1206,16 +1206,19 @@ class ConstructConnectAdapter(SiteAdapter):
             if download:
                 out = self._handle_download(download, label, project_url)
             elif doc_page:
-                download = self._click_download_zip(doc_page)
+                # One multi-page PDF per project (user's pick, 2026-10-27 —
+                # reversed the 2026-09-20 switch to "Zipped PDFs"); the zip
+                # picker is kept as the fallback.
+                download = self._click_download_all(doc_page)
                 if download:
-                    out = self._handle_zip_download(download, label, project_url)
+                    out = self._handle_merged_pdf(download, label, project_url)
                 else:
-                    download = self._click_download_all(doc_page)
+                    download = self._click_download_zip(doc_page)
                     if download:
-                        out = self._handle_merged_pdf(download, label, project_url)
+                        out = self._handle_zip_download(download, label, project_url)
                     else:
-                        print(f"  ! ConstructConnect: 'Download All' didn't produce "
-                              f"anything for '{label}'")
+                        print(f"  ! ConstructConnect: neither 'Download All' nor the "
+                              f"'Zipped PDFs' picker produced anything for '{label}'")
             else:
                 print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
                       f"observable for '{label}'")
@@ -1248,7 +1251,8 @@ class ConstructConnectAdapter(SiteAdapter):
     # from their `title` attribute, which holds the clean value. The data is
     # server-rendered with the page — no separate XHR to listen for. Design
     # Team (owner/architect) is deliberately left out: not sales leads.
-    CONTACT_GROUPS = (("Bidders", "Bidder"), ("Planholders", "Planholder"),
+    CONTACT_GROUPS = (("Design Team", "Design Team"),
+                      ("Bidders", "Bidder"), ("Planholders", "Planholder"),
                       ("Interested Parties", "Interested Party"))
     CONTACT_CARD = '[class*="ProjectContactCard_card"]'
     CONTACT_MAX_PAGES = 10
@@ -1612,8 +1616,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 page.click(self.DOWNLOAD_START_SELECTOR, timeout=8000, force=True)
             return dl_info.value
         except Exception as e:
-            print(f"  ! ConstructConnect: 'Zipped PDFs' picker didn't work "
-                  f"({e}) — falling back to merged PDF")
+            print(f"  ! ConstructConnect: 'Zipped PDFs' picker didn't work ({e})")
             if not getattr(self, "_saved_zip_picker_debug", False):
                 self._saved_zip_picker_debug = True
                 self._save_debug_screenshot(page, "zip_picker_failed")
@@ -1636,8 +1639,8 @@ class ConstructConnectAdapter(SiteAdapter):
     def _click_download_all(self, page):
         """Click "Download All" on the docviewer tab and return the
         resulting Download — every document in the project merged into one
-        PDF. Fallback path only, used when _click_download_zip doesn't
-        produce a usable download."""
+        PDF (the "Multi-page PDF" format). The first choice since
+        2026-10-27; _click_download_zip is the fallback."""
         if not self._wait_downloads_ready(page):
             print("  ! ConstructConnect: document never finished loading — "
                   "'Download All' stayed disabled")
