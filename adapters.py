@@ -1545,7 +1545,13 @@ class ConstructConnectAdapter(SiteAdapter):
         # app.constructconnect.com/docviewer?projId=…&docType=plans"> holding
         # a [class*="DocumentAvailabilityRow_available"] status span. Open the
         # first one's href in a tab of our own; clicking category names below
-        # is the fallback.
+        # is the fallback. The panel renders after the rest of the page, so
+        # wait for its rows first (a first run checked too early, found no
+        # links on any project and fell back to clicking every time).
+        try:
+            page.wait_for_selector('[class*="DocumentAvailabilityRow_available"]', timeout=10000)
+        except Exception:
+            pass
         for link in page.query_selector_all('a[class*="DocumentAvailabilityRow_link"]'):
             if not link.query_selector('[class*="DocumentAvailabilityRow_available"]'):
                 continue
