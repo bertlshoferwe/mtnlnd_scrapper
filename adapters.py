@@ -902,15 +902,18 @@ class ConstructConnectAdapter(SiteAdapter):
 
         DOM confirmed via devtools 2026-10-27 — the same custom combobox as
         the location picker: section data-section-key="bidDate", trigger
-        <button id="bidDate" role="combobox"> showing the current value in
-        .dropdown-input__value, options in <div id="bidDate-listbox"
+        <button id="bidDate" role="combobox"> showing the current value (or
+        a "Select Bid Date" placeholder), options in <div id="bidDate-listbox"
         role="listbox">. Skipped if it already shows BID_DATE_WINDOW.
         Best-effort like the other filters — a failure just leaves the run
         wider, logged + screenshotted."""
         self._dismiss_cookie_banner(page)
         try:
             self._expand_filter_section(page, "bidDate", "#bidDate")
-            current = page.locator("#bidDate .dropdown-input__value").inner_text(timeout=5000).strip()
+            # The whole button's text, not .dropdown-input__value — that
+            # span only exists once something is picked; a fresh login
+            # shows a "Select Bid Date" placeholder instead (2026-10-27 run).
+            current = page.locator("#bidDate").inner_text(timeout=5000).strip()
             if current != self.BID_DATE_WINDOW:
                 page.click("#bidDate", timeout=8000)
                 # The option rows' own markup isn't confirmed — match the
