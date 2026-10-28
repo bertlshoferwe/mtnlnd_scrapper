@@ -1385,6 +1385,7 @@ img.who{object-fit:cover;background:var(--chip)}
   // space (state.repSeeded): quoted dollars by team and by month, and bids received per week.
   // (state.repSeedGB is the older Geo-only flag, so Geo's aren't added back after being deleted.)
   function seedSpaceReports(p){
+    if(p&&p.parentId)return seedFollowUpReports(p);
     if(!p||!isDefaultSpace(p))return;
     state.repSeeded=state.repSeeded||{};if(state.repSeeded[p.id])return;
     var d=D.divs.filter(function(x){return x.id===p.divisionId})[0];if(!d)return;
@@ -1395,6 +1396,26 @@ img.who{object-fit:cover;background:var(--chip)}
     if(team&&amt)add.push({name:"Quoted $ by team",cfg:Object.assign({},base,{groupBy:"cf:"+team.id,measure:amt.id})});
     if(dq&&amt)add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id})});
     add.push({name:"Bids received per week",cfg:Object.assign({},base,{groupBy:"created"})});
+    add.forEach(function(r){r.space=p.id;if(!state.reports.some(function(x){return x.name===r.name&&x.space===p.id}))state.reports.push(r)});
+    state.repSeeded[p.id]=true;savePrefs();
+  }
+
+  // A follow-up space (a sub-space with Won and Lost columns, e.g. Geo Follow-Up) gets its own set:
+  // why bids are lost (count and dollars), won vs lost dollars, and open follow-ups by person.
+  function seedFollowUpReports(p){
+    state.repSeeded=state.repSeeded||{};if(state.repSeeded[p.id])return;
+    var has=function(n){return p.statuses.some(function(x){return (x.name||"").trim().toLowerCase()===n})};
+    if(!has("won")||!has("lost"))return;
+    var F=spaceFields(p),amt=F.filter(function(f){return f.type==="money"&&/quoted amount/i.test(f.name)})[0],
+      why=F.filter(function(f){return f.type==="choice"&&/lost reason/i.test(f.name)})[0];
+    var base={chart:"bar",scope:"all",type:"",pri:"",who:"",label:""},add=[];
+    if(why){
+      var only={};only[why.id]="set";
+      add.push({name:"Why we lose",cfg:Object.assign({},base,{groupBy:"cf:"+why.id,chart:"donut",cf:only})});
+      if(amt)add.push({name:"Lost $ by reason",cfg:Object.assign({},base,{groupBy:"cf:"+why.id,measure:amt.id,cf:only})});
+    }
+    if(amt)add.push({name:"Won vs lost $",cfg:Object.assign({},base,{groupBy:"status",measure:amt.id,scope:"done",chart:"donut"})});
+    add.push({name:"Open follow-ups by person",cfg:Object.assign({},base,{groupBy:"assignee",scope:"open"})});
     add.forEach(function(r){r.space=p.id;if(!state.reports.some(function(x){return x.name===r.name&&x.space===p.id}))state.reports.push(r)});
     state.repSeeded[p.id]=true;savePrefs();
   }
@@ -2401,7 +2422,8 @@ img.who{object-fit:cover;background:var(--chip)}
       if(c.rep&&(t.reporter||"__none")!==c.rep)return false;
       for(var i=0;i<F.length;i++){
         var fd=F[i],want=cf[fd.id],v=(t.fields||{})[fd.id]||"";if(!want)continue;
-        if(fd.type==="person"||fd.type==="team"||fd.type==="choice"){if((v||"__none")!==want)return false}
+        if(fd.type==="choice"&&want==="set"){if(!v)return false}
+        else if(fd.type==="person"||fd.type==="team"||fd.type==="choice"){if((v||"__none")!==want)return false}
         else if(fd.type==="text"){if(String(v).toLowerCase().indexOf(want.toLowerCase())<0)return false}
         else if(want==="set"?!v:!!v)return false;
       }
@@ -2528,7 +2550,7 @@ img.who{object-fit:cover;background:var(--chip)}
         var cv=(c.cf||{})[fd.id]||"",id='rcf-'+fd.id,lab='<label for="'+id+'">'+esc(fd.name)+'</label>';
         if(fd.type==="text")return '<div>'+lab+'<input id="'+id+'" data-rcf="'+fd.id+'" value="'+esc(cv)+'" placeholder="Contains…"></div>';
         if(fd.type==="person")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Anyone",cv)+opt("__none","None",cv)+divMembers().map(function(m){return opt(m,nameOf(m),cv)}).join("")+'</select></div>';
-        if(fd.type==="choice")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("__none","None",cv)+choiceOpts(fd,"").map(function(o){return opt(o,o,cv)}).join("")+'</select></div>';
+        if(fd.type==="choice")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("__none","None",cv)+choiceOpts(fd,"").map(function(o){return opt(o,o,cv)}).join("")+'</select></div>';
         if(fd.type==="team")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any team",cv)+opt("__none","None",cv)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,cv)}).join("")+'</select></div>';
         return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("empty","Empty",cv)+'</select></div>';
       }).join("")+
@@ -3970,7 +3992,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-day]"))){state.calSel=el.getAttribute("data-day");savePrefs();return}
     if((el=t.closest("[data-gi]"))){var gi=parseInt(el.getAttribute("data-gi"),10);ui.rsel=ui.rsel===gi?null:gi;render();return}
-    if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},r.cfg,{name:r.name});ui.rsel=null;save();render();return}
+    if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},clone(r.cfg),{name:r.name});ui.rsel=null;save();render();return}
     if((el=t.closest("[data-delrep]"))){state.reports.splice(parseInt(el.getAttribute("data-delrep"),10),1);save();render();return}
     
     if((el=t.closest("[data-quickadd]"))){quickAdd(el.getAttribute("data-quickadd"));return}
@@ -4047,7 +4069,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(a==="saveReport"){
         var name=state.rcfg.name.trim();
         if(!name){var inp=$("rname");inp.focus();inp.style.borderColor="var(--high)";inp.placeholder="Enter a name first";return}
-        var cfg=Object.assign({},state.rcfg);delete cfg.name;
+        var cfg=clone(state.rcfg);delete cfg.name;
         var ix=state.reports.findIndex(function(r){return r.name===name});
         if(ix>-1)state.reports[ix].cfg=cfg;else state.reports.push({name:name,cfg:cfg});
         save();render();toast("Report saved");
