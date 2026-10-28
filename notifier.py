@@ -14,6 +14,13 @@ one email listing everything. Nobody is emailed about their own changes.
 wf_notify remembers, per bid, the newest event already handled; the "*" row
 is when notifications were switched on, so older history is never emailed.
 
+It also sends follow-up reminders: a space's "remind" automation ({status, hours})
+emails a bid's assignee (else its reporter) once, when the bid has sat in that
+column for that long. Only reminders that come due after the rule was made (its
+"since") and after notifications were switched on are sent; the board shows a
+"Follow up due" flag for older ones. wf_notify's "remind:<bid id>" row holds the
+time the bid entered the column it was last reminded about.
+
 Off until SMTP_HOST is set (see .env.example).
 """
 
@@ -199,6 +206,59 @@ def _send(to_addr, to_name, key, title, lines, link):
         s.send_message(msg)
 
 
+def _entered_at(bid, column):
+    """When the bid entered `column` (ms): its newest Status entry into it, or
+    its "created" entry if newer — the same rule as the board's enteredAt()."""
+    col = column.lower()
+    for h in reversed(bid.get("history") or []):
+        if h.get("field") == "created" or (
+                h.get("field") == "Status" and str(h.get("to") or "").lower() == col):
+            return int(h.get("at") or 0)
+    return 0
+
+
+def _hours_label(h):
+    return f"{h // 24} days" if h % 24 == 0 and h >= 48 else f"{h} hours"
+
+
+def _reminders(c, state, baseline, people, now):
+    for sp in c.table("wf_spaces").select("id,key,statuses,rules").execute().data or []:
+        rules = [r for r in sp.get("rules") or [] if r and r.get("kind") == "remind"]
+        if not rules:
+            continue
+        cols = {s["id"]: s for s in sp.get("statuses") or [] if s.get("id")}
+        bids = (c.table("wf_bids").select("id,num,title,type,status,assignee,reporter,history")
+                .eq("space_id", sp["id"]).execute().data or [])
+        for bid in bids:
+            col = cols.get(bid.get("status")) or {}
+            name = col.get("name") or ""
+            rule = next((r for r in rules if str(r.get("status") or "").lower() == name.lower()), None)
+            if not rule or bid.get("type") == "Subtask" or col.get("cat") == "done":
+                continue
+            entered = _entered_at(bid, name)
+            hours = int(rule.get("hours") or 48)
+            due = entered + hours * 3600 * 1000
+            if not entered or now < due or due < max(baseline, int(rule.get("since") or 0)):
+                continue
+            mark = "remind:" + bid["id"]
+            if state.get(mark, 0) >= entered:
+                continue
+            pid = bid.get("assignee") or bid.get("reporter")
+            p = people.get(pid)
+            key = f"{sp.get('key') or 'BID'}-{bid['num']}"
+            if p and (p.get("email") or "").strip():
+                line = {"text": f"Time to follow up: it has been in {name} for {_hours_label(hours)}"}
+                try:
+                    _send(p["email"].strip(), p["name"], key, bid["title"], [line],
+                          BOARD_URL + "?bid=" + bid["id"])
+                    print(f"[notify] {key}: follow-up reminder to {p['name']}", flush=True)
+                except Exception as e:
+                    print(f"[notify] {key}: couldn't send the reminder to {p['name']}: {e}",
+                          file=sys.stderr, flush=True)
+                    continue   # try again next tick
+            _save_through(c, mark, entered)
+
+
 def tick():
     c = supabase_store.get_client()
     state = _load_state(c)
@@ -210,6 +270,9 @@ def tick():
         print("[notify] switched on — emailing changes from now on", flush=True)
         return
 
+    people = {p["id"]: p for p in c.table("wf_people").select("id,name,email").execute().data or []}
+    _reminders(c, state, baseline, people, now)
+
     since = max(baseline, now - LOOKBACK_S * 1000) - 60_000
     bids = (c.table("wf_bids")
             .select("id,space_id,num,title,assignee,reporter,fields,comments,history,updated_at")
@@ -218,7 +281,6 @@ def tick():
     if not bids:
         return
     person_fields = _person_fields(c)
-    people = {p["id"]: p for p in c.table("wf_people").select("id,name,email").execute().data or []}
     keys = {s["id"]: s["key"] for s in c.table("wf_spaces").select("id,key").execute().data or []}
 
     for bid in bids:

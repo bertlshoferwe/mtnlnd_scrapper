@@ -207,6 +207,7 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cdue .odc.soon{color:var(--med)}
 .cdue .odc.late{color:var(--high)}
 .cdue.over{color:var(--high)}
+.fuflag{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:1px 7px;border-radius:999px;font-size:12px;font-weight:600;color:var(--high);background:color-mix(in srgb,var(--high) 14%,transparent);white-space:nowrap}
 .cfoot{display:flex;align-items:center;gap:6px}
 .cfoot .sp{flex:1}
 .cfoot .key{font-size:13px}
@@ -490,6 +491,12 @@ td.over{color:var(--high);font-weight:600}
 .fine{font-size:12px;color:var(--muted);margin:8px 0 0}
 .srow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .srow:first-of-type{border-top:0}
+.askopts{display:flex;flex-direction:column;gap:6px;margin:4px 0 6px}
+.askopt{display:flex;align-items:center;gap:10px;padding:9px 12px;color:var(--text);font-size:14px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:400;margin:0}
+.askopt:hover{background:var(--chip)}
+.askopt.on{border-color:var(--accent);background:var(--chip)}
+.askopt input{width:auto;margin:0}
+.fopts{display:block;width:100%;margin:0 0 8px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;resize:vertical}
 .srow input{flex:1 1 150px;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
 .srow select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
 .srow .cnt{font-size:12px;color:var(--muted)}
@@ -928,6 +935,14 @@ img.who{object-fit:cover;background:var(--chip)}
   </div>
 </div>
 
+<div class="overlay" id="ov-ask" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+  <div class="sheet">
+    <h3 id="askTitle">Moving the bid</h3>
+    <div id="askBody"></div>
+    <div class="actions" id="askActs"></div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-handoff" role="dialog" aria-modal="true" aria-labelledby="hoTitle">
   <div class="sheet">
     <h3 id="hoTitle">Who should handle it?</h3>
@@ -1066,6 +1081,17 @@ img.who{object-fit:cover;background:var(--chip)}
   function stat(p,id){return p.statuses.filter(function(s){return s.id===id})[0]||p.statuses[0]}
   function isDone(is){return stat(proj(),is.status).cat==="done"}
   function dueAt(is){var d=parse(is.due),t=(is.dueTime||"23:59").split(":");d.setHours(+t[0],+t[1],59,999);return d.getTime()}
+  // A space can show one of its date fields on cards instead of the due date (Settings → Date on
+  // cards), e.g. "Date Quoted" in a follow-up space, where every due date has already passed.
+  // The label drops a leading/trailing "Date": "Date Quoted" reads "Quoted Oct 02, 2026".
+  function cardDateHTML(p,is){
+    if(!p.cardDate)return "";
+    var fd=spaceFields(p).filter(function(x){return x.id===p.cardDate})[0],v=fd&&(is.fields||{})[fd.id],fu=followUpDue(p,is);
+    if(!fd||(!v&&!fu))return "";
+    var lab=fd.name.replace(/^\s*date\s+|\s+date\s*$/i,"").trim()||fd.name;
+    return '<div class="cdue">'+(v?esc(lab)+' '+fmtDay(v):'')+(fu?fuFlag():'')+'</div>';
+  }
+  function fuFlag(){return '<span class="fuflag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Follow up due</span>'}
   function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&dueAt(is)-Date.now()<=86400000}
   function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
   function overdue(is){return !!is.due&&!isDone(is)&&(is.due<today()||(is.due===today()&&!!is.dueTime&&is.dueTime<nowHM()))}
@@ -1088,7 +1114,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var st=stat(p,sid);if(!st||is.type==="Subtask")return;
     (p.rules||[]).forEach(function(r){
       if(r.kind!=="fill"||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
-      var v=r.value==="@today"?today():r.value==="@me"?ME:String(r.value||"");if(!v)return;
+      var v=r.value==="@ask"?String((ui.askAns||{})[r.field]||""):r.value==="@today"?today():r.value==="@me"?ME:String(r.value||"");if(!v)return;
       if(r.field.indexOf("cf:")===0){
         var fid=r.field.slice(3),fd=spaceFields(p).filter(function(x){return x.id===fid})[0];if(!fd)return;
         is.fields=is.fields||{};var old=is.fields[fid]||"";
@@ -1120,6 +1146,92 @@ img.who{object-fit:cover;background:var(--chip)}
       sp.rules=(sp.rules||[]).concat([{id:uid("r"),kind:"fill",status:q.name,field:"cf:"+fd.id,value:"@today",blank:true}]);made=true;
     });
     state.fillSeed1=true;savePrefs();if(made)save();
+  }
+
+  // "Ask whoever moved it" fill rules (value "@ask", e.g. Lost → Lost reason): the move waits for the
+  // answer. askFirst opens the window and returns true; Save re-runs the move with the answers in
+  // ui.askAns (applyFills writes them); Cancel just closes it, so the bid never left its column.
+  // rule.must means the answer can't be left blank.
+  function askRules(p,is,sid){
+    var st=stat(p,sid);if(!st||is.type==="Subtask"||is.status===sid)return [];
+    return (p.rules||[]).filter(function(r){
+      if(r.kind!=="fill"||r.value!=="@ask"||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return false;
+      var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];if(!tg)return false;
+      return !(r.blank&&fieldVal(is,r.field));
+    });
+  }
+  function fieldVal(is,f){return f.indexOf("cf:")===0?(is.fields||{})[f.slice(3)]||"":f==="priority"?"":is[f]||""}
+  function askFirst(p,is,sid,go){
+    if(ui.askPass)return false;
+    var rs=askRules(p,is,sid);if(!rs.length)return false;
+    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:""};
+    renderAsk();openOv("ov-ask");return true;
+  }
+  function askInput(p,r,v){
+    var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0],ty=tg[2],a=' data-askf="'+esc(r.field)+'"';
+    if(ty==="choice"){
+      var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===r.field})[0];
+      return '<div class="askopts" role="radiogroup" aria-label="'+esc(tg[1])+'">'+choiceOpts(fd,"").map(function(o){
+        return '<label class="askopt'+(o===v?' on':'')+'"><input type="radio" name="askf-'+esc(r.field)+'" value="'+esc(o)+'"'+a+(o===v?' checked':'')+'> '+esc(o)+'</label>'}).join("")+'</div>';
+    }
+    if(ty==="person")return '<select'+a+'>'+teamOptions(v).replace('>Unassigned<','>Choose someone<')+'</select>';
+    if(ty==="team")return '<select'+a+'>'+opt("","Choose a team",v)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>';
+    if(ty==="priority")return '<select'+a+'>'+PRI.map(function(x){return opt(x,x,v||"Medium")}).join("")+'</select>';
+    if(ty==="date")return '<input type="date"'+a+' value="'+esc(v)+'">';
+    return '<input'+a+(ty==="number"||ty==="money"?' type="number" step="any"':'')+' value="'+esc(v)+'" maxlength="200">';
+  }
+  function renderAsk(){
+    var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is){closeOv("ov-ask");return}
+    $("askTitle").textContent="Moving to "+stat(p,k.status).name;
+    var h='<p class="fine" style="margin:0 0 6px"><b>'+esc(is.title)+'</b></p>';
+    k.rules.forEach(function(r){
+      var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
+      h+='<label>'+esc(tg[1])+(r.must?'':' <span class="fine">(optional)</span>')+'</label>'+askInput(p,r,k.ans[r.field]||"");
+    });
+    var other=k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")});
+    h+='<label for="ask-note">Note'+(other?'':' <span class="fine">(optional)</span>')+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering')+'">'+esc(k.note)+'</textarea>'+
+      '<p class="fine" style="margin:6px 0 0">The note is added to the bid as a comment.</p>';
+    $("askBody").innerHTML=h;
+    $("askActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-ask">Cancel</button><button class="btn primary" data-asksave>Move it</button>';
+  }
+  function saveAsk(){
+    var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is)return;
+    var miss=k.rules.filter(function(r){return r.must&&!String(k.ans[r.field]||"").trim()})[0];
+    if(miss){var mt=fillTargets(p).filter(function(x){return x[0]===miss.field})[0];toast("Choose a "+(mt?mt[1]:"value")+" first.");return}
+    if(k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")})&&!k.note.trim()){toast("Add a short note about what happened.");var n=$("ask-note");if(n)n.focus();return}
+    ui.ask=null;$("ov-ask").classList.remove("open");
+    ui.askAns=k.ans;ui.askPass=true;
+    try{k.go()}finally{ui.askAns=null;ui.askPass=false}
+    if(k.note.trim()){is.comments.push({id:uid("c"),by:ME,at:Date.now(),text:k.note.trim()});is.updated=Date.now();save()}
+    askRefreshBid();
+  }
+  // the bid window's status picker showed the new column before asking; put it right either way
+  function askRefreshBid(){
+    var cur=ui.issueId&&byId(ui.issueId);if(!cur||!$("ov-issue").classList.contains("open"))return;
+    $("i-side").innerHTML=issueSideHTML(cur);renderIssueHead(cur);renderIssueAct();
+  }
+
+  // "Remind" automations (kind "remind", {status, hours}): once a bid has sat in that column for the
+  // hours, its card shows "Follow up due" and notifier.py emails the assignee once (email only for
+  // reminders that come due after the rule was made — rule.since). The clock starts when the bid
+  // entered the column: its newest Status entry into it, or its "created" entry if that's newer
+  // (copies made by an automation keep the original's history, then get a "created" entry).
+  function enteredAt(p,is){
+    var nm=String(stat(p,is.status).name||"").toLowerCase(),H=is.history||[];
+    for(var i=H.length-1;i>=0;i--){
+      var e=H[i];
+      if(e.field==="created"||(e.field==="Status"&&String(e.to||"").toLowerCase()===nm))return e.at||0;
+    }
+    return is.created?Date.parse(is.created+"T00:00:00"):0;
+  }
+  function remindRule(p,is){
+    if(is.type==="Subtask"||isDone(is))return null;
+    var nm=String(stat(p,is.status).name||"").toLowerCase();
+    return (p.rules||[]).filter(function(r){return r.kind==="remind"&&String(r.status).toLowerCase()===nm})[0]||null;
+  }
+  function followUpDue(p,is){
+    var r=remindRule(p,is);if(!r)return false;
+    var at=enteredAt(p,is);return !!at&&Date.now()-at>=(+r.hours||48)*3600000;
   }
 
   // An automation set to "ask" (rule.ask): the database still makes the copy and picks the team's
@@ -1175,7 +1287,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(type!=="Subtask")return [];
     return proj().issues.filter(function(i){return i.id!==selfId&&i.type!=="Subtask"});
   }
-  var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"],["team","Team"]];
+  var FTYPES=[["text","Text"],["number","Number"],["money","Amount ($)"],["date","Date"],["person","Person"],["team","Team"],["choice","Choice"]];
   // the custom fields a space's bids have: those of the workflow template it follows
   function spaceFields(p){
     if(!HAS_FIELDS||!p)return [];
@@ -1196,6 +1308,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(fd.type==="money")return "$"+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     return String(v);
   }
+  // a Choice field's options, plus a value no longer on the list (so an old answer still shows)
+  function choiceOpts(fd,v){var o=(fd.options||[]).slice();if(v&&o.indexOf(v)<0)o.push(v);return o}
   function setField(is,f,v){
     var p=proj();
     if(f.indexOf("cf:")===0){
@@ -1208,7 +1322,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
-    else if(f==="status"){if(v===is.status)return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);applyFills(p,is,v);queueHandoff(p,is,v)}
+    else if(f==="status"){if(v===is.status||askFirst(p,is,v,function(){setField(is,"status",v)}))return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);applyFills(p,is,v);queueHandoff(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
     else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None",v);is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
@@ -1249,6 +1363,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function moveTo(id,sid,beforeId){
     var p=proj(),is=byId(id);if(!is)return;
+    if(askFirst(p,is,sid,function(){moveTo(id,sid,beforeId)})){render();return}
     if(is.status!==sid){logH(is,"Status",stat(p,is.status).name,stat(p,sid).name);applyStatus(p,is,sid);applyFills(p,is,sid);queueHandoff(p,is,sid);is.updated=Date.now()}
     var col=p.issues.filter(function(x){return x.status===sid&&x.id!==id}).sort(function(a,b){return rk(a)-rk(b)});
     var j=beforeId?col.findIndex(function(x){return x.id===beforeId}):-1;
@@ -1312,8 +1427,10 @@ img.who{object-fit:cover;background:var(--chip)}
   function nz(s){return s?s:null}
 
   /* rows <-> documents */
-  function rowToSpace(r){return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:r.rules||[],fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
-  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:d.rules||[]};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
+  // The space's "Date on cards" pick is stored in wf_spaces.rules as {kind:"card",field} so it needs
+  // no new column (the copy trigger skips rules without "to"); in the browser it's sp.cardDate.
+  function rowToSpace(r){var R=r.rules||[],cd=R.filter(function(x){return x&&x.kind==="card"})[0];return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:R.filter(function(x){return !x||x.kind!=="card"}),cardDate:cd?cd.field||"":"",fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
+  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:(d.rules||[]).concat(d.cardDate?[{id:"card",kind:"card",field:d.cardDate}]:[])};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
   function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):"",attachments:r.attachments||[]}}
   function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined,attachments:HAS_FILES?(d.attachments||[]):undefined}}
 
@@ -1592,10 +1709,11 @@ img.who{object-fit:cover;background:var(--chip)}
   function automationsHTML(p){
     var rules=p.rules||[];
     var h='<section class="panel"><div class="phead"><h3>Automations</h3><button class="addbtn" data-arnew aria-label="Add an automation" title="Add an automation">'+ic("plus",16)+'</button></div>'+
-      '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
+      '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields (or ask whoever moved it), remind the assignee to follow up, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
     if(rules.length)h+='<div class="cards arcards">';
     rules.forEach(function(r){
       if(r.kind==="fill"){h+=fillCardHTML(p,r);return}
+      if(r.kind==="remind"){h+=remindCardHTML(p,r);return}
       var t=D.spaces.filter(function(x){return x.id===r.to})[0];
       var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
       var warn=!t?'That space no longer exists, so this does nothing.':(t.parentId!==p.id?'That space is no longer a sub-space of this one, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':''));
@@ -1612,6 +1730,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0],ty=tg?tg[2]:"text";
     if(r.value==="@today")return "Today’s date";
     if(r.value==="@me")return "Whoever moved it";
+    if(r.value==="@ask")return "Asks whoever moved it"+(r.must?" (must answer)":"");
     if(ty==="person")return nameOf(r.value);
     if(ty==="team"){var tm=(D.teams||[]).filter(function(x){return x.id===r.value})[0];return tm?tm.name:"a deleted team"}
     if(ty==="money")return "$"+r.value;
@@ -1626,26 +1745,54 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div class="arl">Fill in</div><div class="arto"><b>'+esc(tg?tg[1]:"a deleted field")+'</b><br>'+esc(fillValueLabel(p,r))+(r.blank?'<br>Only if it’s empty':'')+'</div>'+
       (warn?'<div class="fine" style="color:var(--high);margin:0">'+warn+'</div>':'')+'</div>';
   }
+  function remindCardHTML(p,r){
+    var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
+    return '<div class="mcard arcard"><div class="arl">When a bid enters</div><div class="tname">'+esc(r.status)+'</div>'+
+      '<button class="editbtn" data-aredit="'+esc(r.id)+'" aria-label="Edit automation" title="Edit automation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>'+
+      '<div class="arl">Remind the assignee</div><div class="arto"><b>After '+esc(hoursLabel(r.hours))+'</b><br>If it’s still in that column</div>'+
+      (!okCol?'<div class="fine" style="color:var(--high);margin:0">This space has no column named “'+esc(r.status)+'”, so this does nothing.</div>':'')+'</div>';
+  }
+  function hoursLabel(h){h=+h||48;return h%24===0?(h/24)+(h===24?" day":" days")+(h>=48?" ("+h+" hours)":""):h+(h===1?" hour":" hours")}
   // the value picker for a fill rule, by the field's type
   function fillValueHTML(p,f){
     var tg=fillTargets(p).filter(function(x){return x[0]===f.field})[0];if(!tg)return '';
-    var ty=tg[2],v=f.value||"",lab='<label for="ar-v">Fill it with</label>';
-    if(ty==="date")return lab+'<select id="ar-v" data-ar="value">'+opt("@today","Today’s date","@today")+'</select>';
-    if(ty==="person")return lab+'<select id="ar-v" data-ar="value">'+opt("@me","Whoever moved it",v||"@me")+teamOptions(v==="@me"?"":v).replace('<option value="">Unassigned</option>','')+'</select>';
-    if(ty==="team")return lab+'<select id="ar-v" data-ar="value">'+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>';
-    if(ty==="priority")return lab+'<select id="ar-v" data-ar="value">'+PRI.map(function(x){return opt(x,x,v||"High")}).join("")+'</select>';
-    return lab+'<input id="ar-v" data-ar="value" '+(ty==="number"||ty==="money"?'type="number" step="any"':'')+' value="'+esc(v.charAt(0)==="@"?"":v)+'" placeholder="What to put in it">';
+    var ty=tg[2];if(ty==="choice"&&!f.value)f.value="@ask";
+    var v=f.value||"",lab='<label for="ar-v">Fill it with</label>',ask=opt("@ask","Ask whoever moved it",v);
+    var must=v==="@ask"?'<label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:400"><input type="checkbox" data-ar="must" style="width:auto"'+(f.must!==false?' checked':'')+'> They must answer (Cancel leaves the bid where it was)</label>'+
+      '<p class="fine" style="margin:6px 0 0">A window asks for it when someone moves a bid there. If they pick an option starting with “Other”, they also write a short note, saved as a comment.</p>':'';
+    if(ty==="date")return lab+'<select id="ar-v" data-ar="value">'+opt("@today","Today’s date",v||"@today")+ask+'</select>'+must;
+    if(ty==="person")return lab+'<select id="ar-v" data-ar="value">'+opt("@me","Whoever moved it",v||"@me")+ask+teamOptions(v.charAt(0)==="@"?"":v).replace('<option value="">Unassigned</option>','')+'</select>'+must;
+    if(ty==="team")return lab+'<select id="ar-v" data-ar="value">'+ask+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>'+must;
+    if(ty==="priority")return lab+'<select id="ar-v" data-ar="value">'+ask+PRI.map(function(x){return opt(x,x,v||"High")}).join("")+'</select>'+must;
+    if(ty==="choice"){
+      var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===f.field})[0],co=choiceOpts(fd,"");
+      return lab+'<select id="ar-v" data-ar="value">'+ask+co.map(function(o){return opt(o,o,v||"@ask")}).join("")+'</select>'+must+
+        (co.length?'':'<p class="fine" style="margin:6px 0 0;color:var(--high)">This field has no options yet. Add them in Settings → its field setup.</p>');
+    }
+    var m=v==="@ask"?"ask":"set";
+    return lab+'<select id="ar-vm" data-ar="mode">'+opt("set","This value",m)+opt("ask","Ask whoever moved it",m)+'</select>'+
+      (m==="ask"?must:'<input id="ar-v" data-ar="value" '+(ty==="number"||ty==="money"?'type="number" step="any"':'')+' value="'+esc(v.charAt(0)==="@"?"":v)+'" placeholder="What to put in it" style="margin-top:8px">');
   }
   // New automation modal (the + on the Automations panel)
   function renderAutoModal(){
     var p=proj();if(!p){closeOv("ov-auto");return}
     var kids=childSpaces(p),body,editing=!!ui.editRule;
     $("autoTitle").textContent=editing?"Edit automation":"New automation";
-    if(ui.ar.kind==="fill"||!kids.length){
+    var cur=ui.ar.kind==="fill"||ui.ar.kind==="remind"?ui.ar.kind:kids.length?"copy":"fill";
+    var kindSel=editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field",cur)+opt("remind","Remind the assignee to follow up",cur)+(kids.length?opt("copy","Add a copy to a sub-space",cur):'')+'</select>';
+    var acts=(editing?'<button class="btn small danger" data-delrule="'+esc(ui.editRule)+'">'+(ui.armR?'Tap to confirm':'Delete automation')+'</button>':'')+
+      '<span class="spacer"></span><button class="btn" data-close="ov-auto">Cancel</button><button class="btn primary" data-addrule>'+(editing?'Save':'Add automation')+'</button>';
+    if(cur==="remind"){
+      var rm=ui.ar;
+      body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,rm.status||p.statuses[0].name)}).join("")+'</select>'+kindSel+
+        '<label for="ar-h">After how many hours</label><input id="ar-h" data-ar="hours" type="number" min="1" step="1" value="'+esc(String(rm.hours||48))+'" style="max-width:120px">'+
+        '<p class="fine" style="margin:8px 0 0">If the bid is still in that column after this long, its card shows <b>Follow up due</b> and its assignee gets one email (once email is set up). Moving it to another column with a reminder starts a new timer.</p>';
+      $("autoActs").innerHTML=acts;
+    }else if(cur==="fill"){
       var ff=ui.ar,tgs=fillTargets(p);ff.kind="fill";
       if(!tgs.some(function(x){return x[0]===ff.field}))ff.field=tgs.filter(function(x){return x[2]==="date"})[0]?tgs.filter(function(x){return x[2]==="date"})[0][0]:tgs[0][0];
       body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,ff.status||p.statuses[0].name)}).join("")+'</select>'+
-        (editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field","fill")+(kids.length?opt("copy","Add a copy to a sub-space","fill"):'')+'</select>')+
+        kindSel+
         '<label for="ar-f">Field</label><select id="ar-f" data-ar="field">'+tgs.map(function(x){return opt(x[0],x[1],ff.field)}).join("")+'</select>'+
         fillValueHTML(p,ff)+
         '<label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:400"><input type="checkbox" data-ar="blank" style="width:auto"'+(ff.blank!==false?' checked':'')+'> Only if it’s empty (don’t replace what’s there)</label>';
@@ -1657,7 +1804,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }else{
       var f=ui.ar,tgt=kids.filter(function(k){return k.id===f.to})[0]||kids[0];
       body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,f.status||p.statuses[0].name)}).join("")+'</select>'+
-        (editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field","copy")+opt("copy","Add a copy to a sub-space","copy")+'</select>')+
+        kindSel+
         '<label for="ar-t">Add a copy to</label><select id="ar-t" data-ar="to">'+kids.map(function(k){return opt(k.id,k.name,tgt.id)}).join("")+'</select>'+
         '<label for="ar-c">In column</label><select id="ar-c" data-ar="col">'+opt("","First column",f.col||"")+tgt.statuses.map(function(s){return opt(s.name,s.name,f.col||"")}).join("")+'</select>'+
         (HAS_PROLE?'<label for="ar-a">Assign the copy to</label><select id="ar-a" data-ar="assign">'+opt("","Keep the same people",f.assign||"")+ROLES.map(function(o){return opt(o,"The team’s "+o,f.assign||"")}).join("")+'</select>'+
@@ -1849,7 +1996,8 @@ img.who{object-fit:cover;background:var(--chip)}
         // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
         h+='<article class="card" draggable="true" data-id="'+is.id+'" data-open="'+is.id+'">'+
           '<div class="ctitle">'+esc(is.title)+'</div>'+
-          (is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+'</div>':'')+
+          cardDateHTML(p,is)+
+          (p.cardDate?'':is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+(followUpDue(p,is)?fuFlag():'')+'</div>':(followUpDue(p,is)?'<div class="cdue">'+fuFlag()+'</div>':''))+
           echipHTML(is)+
           '<div class="cfoot">'+(tkt&&is.fields&&is.fields[tkt.id]?'<span class="kc"><span class="key" title="Ticket #">'+esc(is.fields[tkt.id])+'</span></span>':'')+'<span class="sp"></span>'+
           (tmf?teamIcon((is.fields||{})[tmf.id]):'')+
@@ -2195,7 +2343,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(c.rep&&(t.reporter||"__none")!==c.rep)return false;
       for(var i=0;i<F.length;i++){
         var fd=F[i],want=cf[fd.id],v=(t.fields||{})[fd.id]||"";if(!want)continue;
-        if(fd.type==="person"||fd.type==="team"){if((v||"__none")!==want)return false}
+        if(fd.type==="person"||fd.type==="team"||fd.type==="choice"){if((v||"__none")!==want)return false}
         else if(fd.type==="text"){if(String(v).toLowerCase().indexOf(want.toLowerCase())<0)return false}
         else if(want==="set"?!v:!!v)return false;
       }
@@ -2321,6 +2469,7 @@ img.who{object-fit:cover;background:var(--chip)}
         var cv=(c.cf||{})[fd.id]||"",id='rcf-'+fd.id,lab='<label for="'+id+'">'+esc(fd.name)+'</label>';
         if(fd.type==="text")return '<div>'+lab+'<input id="'+id+'" data-rcf="'+fd.id+'" value="'+esc(cv)+'" placeholder="Contains…"></div>';
         if(fd.type==="person")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Anyone",cv)+opt("__none","None",cv)+divMembers().map(function(m){return opt(m,nameOf(m),cv)}).join("")+'</select></div>';
+        if(fd.type==="choice")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("__none","None",cv)+choiceOpts(fd,"").map(function(o){return opt(o,o,cv)}).join("")+'</select></div>';
         if(fd.type==="team")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any team",cv)+opt("__none","None",cv)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,cv)}).join("")+'</select></div>';
         return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("empty","Empty",cv)+'</select></div>';
       }).join("")+
@@ -2452,7 +2601,9 @@ img.who{object-fit:cover;background:var(--chip)}
       '<select data-spacetpl aria-label="Workflow template" style="min-width:220px">'+(ft?'':opt("","Custom columns",""))+
         tpls.map(function(t){return opt(t.id,t.name+(t===defaultTpl()?" (default)":""),ft?ft.id:"")}).join("")+'</select>'+
       (HAS_FIELDS&&HAS_FSET&&(D.config.fieldSets||[]).length?'<label for="p-fs" style="margin-top:12px">Fields</label><select id="p-fs" data-spacefs style="min-width:220px">'+
-        D.config.fieldSets.map(function(fs){return opt(fs.id,fs.name+(isDefaultFieldSet(fs)?" (default)":""),fieldSetFor(p).id)}).join("")+'</select>':'')+'</section>';
+        D.config.fieldSets.map(function(fs){return opt(fs.id,fs.name+(isDefaultFieldSet(fs)?" (default)":""),fieldSetFor(p).id)}).join("")+'</select>':'')+
+      (HAS_FIELDS?'<label for="p-cd" style="margin-top:12px">Date on cards</label><select id="p-cd" data-spacecard style="min-width:220px">'+opt("","Due date",p.cardDate||"")+
+        spaceFields(p).filter(function(fd){return fd.type==="date"}).map(function(fd){return opt(fd.id,fd.name,p.cardDate||"")}).join("")+'</select>':'')+'</section>';
     h+=automationsHTML(p);
     if(!main)h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section>';
     return h;
@@ -2595,7 +2746,8 @@ img.who{object-fit:cover;background:var(--chip)}
         var k=t.id+":"+i;
         h+='<div class="srow"><input data-tfname="'+k+'" value="'+esc(fd.name)+'" aria-label="Field name" maxlength="40"><select data-tftype="'+k+'" aria-label="Field type">'+FTYPES.map(function(x){return opt(x[0],x[1],fd.type)}).join("")+'</select>'+
           '<button class="btn small" data-tfmv="'+k+'" data-d="-1" aria-label="Move up"'+(i===0?' disabled':'')+'>'+ic("arrowU",14)+'</button><button class="btn small" data-tfmv="'+k+'" data-d="1" aria-label="Move down"'+(i===F.length-1?' disabled':'')+'>'+ic("arrowD",14)+'</button>'+
-          (lockedFields(t)?'':'<button class="btn small danger" data-tfdel="'+k+'">Remove</button>')+'</div>';
+          (lockedFields(t)?'':'<button class="btn small danger" data-tfdel="'+k+'">Remove</button>')+'</div>'+
+          (fd.type==="choice"?'<textarea class="fopts" data-tfopts="'+k+'" rows="4" aria-label="Options for '+esc(fd.name)+'" placeholder="The options, one per line">'+esc((fd.options||[]).join("\n"))+'</textarea>':'');
       });
       if(!F.length)h+='<p class="fine">No fields yet.</p>';
       if(lockedFields(t)&&F.length)h+='<p class="fine" style="margin:6px 0 0">These are the default fields, so they can’t be removed. You can rename them, reorder them or add more.</p>';
@@ -2823,7 +2975,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -3301,6 +3453,7 @@ img.who{object-fit:cover;background:var(--chip)}
       return '<select class="bare"'+a+'>'+opt("","None",v)+tl.map(function(x){return opt(x.id,x.name,v)}).join("")+'</select>';
     }
     if(fd.type==="date")return '<input class="bare'+(v?'':' empty')+'" type="date"'+a+' value="'+esc(v)+'">';
+    if(fd.type==="choice")return '<select class="bare"'+a+'>'+opt("","None",v)+choiceOpts(fd,v).map(function(o){return opt(o,o,v)}).join("")+'</select>';
     if(fd.type==="number"||fd.type==="money")return '<input class="bare" type="number" step="any" inputmode="decimal"'+a+' value="'+esc(v)+'" placeholder="'+(fd.type==="money"?'Add amount':'Add number')+'">';
     return '<input class="bare"'+a+' value="'+esc(v)+'" maxlength="200" placeholder="Add text">';
   }
@@ -3494,6 +3647,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-scrim]")){$("side").classList.remove("open");$("scrim").classList.remove("open");return}
     if((el=t.closest("[data-close]"))){closeOv(el.getAttribute("data-close"));return}
     if(t.closest("[data-hosave]")){saveHandoff();return}
+    if(t.closest("[data-asksave]")){saveAsk();return}
     if(t.closest("[data-lsedit]")){ui.lsEdit=ui.issueId;renderIssueSideOnly();var li=$("ls-url");if(li)li.focus();return}
     if(t.closest("[data-lscancel]")){ui.lsEdit=null;renderIssueSideOnly();return}
     if(t.closest("[data-lssave]")){var lb=byId(ui.issueId);if(lb)saveListing(lb);return}
@@ -3559,11 +3713,23 @@ img.who{object-fit:cover;background:var(--chip)}
       if(sb)Promise.resolve(sb.from("wf_division_names").delete().eq("division_id",pgid)).then(function(){},function(){});
       delete raw.names[pgid];render();toast("Archived division deleted");return;
     }
+    if(t.closest("[data-addrule]")&&ui.ar.kind==="remind"){
+      var mp=proj();if(!mp)return;
+      var ms=ui.ar.status||mp.statuses[0].name,mh=Math.round(+(($("ar-h")||{}).value||ui.ar.hours||48));
+      if(!(mh>=1)){toast("Enter how many hours to wait.");return}
+      mp.rules=mp.rules||[];
+      var mex=mp.rules.filter(function(x){return x.id===ui.editRule})[0];
+      if(mp.rules.some(function(x){return x!==mex&&x.kind==="remind"&&String(x.status).toLowerCase()===ms.toLowerCase()})){toast("That column already has a reminder.");return}
+      if(mex){mex.status=ms;mex.hours=mh}else mp.rules.push({id:uid("r"),kind:"remind",status:ms,hours:mh,since:Date.now()});
+      ui.ar={status:"",to:"",col:"",assign:""};closeOv("ov-auto");save();render();toast(mex?"Automation saved":"Automation added");return;
+    }
     if(t.closest("[data-addrule]")&&ui.ar.kind==="fill"){
       var fp=proj();if(!fp)return;
       var fa=ui.ar,fs=fa.status||fp.statuses[0].name,fv=fa.value;
       var ftg=fillTargets(fp).filter(function(x){return x[0]===fa.field})[0];if(!ftg)return;
-      if(ftg[2]==="date")fv="@today";
+      if(fv==="@ask");
+      else if(ftg[2]==="date")fv="@today";
+      else if(ftg[2]==="choice")fv=fv||"@ask";
       else if(ftg[2]==="person")fv=fv||"@me";
       else if(ftg[2]==="priority")fv=fv||"High";
       else if(ftg[2]==="team")fv=fv||((divTeams(curDiv())[0]||{}).id||"");
@@ -3571,6 +3737,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(!fv){toast("Choose what to fill it with.");return}
       fp.rules=fp.rules||[];
       var fex=fp.rules.filter(function(x){return x.id===ui.editRule})[0],frule={kind:"fill",status:fs,field:fa.field,value:fv,blank:fa.blank!==false};
+      if(fv==="@ask")frule.must=fa.must!==false;else if(fex)delete fex.must;
       if(fp.rules.some(function(x){return x!==fex&&x.kind==="fill"&&x.status===fs&&x.field===fa.field})){toast("There’s already an automation filling that field in that column.");return}
       if(fex)Object.assign(fex,frule);else fp.rules.push(Object.assign({id:uid("r")},frule));
       ui.ar={status:"",to:"",col:"",assign:""};closeOv("ov-auto");save();render();toast(fex?"Automation saved":"Automation added");return;
@@ -3589,7 +3756,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-arnew]")){ui.editRule=null;ui.armR=false;ui.ar={status:"",to:"",col:"",assign:""};renderAutoModal();openOv("ov-auto");return}
     if((el=t.closest("[data-aredit]"))){
       var ep=proj(),er=((ep&&ep.rules)||[]).filter(function(x){return x.id===el.getAttribute("data-aredit")})[0];if(!er)return;
-      ui.editRule=er.id;ui.armR=false;ui.ar=er.kind==="fill"?{kind:"fill",status:er.status,field:er.field,value:er.value,blank:!!er.blank}:{status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
+      ui.editRule=er.id;ui.armR=false;ui.ar=er.kind==="remind"?{kind:"remind",status:er.status,hours:er.hours||48}:er.kind==="fill"?{kind:"fill",status:er.status,field:er.field,value:er.value,blank:!!er.blank,must:er.must!==false}:{status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
     }
     if((el=t.closest("[data-delrule]"))){
       var dp=proj(),did=el.getAttribute("data-delrule");
@@ -3919,8 +4086,10 @@ img.who{object-fit:cover;background:var(--chip)}
       if(nm&&nm!==s2.name){unfollow(proj());s2.name=nm;save();render()}else el.value=s2.name;return;
     }
     if(el.id==="pname"&&!isDefaultSpace(proj())){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
+    if(el.hasAttribute("data-spacecard")){var cp=proj();if(cp){cp.cardDate=el.value;save();render();toast(el.value?"Cards show "+el.options[el.selectedIndex].text:"Cards show the due date")}return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.type==="checkbox"?el.checked:el.value;
-      if(v==="value"||v==="blank")return;   // nothing else depends on these; re-drawing would swallow a click on Save
+      if(v==="mode"){ui.ar.value=el.value==="ask"?"@ask":"";renderAutoModal();return}
+      if((v==="value"&&el.tagName!=="SELECT")||v==="blank"||v==="must"||v==="hours")return;   // nothing else depends on these; re-drawing would swallow a click on Save
       if(v==="to")ui.ar.col="";if(v==="field")ui.ar.value="";if(v==="kind"&&ui.ar.kind==="copy")delete ui.ar.kind;renderAutoModal();return}
     if((v=el.getAttribute("data-tname"))){
       var tt=tplById(v),tv=el.value.trim();
@@ -3939,6 +4108,11 @@ img.who{object-fit:cover;background:var(--chip)}
       var fk=v.split(":"),ft=tplById(fk[0]),ff=ft&&ft.fields?ft.fields[+fk[1]]:null;
       if(!ff)return;
       if(el.hasAttribute("data-tftype"))ff.type=el.value;else if(el.value.trim())ff.name=el.value.trim();else{el.value=ff.name;return}
+      save();render();return;
+    }
+    if((v=el.getAttribute("data-tfopts"))){
+      var ok=v.split(":"),ot=tplById(ok[0]),of=ot&&ot.fields?ot.fields[+ok[1]]:null;if(!of)return;
+      var seen={};of.options=el.value.split("\n").map(function(x){return x.trim()}).filter(function(x){if(!x||seen[x.toLowerCase()])return false;seen[x.toLowerCase()]=1;return true});
       save();render();return;
     }
     if((v=el.getAttribute("data-tccat"))){
@@ -3962,6 +4136,12 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   document.addEventListener("input",function(e){
     var el=e.target;
+    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askf")){
+      var af=el.getAttribute("data-askf"),wasOther=/^other\b/i.test(ui.ask.ans[af]||"");ui.ask.ans[af]=el.value;
+      if(el.type==="radio"||wasOther!==/^other\b/i.test(el.value)){var nt=$("ask-note");if(nt)ui.ask.note=nt.value;renderAsk()}
+      return;
+    }
+    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="bs-q"&&ui.bsPick){
