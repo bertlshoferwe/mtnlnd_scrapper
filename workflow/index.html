@@ -1380,6 +1380,21 @@ img.who{object-fit:cover;background:var(--chip)}
     save();render();
   }
 
+  // Saved reports with a "space" show only in that space. Geo Bids gets three starter reports, added
+  // once per browser (state.repSeedGB): quoted dollars by team and by month, and bids received per week.
+  function seedSpaceReports(p){
+    if(state.repSeedGB||!p||!isDefaultSpace(p))return;
+    var d=D.divs.filter(function(x){return x.id===p.divisionId})[0];if(!d||!/^geo$/i.test(d.name))return;
+    var F=spaceFields(p),amt=F.filter(function(f){return f.type==="money"&&/quoted amount/i.test(f.name)})[0],
+      team=F.filter(function(f){return f.type==="team"})[0],dq=F.filter(function(f){return f.type==="date"&&/date quoted/i.test(f.name)})[0];
+    var base={chart:"bar",scope:"all",type:"",pri:"",who:"",label:""},add=[];
+    if(team&&amt)add.push({name:"Quoted $ by team",cfg:Object.assign({},base,{groupBy:"cf:"+team.id,measure:amt.id})});
+    if(dq&&amt)add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id})});
+    add.push({name:"Bids received per week",cfg:Object.assign({},base,{groupBy:"created"})});
+    add.forEach(function(r){r.space=p.id;if(!state.reports.some(function(x){return x.name===r.name&&x.space===p.id}))state.reports.push(r)});
+    state.repSeedGB=true;savePrefs();
+  }
+
   /* ---------- preferences (this device only) ---------- */
   function defaultPrefs(){
     var T=today();
@@ -2483,6 +2498,7 @@ img.who{object-fit:cover;background:var(--chip)}
       un:list.filter(function(t){return !t.assignee}).length};
   }
   function reportsHTML(){
+    seedSpaceReports(proj());
     var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy),p=proj();
     ui.groups=groups;
     var whos=[],labels=[];
@@ -2493,7 +2509,7 @@ img.who{object-fit:cover;background:var(--chip)}
     whos.sort();labels.sort();
     var h='<div class="rep">';
     h+='<div class="saved-row"><span class="fine" style="margin:0">Saved reports</span>'+
-      (state.reports.length?state.reports.map(function(r,i){return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">'+ic("x",18)+'</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
+      (state.reports.some(function(r){return !r.space||r.space===p.id})?state.reports.map(function(r,i){if(r.space&&r.space!==p.id)return "";return '<span class="saved"><button data-load="'+i+'">'+esc(r.name)+'</button><button data-delrep="'+i+'" aria-label="Delete report '+esc(r.name)+'">'+ic("x",18)+'</button></span>'}).join(""):'<span class="fine" style="margin:0">None yet. Save the current settings below.</span>')+'</div>';
     h+='<section class="panel"><div class="ctrl">'+
       '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+groupChoices().map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
       '<div><label for="rc-m">Show</label><select id="rc-m" data-rc="measure">'+opt("","Number of bids",c.measure||"")+rFields().filter(function(f){return f.type==="money"||f.type==="number"}).map(function(f){return opt(f.id,"Total "+f.name,c.measure||"")}).join("")+'</select></div>'+
