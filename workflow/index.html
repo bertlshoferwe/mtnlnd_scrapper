@@ -461,9 +461,8 @@ td.over{color:var(--high);font-weight:600}
 .rcard .rbcap{margin:0 0 10px}
 .rcard{position:relative}
 .rcard .phead{cursor:grab}
-.rcard.dragging{opacity:.45}
-.rcard.rbefore{box-shadow:-3px 0 0 var(--accent),var(--shadow)}
-.rcard.rafter{box-shadow:3px 0 0 var(--accent),var(--shadow)}
+.rcard.drag-src{display:none}
+.rph{border:2px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,transparent);min-height:120px}
 .rgrip{color:var(--muted);display:inline-flex;margin-right:2px}
 .rcbtn{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted)}
 .rcbtn:hover{background:var(--chip);color:var(--text)}
@@ -4498,28 +4497,43 @@ img.who{object-fit:cover;background:var(--chip)}
     });
     box.addEventListener("dragend",function(){dragF=null;clearF()});
   })();
-  // Reports dashboard: drag a report card onto another to put it before (left half) or after (right
-  // half) that one; the order is the order of state.reports, saved with the reports.
-  function clearRepDrop(){Array.prototype.forEach.call(view.querySelectorAll(".rcard.rbefore,.rcard.rafter"),function(x){x.classList.remove("rbefore","rafter")})}
+  // Reports dashboard: drag a report card and a dashed placeholder the card's size opens where it
+  // would land (the card itself lifts out), so the others shift around it live. Dropping puts it at the
+  // placeholder; the order is the order of state.reports (other spaces' reports keep their slots).
+  var repPh=null,repSrc=null;
+  function clearRepDrop(){if(repPh&&repPh.parentNode)repPh.parentNode.removeChild(repPh);if(repSrc)repSrc.classList.remove("drag-src");repPh=null;repSrc=null}
   view.addEventListener("dragstart",function(e){
-    var rcd=e.target.closest&&e.target.closest("[data-repdrag]");
-    if(rcd){ui.dragRep=+rcd.getAttribute("data-repdrag");rcd.classList.add("dragging");try{e.dataTransfer.setData("text/plain","report");e.dataTransfer.effectAllowed="move"}catch(x){}return}
+    var rcd=e.target.closest&&e.target.closest("[data-repdrag]");if(!rcd)return;
+    ui.dragRep=+rcd.getAttribute("data-repdrag");repSrc=rcd;
+    repPh=document.createElement("div");repPh.className="rph";repPh.style.height=rcd.offsetHeight+"px";repPh.setAttribute("aria-hidden","true");
+    try{e.dataTransfer.setData("text/plain","report");e.dataTransfer.effectAllowed="move"}catch(x){}
+    // after the browser has taken its drag picture: hide the card and open its spot
+    setTimeout(function(){if(repSrc&&repPh){repSrc.parentNode.insertBefore(repPh,repSrc);repSrc.classList.add("drag-src")}},0);
   });
   view.addEventListener("dragover",function(e){
-    if(ui.dragRep==null)return;
-    var tc=e.target.closest(".rcard[data-repdrag]");clearRepDrop();
-    if(!tc||+tc.getAttribute("data-repdrag")===ui.dragRep)return;
-    e.preventDefault();var rc=tc.getBoundingClientRect();tc.classList.add(e.clientX<rc.left+rc.width/2?"rbefore":"rafter");
+    if(ui.dragRep==null||!repPh)return;
+    var dash=e.target.closest(".rdash");if(!dash)return;
+    e.preventDefault();
+    var tc=e.target.closest(".rcard[data-repdrag]");if(!tc||tc===repSrc)return;
+    var rc=tc.getBoundingClientRect(),before=e.clientX<rc.left+rc.width/2;
+    var ref=before?tc:tc.nextSibling;
+    if(ref===repPh||(before&&tc.previousSibling===repPh)||(!before&&tc.nextSibling===repPh))return;
+    dash.insertBefore(repPh,ref);
   });
   view.addEventListener("drop",function(e){
     if(ui.dragRep==null)return;
-    var tc=e.target.closest(".rcard[data-repdrag]"),from=ui.dragRep;ui.dragRep=null;
-    if(!tc){clearRepDrop();return}
+    var dash=e.target.closest(".rdash"),r=state.reports[ui.dragRep];
+    if(!dash||!repPh||!repPh.parentNode||!r){ui.dragRep=null;clearRepDrop();render();return}
     e.preventDefault();
-    var to=+tc.getAttribute("data-repdrag"),after=tc.classList.contains("rafter"),r=state.reports[from];clearRepDrop();
-    if(!r||from===to)return;
-    state.reports.splice(from,1);var j=to>from?to-1:to;   // the target's index once the dragged one is out
-    state.reports.splice(after?j+1:j,0,r);ui.rsel=null;save();render();
+    // the new on-screen order, with the dragged one where the placeholder is
+    var order=[];
+    Array.prototype.forEach.call(dash.children,function(n){
+      if(n===repPh)order.push(r);
+      else if(n!==repSrc&&n.hasAttribute("data-repdrag"))order.push(state.reports[+n.getAttribute("data-repdrag")]);
+    });
+    var slots=[];state.reports.forEach(function(x,k){if(order.indexOf(x)>-1)slots.push(k)});
+    slots.forEach(function(k,n){state.reports[k]=order[n]});
+    ui.dragRep=null;clearRepDrop();ui.rsel=null;save();render();
   });
   view.addEventListener("dragend",function(){if(ui.dragRep!=null){ui.dragRep=null;clearRepDrop();render()}});
   view.addEventListener("dragstart",function(e){
