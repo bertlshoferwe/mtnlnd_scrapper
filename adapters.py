@@ -890,7 +890,10 @@ class ConstructConnectAdapter(SiteAdapter):
                   f"scanning without it instead ({e})")
             self._save_debug_screenshot(page, "category_filter_failed")
 
-    BID_DATE_WINDOW = "Next 60 Days"
+    # Options are #bidDate-listbox-option-{7,14,30,60,90,CUSTOM}, labelled
+    # "Next N Days" (confirmed via devtools 2026-10-27).
+    BID_DATE_DAYS = 60
+    BID_DATE_WINDOW = f"Next {BID_DATE_DAYS} Days"
 
     def _apply_bid_date_filter(self, page):
         """Picks BID_DATE_WINDOW in the sidebar's Bid Date section. With the
@@ -916,10 +919,7 @@ class ConstructConnectAdapter(SiteAdapter):
             current = page.locator("#bidDate").inner_text(timeout=5000).strip()
             if current != self.BID_DATE_WINDOW:
                 page.click("#bidDate", timeout=8000)
-                # The option rows' own markup isn't confirmed — match the
-                # text anywhere inside the listbox.
-                page.locator("#bidDate-listbox").get_by_text(
-                    self.BID_DATE_WINDOW, exact=True).first.click(timeout=8000)
+                page.click(f"#bidDate-listbox-option-{self.BID_DATE_DAYS}", timeout=8000)
             page.wait_for_timeout(1500)
             count = re.search(r"Projects\s*([\d,]+)", page.evaluate("document.body.innerText") or "")
             print(f"  ConstructConnect: scoped results to bid dates in the {self.BID_DATE_WINDOW.lower()}"
