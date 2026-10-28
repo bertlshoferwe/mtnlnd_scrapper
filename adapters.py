@@ -853,29 +853,36 @@ class ConstructConnectAdapter(SiteAdapter):
 
     CATEGORY = "Civil"
 
+    def _expand_filter_section(self, page, key, content_selector):
+        """Opens the sidebar's collapsible filter section with
+        data-section-key=key (its header is a role="button" div, confirmed
+        via devtools 2026-10-27) unless content_selector inside it is
+        already showing — clicking an open header would collapse it."""
+        section = page.locator(f'[data-section-key="{key}"]').first
+        content = section.locator(content_selector).first
+        if not (content.count() and content.is_visible()):
+            section.locator('[class*="CollapsibleSection_header"][role="button"]').first.click(timeout=8000)
+            page.wait_for_timeout(500)
+        return section
+
     def _apply_category_filter(self, page):
         """Checks CATEGORY in the sidebar's Project Category tree — checking
         "Civil" checks all 9 of its children (Bridges / Tunnels, Pipeline,
         Roads / Highways, Water / Sewer, ...), confirmed via user screenshot
         2026-10-27. Not saved on the account, so redone every run like the
-        location filter. Looks like the same react-checkbox-tree as the old
-        Project Stage filter (<input id="stageFilter-Bidding"> + matching
-        <label for>), but the id isn't confirmed, so it falls back to the
-        checkbox's accessible name. Left alone if it's already checked so a
-        click can't turn it off. Best-effort like the other filters."""
+        location filter. Same react-checkbox-tree as the old Project Stage
+        filter (DOM confirmed via devtools 2026-10-27): section
+        data-section-key="category", <div id="projectCategoryFilter">,
+        <input id="projectCategoryFilter-Civil" type="checkbox"> wrapped in
+        <label for="projectCategoryFilter-Civil">. Left alone if it's already
+        checked so a click can't turn it off. Best-effort like the other
+        filters."""
         self._dismiss_cookie_banner(page)
+        box_id = f"projectCategoryFilter-{self.CATEGORY}"
         try:
-            page.click("text=Project Category", timeout=8000)
-            page.wait_for_timeout(500)
-            box = page.locator(f"input[type='checkbox'][id$='-{self.CATEGORY}']").first
-            if not box.count():
-                box = page.get_by_role("checkbox", name=self.CATEGORY, exact=True).first
-            if not box.is_checked():
-                box_id = box.get_attribute("id")
-                if box_id:
-                    page.click(f"label[for='{box_id}']", timeout=8000)
-                else:
-                    box.check(force=True, timeout=8000)
+            self._expand_filter_section(page, "category", "#projectCategoryFilter")
+            if not page.locator(f"#{box_id}").is_checked():
+                page.click(f"label[for='{box_id}']", timeout=8000)
             page.wait_for_timeout(1500)
             print(f"  ConstructConnect: scoped results to {self.CATEGORY} projects")
             self._save_debug_screenshot(page, "category_filter_applied")
@@ -889,35 +896,28 @@ class ConstructConnectAdapter(SiteAdapter):
     def _apply_bid_date_filter(self, page):
         """Picks BID_DATE_WINDOW in the sidebar's Bid Date section. With the
         location and category filters this matches the view the user works
-        from — 261 projects on
-        2026-10-27, vs. ~3,600 for location+category alone. Replaced the
-        old "Bidding" stage checkbox: past bid dates drop Post-Bid on their
-        own, and Conceptual projects with a real bid date coming up are
-        wanted.
+        from — 261 projects on 2026-10-27, vs. ~3,600 for location+category
+        alone. Replaced the old "Bidding" stage checkbox: past bid dates drop
+        Post-Bid on their own, and Conceptual projects with a real bid date
+        coming up are wanted.
 
-        The control's DOM isn't confirmed yet (only a screenshot: a
-        dropdown under a collapsible "Bid Date" header), so this tries a
-        real <select> first, then a custom combobox. "Bid Date" is also a
-        grid column header, so the section header is matched outside the
-        grid. Best-effort like the other filters — a failure just leaves
-        the run wider, logged + screenshotted."""
+        DOM confirmed via devtools 2026-10-27 — the same custom combobox as
+        the location picker: section data-section-key="bidDate", trigger
+        <button id="bidDate" role="combobox"> showing the current value in
+        .dropdown-input__value, options in <div id="bidDate-listbox"
+        role="listbox">. Skipped if it already shows BID_DATE_WINDOW.
+        Best-effort like the other filters — a failure just leaves the run
+        wider, logged + screenshotted."""
         self._dismiss_cookie_banner(page)
         try:
-            header = page.locator(
-                "xpath=//*[normalize-space(text())='Bid Date']"
-                "[not(ancestor::table) and not(ancestor::*[@role='table' or @role='columnheader'])]"
-            ).first
-            select = page.locator(f"select:has(option:text-is('{self.BID_DATE_WINDOW}'))").first
-            if not select.count() or not select.is_visible():
-                header.click(timeout=8000)
-                page.wait_for_timeout(500)
-            if select.count():
-                select.select_option(label=self.BID_DATE_WINDOW, timeout=8000)
-            else:
-                section = header.locator("xpath=ancestor::*[.//*[@role='combobox' or @aria-haspopup]][1]")
-                section.locator("[role='combobox'], [aria-haspopup]").first.click(timeout=8000)
-                page.get_by_role("option", name=self.BID_DATE_WINDOW).or_(
-                    page.get_by_text(self.BID_DATE_WINDOW, exact=True)).first.click(timeout=8000)
+            self._expand_filter_section(page, "bidDate", "#bidDate")
+            current = page.locator("#bidDate .dropdown-input__value").inner_text(timeout=5000).strip()
+            if current != self.BID_DATE_WINDOW:
+                page.click("#bidDate", timeout=8000)
+                # The option rows' own markup isn't confirmed — match the
+                # text anywhere inside the listbox.
+                page.locator("#bidDate-listbox").get_by_text(
+                    self.BID_DATE_WINDOW, exact=True).first.click(timeout=8000)
             page.wait_for_timeout(1500)
             count = re.search(r"Projects\s*([\d,]+)", page.evaluate("document.body.innerText") or "")
             print(f"  ConstructConnect: scoped results to bid dates in the {self.BID_DATE_WINDOW.lower()}"
