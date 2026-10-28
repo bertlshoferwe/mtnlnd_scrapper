@@ -595,7 +595,8 @@ class ConstructConnectAdapter(SiteAdapter):
 
     BASE = "https://app.constructconnect.com"
     PAGE_TIMEOUT_MS = 25000
-    # Scoped (location + stage filters) results run ~722 projects; at the
+    # Scoped results ran ~722 projects with the old stage filter (261 with
+    # the bid date filter that replaced it, 2026-10-27); at the
     # ~23s/project pace seen 2026-10-04, a full pass takes ~4.5hrs. Raised
     # from the original 1800s/100 (which only ever reached 79 projects
     # before the old 30-min budget cut it off) — fine to run this long on
@@ -642,10 +643,11 @@ class ConstructConnectAdapter(SiteAdapter):
                 return [], login_result, {}
 
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
-            # parked for that) — but _apply_location_filter/_apply_stage_filter
-            # at least scope the default nationwide view down to what matters.
+            # parked for that) — but the location, category and bid date
+            # filters scope the default nationwide view down to what matters.
             self._apply_location_filter(page)
-            self._apply_stage_filter(page)
+            self._apply_category_filter(page)
+            self._apply_bid_date_filter(page)
             out, current_updated = self._scan_results_page(page, deadline, known_updated or {})
             if not out:
                 self._save_debug_screenshot(page, "no_docs_found")
@@ -849,33 +851,86 @@ class ConstructConnectAdapter(SiteAdapter):
             except Exception:
                 pass
 
-    def _apply_stage_filter(self, page):
-        """Checks "Bidding" in the sidebar's Project Stage tree (confirmed
-        by the user via devtools 2026-10-04: dropped results from ~9,000
-        location-filtered down to 722, combined with _apply_location_filter)
-        — leaves Planning/Post-Bid/Canceled unchecked. Unlike the location
-        filter this isn't behind a modal, no separate Apply click needed:
-        it's a plain react-checkbox-tree node, a real
-        <input id="stageFilter-Bidding" type="checkbox"> with a matching
-        <label for="stageFilter-Bidding"> — checking "Bidding" auto-checks
-        its "GC Bidding"/"Sub-Bidding" children, so just the one click.
-        Best-effort, same reasoning as _apply_location_filter: any failure
-        here just leaves the run less scoped, not aborted."""
+    CATEGORY = "Civil"
+
+    def _apply_category_filter(self, page):
+        """Checks CATEGORY in the sidebar's Project Category tree — checking
+        "Civil" checks all 9 of its children (Bridges / Tunnels, Pipeline,
+        Roads / Highways, Water / Sewer, ...), confirmed via user screenshot
+        2026-10-27. Not saved on the account, so redone every run like the
+        location filter. Looks like the same react-checkbox-tree as the old
+        Project Stage filter (<input id="stageFilter-Bidding"> + matching
+        <label for>), but the id isn't confirmed, so it falls back to the
+        checkbox's accessible name. Left alone if it's already checked so a
+        click can't turn it off. Best-effort like the other filters."""
+        self._dismiss_cookie_banner(page)
         try:
-            self._dismiss_cookie_banner(page)
-            # Confirmed via debug screenshot 2026-10-04: this section is
-            # collapsed by default (same as Project Location), so its
-            # checkbox isn't interactable until expanded — missing this
-            # step is why the first attempt just timed out.
-            page.click("text=Project Stage", timeout=8000)
-            page.click("label[for='stageFilter-Bidding']", timeout=8000)
-            page.wait_for_timeout(1000)
-            print("  ConstructConnect: scoped results to Bidding-stage projects")
-            self._save_debug_screenshot(page, "stage_filter_applied")
+            page.click("text=Project Category", timeout=8000)
+            page.wait_for_timeout(500)
+            box = page.locator(f"input[type='checkbox'][id$='-{self.CATEGORY}']").first
+            if not box.count():
+                box = page.get_by_role("checkbox", name=self.CATEGORY, exact=True).first
+            if not box.is_checked():
+                box_id = box.get_attribute("id")
+                if box_id:
+                    page.click(f"label[for='{box_id}']", timeout=8000)
+                else:
+                    box.check(force=True, timeout=8000)
+            page.wait_for_timeout(1500)
+            print(f"  ConstructConnect: scoped results to {self.CATEGORY} projects")
+            self._save_debug_screenshot(page, "category_filter_applied")
         except Exception as e:
-            print(f"  ! ConstructConnect: couldn't apply the stage filter, "
-                  f"scanning unfiltered instead ({e})")
-            self._save_debug_screenshot(page, "stage_filter_failed")
+            print(f"  ! ConstructConnect: couldn't apply the category filter, "
+                  f"scanning without it instead ({e})")
+            self._save_debug_screenshot(page, "category_filter_failed")
+
+    BID_DATE_WINDOW = "Next 60 Days"
+
+    def _apply_bid_date_filter(self, page):
+        """Picks BID_DATE_WINDOW in the sidebar's Bid Date section. With the
+        location and category filters this matches the view the user works
+        from — 261 projects on
+        2026-10-27, vs. ~3,600 for location+category alone. Replaced the
+        old "Bidding" stage checkbox: past bid dates drop Post-Bid on their
+        own, and Conceptual projects with a real bid date coming up are
+        wanted.
+
+        The control's DOM isn't confirmed yet (only a screenshot: a
+        dropdown under a collapsible "Bid Date" header), so this tries a
+        real <select> first, then a custom combobox. "Bid Date" is also a
+        grid column header, so the section header is matched outside the
+        grid. Best-effort like the other filters — a failure just leaves
+        the run wider, logged + screenshotted."""
+        self._dismiss_cookie_banner(page)
+        try:
+            header = page.locator(
+                "xpath=//*[normalize-space(text())='Bid Date']"
+                "[not(ancestor::table) and not(ancestor::*[@role='table' or @role='columnheader'])]"
+            ).first
+            select = page.locator(f"select:has(option:text-is('{self.BID_DATE_WINDOW}'))").first
+            if not select.count() or not select.is_visible():
+                header.click(timeout=8000)
+                page.wait_for_timeout(500)
+            if select.count():
+                select.select_option(label=self.BID_DATE_WINDOW, timeout=8000)
+            else:
+                section = header.locator("xpath=ancestor::*[.//*[@role='combobox' or @aria-haspopup]][1]")
+                section.locator("[role='combobox'], [aria-haspopup]").first.click(timeout=8000)
+                page.get_by_role("option", name=self.BID_DATE_WINDOW).or_(
+                    page.get_by_text(self.BID_DATE_WINDOW, exact=True)).first.click(timeout=8000)
+            page.wait_for_timeout(1500)
+            count = re.search(r"Projects\s*([\d,]+)", page.evaluate("document.body.innerText") or "")
+            print(f"  ConstructConnect: scoped results to bid dates in the {self.BID_DATE_WINDOW.lower()}"
+                  + (f" ({count.group(1)} projects)" if count else ""))
+            self._save_debug_screenshot(page, "bid_date_filter_applied")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't apply the bid date filter, "
+                  f"scanning without it instead ({e})")
+            self._save_debug_screenshot(page, "bid_date_filter_failed")
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also
@@ -900,8 +955,8 @@ class ConstructConnectAdapter(SiteAdapter):
     def _scan_results_page(self, page, deadline, known_updated):
         """Work through whatever project list is currently on screen — no
         Saved Search filtering yet (see SAVED_SEARCHES / the note in
-        find_documents_with_browser), just the location+stage filters
-        applied earlier.
+        find_documents_with_browser), just the location, category and bid
+        date filters applied earlier.
 
         known_updated is {project_id: 'Oct 4, 2026'} from the previous run
         (see supabase_store.load_project_last_updated) — a project whose
