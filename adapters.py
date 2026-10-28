@@ -609,7 +609,9 @@ class ConstructConnectAdapter(SiteAdapter):
     # wasn't enough for larger ones (e.g. "Pedestrian and Bicylce Paths" and
     # "Dominion WSD - CBWRF Balance of Plant" both timed out and got skipped
     # entirely 2026-09-20). Raised well past the largest projects seen so far.
-    DOWNLOAD_TIMEOUT_MS = 180000
+    # 3 min then wasn't enough for a 66-file Multi-page PDF ("Pavement &
+    # Drainage Rehabilitation - Davis Road", still at 99% building, 2026-10-27).
+    DOWNLOAD_TIMEOUT_MS = 600000
     LOGIN_REDIRECT_TIMEOUT_S = 25    # how long to wait for the SSO redirect back into the app
     # A generic browser-flavored UA and Playwright's default navigator.webdriver=true
     # got the SSO login (login.io.constructconnect.com) stuck forever on a
