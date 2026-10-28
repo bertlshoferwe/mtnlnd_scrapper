@@ -547,14 +547,14 @@ class ConstructConnectAdapter(SiteAdapter):
     Documents panel (see DOCUMENT_CATEGORIES — replaced the site's old
     single "View/Download Documents" button as of 2026-10-04, opens a new
     tab the same way), and on the docviewer tab use the split button's
-    arrow to pick "Multi-page PDF" and click Start — every document in
-    the project merged into one PDF (user's pick, 2026-10-27). (The flyout
+    arrow to pick "Zipped PDFs" and click Start — every document in the
+    project comes back as a separate file. (The flyout
     that arrow opens renders at a fixed, occluded position — real and
     enabled per computed style, just never visible to a human because
     other page chrome sits on top of it; see _click_download_format's
     force=True clicks, confirmed working via devtools 2026-09-20.) Falls
-    back to "Zipped PDFs" (every document a separate file) only if that
-    doesn't behave as expected.
+    back to "Multi-page PDF" (one merged PDF) only if that doesn't behave
+    as expected.
 
     Next phase (not wired up yet): ConstructConnect's own filter UI doesn't
     put its state in the URL — applying filters leaves the address bar
@@ -1266,19 +1266,21 @@ class ConstructConnectAdapter(SiteAdapter):
             if download:
                 out = self._handle_download(download, label, project_url)
             elif doc_page:
-                # One multi-page PDF per project (user's pick, 2026-10-27 —
-                # reversed the 2026-09-20 switch to "Zipped PDFs"), through
-                # the same arrow -> format -> Start picker; "Zipped PDFs" is
-                # the fallback.
+                # "Zipped PDFs" — every document a separate file — through
+                # the arrow -> format -> Start picker. Tried Multi-page PDF
+                # first for a day (2026-10-27) and went back: big projects'
+                # merged PDFs took 10+ min to build or never came, could top
+                # 500MB, and overran the Storage size limit. Multi-page PDF
+                # is now just the fallback.
                 download = self._click_download_format(
-                    doc_page, self.PDF_FORMAT_LABEL_SELECTOR, "Multi-page PDF")
+                    doc_page, self.ZIP_FORMAT_LABEL_SELECTOR, "Zipped PDFs")
                 if download:
-                    out = self._handle_merged_pdf(download, label, project_url)
+                    out = self._handle_zip_download(download, label, project_url)
                 else:
                     download = self._click_download_format(
-                        doc_page, self.ZIP_FORMAT_LABEL_SELECTOR, "Zipped PDFs")
+                        doc_page, self.PDF_FORMAT_LABEL_SELECTOR, "Multi-page PDF")
                     if download:
-                        out = self._handle_zip_download(download, label, project_url)
+                        out = self._handle_merged_pdf(download, label, project_url)
                     else:
                         print(f"  ! ConstructConnect: neither download format "
                               f"produced anything for '{label}'")
