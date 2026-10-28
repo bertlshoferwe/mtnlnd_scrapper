@@ -1252,8 +1252,11 @@ class ConstructConnectAdapter(SiteAdapter):
                         print(f"  ! ConstructConnect: neither download format "
                               f"produced anything for '{label}'")
             else:
-                print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
+                print(f"  ! ConstructConnect: the Documents panel did nothing "
                       f"observable for '{label}'")
+                if not getattr(self, "_saved_docs_panel_debug", False):
+                    self._saved_docs_panel_debug = True
+                    self._save_debug_screenshot(page, "documents_panel_failed")
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't download documents for '{label}': {e}")
         finally:
@@ -1505,14 +1508,42 @@ class ConstructConnectAdapter(SiteAdapter):
         file download directly on this same page. Returns
         (new_page_or_None, download_or_None)."""
         ctx = page.context
+        # Each category row with documents is a real link straight to the
+        # docviewer (DOM confirmed via devtools 2026-10-27):
+        # <a class="DocumentAvailabilityRow_link__…" href="https://documents.
+        # app.constructconnect.com/docviewer?projId=…&docType=plans"> holding
+        # a [class*="DocumentAvailabilityRow_available"] status span. Open the
+        # first one's href in a tab of our own; clicking category names below
+        # is the fallback.
+        for link in page.query_selector_all('a[class*="DocumentAvailabilityRow_link"]'):
+            if not link.query_selector('[class*="DocumentAvailabilityRow_available"]'):
+                continue
+            href = link.get_attribute("href")
+            if not href:
+                continue
+            doc_page = ctx.new_page()
+            try:
+                doc_page.goto(urljoin(page.url, href), timeout=self.PAGE_TIMEOUT_MS)
+            except Exception as e:
+                print(f"  ! ConstructConnect: couldn't open the document viewer ({e})")
+                doc_page.close()
+                break
+            print(f"  ConstructConnect: opened the document viewer ({doc_page.url})")
+            return doc_page, None
+
         new_pages = []
         downloads = []
         ctx.on("page", lambda p: new_pages.append(p))
         page.on("download", lambda d: downloads.append(d))
 
         for cat in self.DOCUMENT_CATEGORIES:
+            # Exact, case-sensitive text (quoted) — the unquoted text=Plans
+            # form is a case-insensitive substring match, so a description
+            # saying "...per the plans and specifications..." came first on
+            # some projects and got clicked instead of the panel row (two
+            # projects never opened their documents, 2026-10-27 run).
             try:
-                page.click(f"text={cat}", timeout=3000)
+                page.click(f'text="{cat}"', timeout=3000)
             except Exception:
                 continue
             deadline = time.time() + 6
