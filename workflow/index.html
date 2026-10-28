@@ -3423,9 +3423,13 @@ img.who{object-fit:cover;background:var(--chip)}
   // fields that start out in Details until someone pins them
   var UNPINNED=["priority","type","labels","parent"];
   var LEAD_FIELDS=["ticket #","original rfq"];
+  // Choice fields (e.g. Lost reason) also start in Details: they're filled in rarely, mostly by an
+  // automation's question.
   function isPinned(p,k){
     var o=(state.fPin||{})[fieldOrderKey(p)]||{};
-    return k in o?!!o[k]:UNPINNED.indexOf(k)<0;
+    if(k in o)return !!o[k];
+    if(k.indexOf("cf:")===0&&spaceFields(p).some(function(f){return "cf:"+f.id===k&&f.type==="choice"}))return false;
+    return UNPINNED.indexOf(k)<0;
   }
   // pin / unpin a field; a newly pinned one goes to the bottom of the pinned list
   function togglePin(k){
