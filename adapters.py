@@ -1144,16 +1144,40 @@ class ConstructConnectAdapter(SiteAdapter):
             rows.append((label, doc_status, project_id, last_updated, project_url))
         return rows
 
+    # The results grid's "›" pager arrow (DOM confirmed via devtools
+    # 2026-10-27): <button class="IconButton_… TableFooterPager_navButton__…
+    # TableFooterPager_navButton--right__…"> — no aria-label or title, so
+    # the old "Next" label match never found it and every run stopped
+    # after the first 100 rows.
+    NEXT_PAGE_SELECTOR = 'button[class*="TableFooterPager_navButton--right"]'
+
     def _go_to_next_page(self, page):
+        """Moves the results grid to its next page. False on the last page
+        (arrow missing or disabled) or when the grid didn't actually change
+        — re-reading the same rows would download them all again."""
         try:
-            btn = (page.query_selector("button[aria-label*='Next' i]")
-                   or page.query_selector("button[title*='Next' i]"))
-            if btn and btn.is_visible() and btn.is_enabled():
-                btn.click(timeout=4000)
-                page.wait_for_timeout(1500)
-                return True
-        except Exception:
-            pass
+            btn = (page.query_selector(self.NEXT_PAGE_SELECTOR)
+                   or page.query_selector("button[aria-label*='Next' i]"))
+            if not btn or not btn.is_visible() or not btn.is_enabled():
+                return False
+            cls = btn.get_attribute("class") or ""
+            if btn.get_attribute("aria-disabled") == "true" or "disabled" in cls.lower():
+                return False
+            first = page.query_selector('[data-label="Project Name"] a, [role="table"] [role="row"]:nth-of-type(2) a')
+            before = (first.inner_text() or "").strip() if first else None
+            btn.click(timeout=4000)
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                page.wait_for_timeout(500)
+                first = page.query_selector('[data-label="Project Name"] a, [role="table"] [role="row"]:nth-of-type(2) a')
+                now = (first.inner_text() or "").strip() if first else None
+                if now and now != before:
+                    page.wait_for_timeout(1000)
+                    return True
+            print("  ! ConstructConnect: the next page of results never loaded — stopping here")
+            self._save_debug_screenshot(page, "next_page_failed")
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't go to the next page of results ({e})")
         return False
 
     def _contacts_stale(self, label):
