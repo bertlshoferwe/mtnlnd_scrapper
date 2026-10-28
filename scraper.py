@@ -817,8 +817,9 @@ def _cosine(a, b):
 def ensure_keyword_embeddings(division_id, embedder):
     """Make sure every keyword in the division has a cached embedding vector,
     computing (and storing) any that are missing. Returns {keyword: vector}
-    for all keywords that have one. A no-op when there's no embedder or the
-    embed call fails — the pre-filter then falls back to literal hits only.
+    for all keywords that have one. Keywords that couldn't be embedded this
+    run are just left out — the pre-filter ranks the ones it has, plus the
+    literal hits.
     """
     rows = supabase_store.load_keyword_rows(division_id)
     have = {r["keyword"]: r["embedding"] for r in rows if r.get("embedding")}
@@ -830,17 +831,20 @@ def ensure_keyword_embeddings(division_id, embedder):
               "semantic pre-filter will use literal hits only")
         return have
 
-    vectors = embedder.embed([r["keyword"] for r in missing])
-    if not vectors or len(vectors) != len(missing):
-        print(f"  ! Could not embed {len(missing)} keyword(s) — semantic pre-filter "
-              "will use literal hits only this run")
-        return have
-
-    for r, v in zip(missing, vectors):
+    # Saves whatever got embedded even if the rest failed — the free tier's
+    # 1,000-a-day quota is about one whole keyword list, and an all-or-nothing
+    # save meant a big list never got stored at all; this way each run picks
+    # up where the last one stopped.
+    vectors = embedder.embed_partial([r["keyword"] for r in missing])
+    done = missing[:len(vectors)]
+    for r, v in zip(done, vectors):
         r["embedding"] = v
         have[r["keyword"]] = v
-    supabase_store.save_keyword_embeddings(division_id, missing)
-    print(f"  Embedded {len(missing)} new keyword(s)")
+    if done:
+        supabase_store.save_keyword_embeddings(division_id, done)
+    left = len(missing) - len(done)
+    print(f"  Embedded {len(done)} new keyword(s)"
+          + (f"; {left} still to do (next run picks them up)" if left else ""))
     return have
 
 

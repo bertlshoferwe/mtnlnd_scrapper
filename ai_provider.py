@@ -128,11 +128,25 @@ class GeminiEmbedder:
 
     BATCH = 100  # Gemini caps batchEmbedContents at 100 requests per call
 
+    # Set once Gemini answers 429 RESOURCE_EXHAUSTED (the free tier allows
+    # 1,000 embeddings a day — about one full keyword list). Every later call
+    # this run returns None straight away instead of failing again, and
+    # logging the whole quota error, once per document.
+    exhausted = False
+
     def embed(self, texts):
         """texts: list[str] -> list[list[float]] (len EMBED_DIM each), or None
         on any failure. Never raises. Sends in batches of 100."""
         texts = list(texts)
-        if not texts:
+        out = self.embed_partial(texts)
+        return out if len(out) == len(texts) else None
+
+    def embed_partial(self, texts):
+        """Like embed(), but on a failure partway through returns the vectors
+        for the batches that did succeed — out[i] belongs to texts[i] for
+        every i < len(out) — so a caller can keep that progress."""
+        texts = list(texts)
+        if not texts or self.exhausted:
             return []
         from google.genai import types
         out = []
@@ -146,8 +160,13 @@ class GeminiEmbedder:
                 )
                 out.extend(list(e.values) for e in resp.embeddings)
             except Exception as e:
-                print(f"  ! Embedding call failed (batch {i // self.BATCH + 1}): {e}")
-                return None
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    self.exhausted = True
+                    print(f"  ! Embedding quota used up for today (after {len(out)} of "
+                          f"{len(texts)}) — the rest of this run matches exact words only")
+                else:
+                    print(f"  ! Embedding call failed (batch {i // self.BATCH + 1}): {e}")
+                break
         return out
 
 
