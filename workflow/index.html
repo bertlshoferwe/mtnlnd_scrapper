@@ -2523,6 +2523,14 @@ img.who{object-fit:cover;background:var(--chip)}
       soon:list.filter(function(t){return t.due&&!isDone(t)&&t.due>=T&&t.due<=soon}).length,
       un:list.filter(function(t){return !t.assignee}).length};
   }
+  // Win rate: won ÷ (won + lost) among the bids the report covers. Only in spaces with Won and
+  // Lost columns (the follow-up spaces).
+  function winRateHTML(p,list){
+    var col=function(n){return p.statuses.filter(function(x){return (x.name||"").trim().toLowerCase()===n})[0]};
+    var w=col("won"),l=col("lost");if(!w||!l)return "";
+    var won=list.filter(function(t){return t.status===w.id}).length,lost=list.filter(function(t){return t.status===l.id}).length;
+    return '<div class="stat"><b>'+(won+lost?pct(won,won+lost)+'%':'–')+'</b><span>Win rate ('+won+' of '+(won+lost)+')</span></div>';
+  }
   function reportsHTML(){
     seedSpaceReports(proj());
     var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy),p=proj();
@@ -2562,6 +2570,7 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div class="stat"><b>'+s.over+'</b><span>Overdue</span></div>'+
       '<div class="stat"><b>'+s.soon+'</b><span>Due in 7 days</span></div>'+
       '<div class="stat"><b>'+s.un+'</b><span>Unassigned</span></div>'+
+      winRateHTML(p,list)+
       (measureField()?'<div class="stat"><b>'+fmtM(mval(list))+'</b><span>Total '+esc(measureField().name)+'</span></div>':'')+'</div>';
     h+='<section class="panel"><h3>'+esc(c.name||((measureField()?"Total "+measureField().name:"Bids")+" by "+groupLabel(c.groupBy).toLowerCase()))+'</h3>'+chartHTML(groups,s.total)+'</section>';
     if(ui.rsel!==null&&groups[ui.rsel]){
