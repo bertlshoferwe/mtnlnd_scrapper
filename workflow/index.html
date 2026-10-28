@@ -1774,7 +1774,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ty==="choice"){
       var fd=spaceFields(p).filter(function(x){return "cf:"+x.id===f.field})[0],co=choiceOpts(fd,"");
       return lab+'<select id="ar-v" data-ar="value">'+ask+co.map(function(o){return opt(o,o,v||"@ask")}).join("")+'</select>'+must+
-        (co.length?'':'<p class="fine" style="margin:6px 0 0;color:var(--high)">This field has no options yet. Add them in Settings → its field setup.</p>');
+        (co.length?'':'<p class="fine" style="margin:6px 0 0;color:var(--high)">This field has no options yet. Add them in Settings → Workflows → Fields.</p>');
     }
     var m=v==="@ask"?"ask":"set";
     return lab+'<select id="ar-vm" data-ar="mode">'+opt("set","This value",m)+opt("ask","Ask whoever moved it",m)+'</select>'+
