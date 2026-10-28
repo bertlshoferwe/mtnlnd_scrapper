@@ -547,15 +547,14 @@ class ConstructConnectAdapter(SiteAdapter):
     Documents panel (see DOCUMENT_CATEGORIES — replaced the site's old
     single "View/Download Documents" button as of 2026-10-04, opens a new
     tab the same way), and on the docviewer tab use the split button's
-    arrow to pick "Zipped PDFs" and click Start — every document
-    in the project comes back as a separate file. (The flyout that arrow
-    opens renders at a fixed, occluded position — real and enabled per
-    computed style, just never visible to a human because other page
-    chrome sits on top of it; see _click_download_zip's force=True clicks,
-    confirmed working via devtools 2026-09-20.) Falls back to the plain
-    "Download All" button — one merged PDF for the whole project, not
-    split back into per-document files — only if that picker doesn't
-    behave as expected.
+    arrow to pick "Multi-page PDF" and click Start — every document in
+    the project merged into one PDF (user's pick, 2026-10-27). (The flyout
+    that arrow opens renders at a fixed, occluded position — real and
+    enabled per computed style, just never visible to a human because
+    other page chrome sits on top of it; see _click_download_format's
+    force=True clicks, confirmed working via devtools 2026-09-20.) Falls
+    back to "Zipped PDFs" (every document a separate file) only if that
+    doesn't behave as expected.
 
     Next phase (not wired up yet): ConstructConnect's own filter UI doesn't
     put its state in the URL — applying filters leaves the address bar
@@ -1207,18 +1206,21 @@ class ConstructConnectAdapter(SiteAdapter):
                 out = self._handle_download(download, label, project_url)
             elif doc_page:
                 # One multi-page PDF per project (user's pick, 2026-10-27 —
-                # reversed the 2026-09-20 switch to "Zipped PDFs"); the zip
-                # picker is kept as the fallback.
-                download = self._click_download_all(doc_page)
+                # reversed the 2026-09-20 switch to "Zipped PDFs"), through
+                # the same arrow -> format -> Start picker; "Zipped PDFs" is
+                # the fallback.
+                download = self._click_download_format(
+                    doc_page, self.PDF_FORMAT_LABEL_SELECTOR, "Multi-page PDF")
                 if download:
                     out = self._handle_merged_pdf(download, label, project_url)
                 else:
-                    download = self._click_download_zip(doc_page)
+                    download = self._click_download_format(
+                        doc_page, self.ZIP_FORMAT_LABEL_SELECTOR, "Zipped PDFs")
                     if download:
                         out = self._handle_zip_download(download, label, project_url)
                     else:
-                        print(f"  ! ConstructConnect: neither 'Download All' nor the "
-                              f"'Zipped PDFs' picker produced anything for '{label}'")
+                        print(f"  ! ConstructConnect: neither download format "
+                              f"produced anything for '{label}'")
             else:
                 print(f"  ! ConstructConnect: 'View/Download Documents' did nothing "
                       f"observable for '{label}'")
@@ -1538,7 +1540,7 @@ class ConstructConnectAdapter(SiteAdapter):
         return []
 
     def _handle_merged_pdf(self, download, label, project_url):
-        """The docviewer's "Download All" always merges every document into
+        """The "Multi-page PDF" format merges every document into
         one PDF — trust that instead of the download's suggested filename,
         which truncates unpredictably for a project name containing a
         semicolon (ConstructConnect's Content-Disposition header isn't
@@ -1554,12 +1556,13 @@ class ConstructConnectAdapter(SiteAdapter):
             return []
         with open(path, "rb") as f:
             data = f.read()
+        if data[:2] == b"PK":  # came back zipped after all
+            return self._extract_zip(data, label, project_url)
         return [(label, None, f"{label} - All Documents.pdf", data, project_url, None, None)]
 
     # The docviewer's "Download All" button has this stable id (confirmed
-    # by the user via devtools) — target it directly rather than a text
-    # match, which is more prone to ambiguity (e.g. matching a wrapping
-    # element instead of the actual clickable button).
+    # by the user via devtools) — only used to tell when the document list
+    # has finished loading (see _wait_downloads_ready).
     DOWNLOAD_ALL_SELECTOR = "#download_button"
 
     # The split button's dropdown arrow next to "Download All" — its own id
@@ -1568,6 +1571,7 @@ class ConstructConnectAdapter(SiteAdapter):
     # devtools 2026-09-20, alongside the two ids below).
     DOWNLOAD_DROPDOWN_TRIGGER_SELECTOR = 'button[aria-haspopup="listbox"]'
     ZIP_FORMAT_LABEL_SELECTOR = "#zip_option_radio_label"
+    PDF_FORMAT_LABEL_SELECTOR = "#pdf_option_radio_label"   # confirmed via devtools 2026-10-27
     DOWNLOAD_START_SELECTOR = "#download_start"
 
     def _wait_downloads_ready(self, page, timeout_s=45):
@@ -1585,10 +1589,12 @@ class ConstructConnectAdapter(SiteAdapter):
             page.wait_for_timeout(500)
         return False
 
-    def _click_download_zip(self, page):
-        """Open the split button's flyout, confirm the "Zipped PDFs" format,
-        and click Start — returns the resulting Download (a zip with every
-        document kept separate), or None if any step doesn't behave.
+    def _click_download_format(self, page, format_selector, format_name):
+        """Open the split button's flyout, pick a File Format radio
+        ("Multi-page PDF" = #pdf_option_radio_label, the menu's default;
+        "Zipped PDFs" = #zip_option_radio_label) and click Start —
+        ConstructConnect builds the file, then the download fires. Returns
+        that Download, or None if any step doesn't behave.
 
         Devtools (2026-09-20) showed why this was flaky before: the flyout
         (`aria-controls`'d content div) is real, enabled, and
@@ -1599,8 +1605,8 @@ class ConstructConnectAdapter(SiteAdapter):
         though the element itself is genuinely clickable — so every click
         here uses force=True (skips the occlusion/visibility check) and
         waits for the target to be `attached` rather than `visible`.
-        "Zipped PDFs" is already the pre-selected radio in a fresh menu, but
-        it's clicked explicitly anyway rather than assumed."""
+        The format radio is clicked even when it's already selected rather
+        than assumed."""
         if not self._wait_downloads_ready(page):
             return None
         trigger = page.query_selector(self.DOWNLOAD_DROPDOWN_TRIGGER_SELECTOR)
@@ -1609,17 +1615,21 @@ class ConstructConnectAdapter(SiteAdapter):
             return None
         try:
             trigger.click(timeout=4000, force=True)
-            page.wait_for_selector(self.ZIP_FORMAT_LABEL_SELECTOR, state="attached", timeout=5000)
-            page.click(self.ZIP_FORMAT_LABEL_SELECTOR, timeout=4000, force=True)
+            page.wait_for_selector(format_selector, state="attached", timeout=5000)
+            page.click(format_selector, timeout=4000, force=True)
             page.wait_for_selector(self.DOWNLOAD_START_SELECTOR, state="attached", timeout=5000)
             with page.expect_download(timeout=self.DOWNLOAD_TIMEOUT_MS) as dl_info:
                 page.click(self.DOWNLOAD_START_SELECTOR, timeout=8000, force=True)
             return dl_info.value
         except Exception as e:
-            print(f"  ! ConstructConnect: 'Zipped PDFs' picker didn't work ({e})")
+            print(f"  ! ConstructConnect: '{format_name}' download didn't work ({e})")
             if not getattr(self, "_saved_zip_picker_debug", False):
                 self._saved_zip_picker_debug = True
-                self._save_debug_screenshot(page, "zip_picker_failed")
+                self._save_debug_screenshot(page, "download_picker_failed")
+            try:
+                page.keyboard.press("Escape")  # so a retry's arrow click opens the menu, not closes it
+            except Exception:
+                pass
             return None
 
     def _handle_zip_download(self, download, label, project_url):
@@ -1635,27 +1645,6 @@ class ConstructConnectAdapter(SiteAdapter):
         with open(path, "rb") as f:
             data = f.read()
         return self._extract_zip(data, label, project_url)
-
-    def _click_download_all(self, page):
-        """Click "Download All" on the docviewer tab and return the
-        resulting Download — every document in the project merged into one
-        PDF (the "Multi-page PDF" format). The first choice since
-        2026-10-27; _click_download_zip is the fallback."""
-        if not self._wait_downloads_ready(page):
-            print("  ! ConstructConnect: document never finished loading — "
-                  "'Download All' stayed disabled")
-            if not getattr(self, "_saved_download_modal_debug", False):
-                self._saved_download_modal_debug = True
-                self._save_debug_screenshot(page, "download_modal")
-            return None
-
-        try:
-            with page.expect_download(timeout=self.DOWNLOAD_TIMEOUT_MS) as dl_info:
-                page.click(self.DOWNLOAD_ALL_SELECTOR, timeout=8000)
-            return dl_info.value
-        except Exception as e:
-            print(f"  ! ConstructConnect: download didn't start: {e}")
-            return None
 
     def _extract_zip(self, zip_bytes, label, project_url):
         out = []
