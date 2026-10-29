@@ -677,10 +677,10 @@
   /* Fixed-width trailing columns — New/+N badge and keyword pill —
      so each lines up under the row above it instead of shifting with the
      length of its own text. */
-  .project-list .p-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .project-list .p-meta { display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; }
   .project-list .p-badge-slot { width: 70px; display: flex; justify-content: flex-end; }
   .project-list .p-badge-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
-  .project-list .p-status-slot { width: 110px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .project-list .p-status-slot { width: 110px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
   .project-list .p-status-slot .p-fit { margin-left: 0; }
   .project-list .p-status-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
   .project-list .p-badges { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 16px; }
