@@ -1611,16 +1611,32 @@ def _file_linked_board_bids(division_id, decisions, board, jira_keys):
             print(f"  ! couldn't file {key} under Bid Board ({e})")
 
 
+def _main_space_id(division_id):
+    """The division's main board space (e.g. Geo Bids): its oldest top-level
+    space other than the old "BS" inbox — the same one _workflow_space picks,
+    without making one. None if it has none yet."""
+    spaces = (get_client().table("wf_spaces").select("id,key")
+              .eq("division_id", division_id).is_("parent_id", "null")
+              .order("created_at").execute().data or [])
+    own = [sp for sp in spaces if sp["key"] != "BS"]
+    return own[0]["id"] if own else None
+
+
 def unlinked_workflow_bids(division_id):
-    """Board bids not tied to any Bid Scout project yet — typed in by hand —
-    as [{"id", "key", "title", "due"}] (key like "BW-14")."""
+    """Bids in the division's main space (e.g. Geo Bids — not its sub-spaces
+    like Geo Follow-Up, whose bids are copies) not tied to any Bid Scout
+    project yet — typed in by hand — as [{"id", "key", "title", "due"}]
+    (key like "GB-14")."""
     sb = get_client()
-    bids = (sb.table("wf_bids").select("id,space_id,num,title,due")
-            .eq("division_id", division_id).is_("source_project_id", "null").execute().data)
-    keys = {sp["id"]: sp["key"] for sp in
-            sb.table("wf_spaces").select("id,key").eq("division_id", division_id).execute().data}
-    return [{"id": b["id"], "key": f"{keys.get(b['space_id'], 'BID')}-{b['num']}",
-             "title": b["title"], "due": b.get("due")} for b in bids]
+    main = _main_space_id(division_id)
+    if not main:
+        return []
+    key = next((sp["key"] for sp in sb.table("wf_spaces").select("id,key").eq("id", main).execute().data), "BID")
+    bids = (sb.table("wf_bids").select("id,num,title,due")
+            .eq("division_id", division_id).eq("space_id", main)
+            .is_("source_project_id", "null").execute().data)
+    return [{"id": b["id"], "key": f"{key}-{b['num']}", "title": b["title"], "due": b.get("due")}
+            for b in bids]
 
 
 def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
@@ -1630,10 +1646,12 @@ def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
     Docs and Plan Holders tabs follow the project. Logged in the bid's
     history as Bid Scout. Raises ValueError if either side is already linked."""
     sb = get_client()
-    rows = (sb.table("wf_bids").select("id,division_id,source_project_id,due,due_time,history")
+    rows = (sb.table("wf_bids").select("id,division_id,space_id,source_project_id,due,due_time,history")
             .eq("id", bid_id).limit(1).execute().data)
     if not rows or rows[0]["division_id"] != division_id:
         raise ValueError("that bid isn't on this division's board")
+    if rows[0].get("space_id") != _main_space_id(division_id):
+        raise ValueError("only bids in the division's main space can be linked")
     b = rows[0]
     if b.get("source_project_id"):
         raise ValueError("that bid is already linked to a Bid Scout project")
