@@ -117,6 +117,7 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .fbtn.on{border-color:var(--accent)}
 .fpop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:230px;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:8px 12px 12px;box-shadow:0 8px 24px rgba(16,22,46,.18)}
 .fpop label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:8px 0 4px}
+.fpop .fhint{font-weight:400;color:var(--muted)}
 .fpop select{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:6px 8px}
 .facc{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin:12px 0 4px;padding:6px 2px;background:none;border:0;border-top:1px solid var(--line);color:var(--ink);font-size:13px;font-weight:700;cursor:pointer;text-align:left}
 .facc .facn{font-weight:500;color:var(--c1)}
@@ -1080,7 +1081,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var ROLES=["Manager","Estimator","Inside Sales","Outside Sales"];
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",teams:[]},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att"};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[],month:"",range:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att"};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -2041,8 +2042,19 @@ img.who{object-fit:cover;background:var(--chip)}
     var tm=(D.teams||[]).filter(function(x){return x.id===tid})[0];
     return !!(tm&&is.assignee&&tm.members.indexOf(is.assignee)>-1);
   }
+  // Month / time-range filters look at the date the space's cards show (Settings → Date on cards):
+  // e.g. Date Quoted in a follow-up space, else the due date. A range keeps everything from that many
+  // days ago on (later dates too, so upcoming bids stay); bids without the date are left out.
+  var FRANGES=[["","Any time"],["30","Last 30 days"],["60","Last 60 days"],["90","Last 90 days"],["182","Last 6 months"],["365","Last year"]];
+  function filterDate(p,is){return p&&p.cardDate?(is.fields||{})[p.cardDate]||"":is.due||""}
+  function filterDateName(p){var fd=p&&p.cardDate?spaceFields(p).filter(function(x){return x.id===p.cardDate})[0]:null;return fd?fd.name:"Due date"}
   function visible(is){
     var f=ui.f;
+    if(f.month||f.range){
+      var fdv=filterDate(proj(),is);if(!fdv)return false;
+      if(f.month&&fdv.slice(0,7)!==f.month)return false;
+      if(f.range&&fdv<addDays(today(),-parseInt(f.range,10)))return false;
+    }
     if(f.pri&&is.priority!==f.pri)return false;
     if(f.who&&(is.assignee||"__none")!==f.who)return false;
     if(f.teams.length&&!f.teams.some(function(tid){return inTeam(is,tid)}))return false;
@@ -2838,11 +2850,17 @@ img.who{object-fit:cover;background:var(--chip)}
       ids.map(function(i){var n=nameOf(i);return '<button class="favb'+(f.who===i?' on':'')+'" data-fwho="'+esc(i)+'" title="'+esc(n)+'" aria-pressed="'+(f.who===i)+'">'+nameAv(n)+'</button>'}).join("")+'</div>';
     var tl=HAS_TEAMS?divTeams(d):[];
     f.teams=f.teams.filter(function(id){return tl.some(function(x){return x.id===id})});
-    var nf=(f.pri?1:0)+f.teams.length;
+    var nf=(f.pri?1:0)+f.teams.length+(f.month?1:0)+(f.range?1:0);
+    var pm=proj(),months={};
+    (pm?pm.issues:[]).forEach(function(x){var dv=filterDate(pm,x);if(dv)months[dv.slice(0,7)]=1});
+    if(f.month)months[f.month]=1;
+    var mlist=Object.keys(months).sort().reverse();
     h+='<div class="fwrap"><button class="btn small fbtn'+(nf?' on':'')+'" data-fopen aria-expanded="'+(!!ui.fOpen)+'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter'+(nf?' <span class="count">'+nf+'</span>':'')+'</button>';
     if(ui.fOpen){
       h+='<div class="fpop" role="dialog" aria-label="Filter">'+
         '<label for="ff-pri">Priority</label><select id="ff-pri" data-ff="pri">'+opt("","All priorities",f.pri)+PRI.map(function(x){return opt(x,x,f.pri)}).join("")+'</select>'+
+        '<label for="ff-mo">Month <span class="fhint">by '+esc(filterDateName(pm).toLowerCase())+'</span></label><select id="ff-mo" data-ff="month">'+opt("","Any month",f.month||"")+mlist.map(function(m){return opt(m,monthLabel(m),f.month||"")}).join("")+'</select>'+
+        '<label for="ff-rg">Time range</label><select id="ff-rg" data-ff="range">'+FRANGES.map(function(x){return opt(x[0],x[1],f.range||"")}).join("")+'</select>'+
         (HAS_TEAMS?'<button type="button" class="facc" data-fteamacc aria-expanded="'+(!!ui.fTeamOpen)+'"><span>Team'+(f.teams.length?' <span class="facn">'+f.teams.length+' selected</span>':'')+'</span>'+ic(ui.fTeamOpen?"chevD":"chevR",14)+'</button>'+
           (!ui.fTeamOpen?'':tl.length?'<div class="fchecks">'+tl.map(function(x){var on=f.teams.indexOf(x.id)>-1;return '<label class="fcheck"><input type="checkbox" data-fteam="'+x.id+'"'+(on?' checked':'')+'>'+esc(x.name)+'</label>'}).join("")+'</div>'
           :'<p class="fine" style="margin:2px 0 0">No teams yet. Add them in Settings (bottom of the sidebar), on the Division tab.</p>'):'')+
@@ -3147,7 +3165,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("menu").setAttribute("aria-label",state.sideHidden?"Expand the sidebar":"Shrink the sidebar");
   }
   function closeDrawer(){$("side").classList.remove("open");$("scrim").classList.remove("open")}
-  function resetFilters(){ui.f={q:"",type:"",who:"",pri:"",teams:[]};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
+  function resetFilters(){ui.f={q:"",type:"",who:"",pri:"",teams:[],month:"",range:""};$("q").value="";ui.rsel=null;ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false}
   function switchSpace(id){
     state.cur=id;
     if(state.defaultView)state.view=defaultView();
@@ -4015,7 +4033,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-gtoggle]"))){var gtk=el.getAttribute("data-gtoggle");ui.gClosed=ui.gClosed||{};ui.gClosed[gtk]=!ui.gClosed[gtk];render();return}
     if(t.closest("[data-fopen]")){ui.fOpen=!ui.fOpen;render();return}
     if(t.closest("[data-fteamacc]")){ui.fTeamOpen=!ui.fTeamOpen;ui.fOpen=true;render();return}
-    if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.teams=[];render();return}
+    if(t.closest("[data-fclear]")){ui.f.type="";ui.f.pri="";ui.f.teams=[];ui.f.month="";ui.f.range="";render();return}
     if((el=t.closest("[data-fpin]"))){togglePin(el.getAttribute("data-fpin"));return}
     if(t.closest("[data-detopen]")){ui.detOpen=ui.detOpen===false;var dis=byId(ui.issueId);if(dis)$("i-side").innerHTML=issueSideHTML(dis);return}
     if((el=t.closest("[data-taddfield]"))){
