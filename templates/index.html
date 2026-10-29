@@ -680,7 +680,8 @@
   .project-list .p-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .project-list .p-badge-slot { width: 70px; display: flex; justify-content: flex-end; }
   .project-list .p-badge-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
-  .project-list .p-status-slot { width: 110px; display: flex; justify-content: flex-end; }
+  .project-list .p-status-slot { width: 110px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .project-list .p-status-slot .p-fit { margin-left: 0; }
   .project-list .p-status-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
   .project-list .p-badges { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 16px; }
   .project-list .p-check { color: var(--success); display: inline-flex; }
@@ -2942,14 +2943,6 @@ async function loadProjects() {
     if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
     if (p.decision === 'duplicate') subParts.push('Duplicate of ' + (p.duplicate_of_site || p.duplicate_of_name || ''));
     else if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
-    const fitLab = p.bucket === 'review' ? fitLabel(p.fit) : null;
-    if (fitLab && fitLab.cls !== 'unsure') {
-      const ft = document.createElement('span');
-      ft.className = 'p-fit ' + fitLab.cls;
-      ft.textContent = fitLab.text;
-      if (p.fit.explanation) ft.title = p.fit.explanation;
-      name.appendChild(ft);
-    }
     if (subParts.length) {
       const sub = document.createElement('span');
       sub.className = 'p-sub';
@@ -3001,6 +2994,15 @@ async function loadProjects() {
     const statusSlot = document.createElement('span');
     statusSlot.className = 'p-status-slot';
     statusSlot.appendChild(pill);
+    // the AI suggestion sits under the keyword pill, not in the title line
+    const fitLab = p.bucket === 'review' ? fitLabel(p.fit) : null;
+    if (fitLab && fitLab.cls !== 'unsure') {
+      const ft = document.createElement('span');
+      ft.className = 'p-fit ' + fitLab.cls;
+      ft.textContent = fitLab.text;
+      if (p.fit.explanation) ft.title = p.fit.explanation;
+      statusSlot.appendChild(ft);
+    }
 
     const meta = document.createElement('div');
     meta.className = 'p-meta';
