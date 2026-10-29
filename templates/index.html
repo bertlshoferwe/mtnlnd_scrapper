@@ -250,8 +250,6 @@
   .fit-suggestion.not_fit { border-left-color: var(--danger); }
   .fit-suggestion b { font-weight: 700; }
   .fit-suggestion .fs-why { color: var(--muted); }
-  .fit-training { margin: -8px 0 12px; font-size: 12px; color: var(--muted); }
-  .fit-training[hidden] { display: none; }
   .decision-bar {
     display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
     margin: -6px 0 14px; font-size: 13px; color: var(--muted);
@@ -1091,8 +1089,6 @@
       <button type="button" class="view-tab" id="viewTabNotFit" role="tab" onclick="switchResultsView('not_fit')">Not a Fit<span class="vt-count" id="viewCountNotFit"></span></button>
       <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
     </div>
-
-    <p class="fit-training" id="fitTrainingNote" hidden></p>
 
     <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
       <div class="stat-tile stat-tile-primary">
@@ -2787,7 +2783,9 @@ function renderSiteTabs(sites) {
   const bar = document.getElementById('siteTabs');
   bar.innerHTML = '';
 
-  if (!sites || sites.length < 2) {
+  // Shown even with a single site, so the row (and which site the list is
+  // from) doesn't come and go between To Review, Bid Board and Not a Fit.
+  if (!sites || !sites.length) {
     bar.style.display = 'none';
     if (currentResultsSite) { currentResultsSite = ''; updateUrl(); }
     return;
@@ -3600,22 +3598,13 @@ function renderFitSuggestion(p) {
   }
 }
 
+// Reads the suggestion settings that come with each results load. (The
+// "Suggestions agreed with your call…" line under the tabs was removed at the
+// user's request on 2026-10-28; those numbers are in the settings window.)
 function renderFitTraining(t) {
-  const el = document.getElementById('fitTrainingNote');
-  if (t) {
-    fitEnabled = t.enabled !== false;
-    if (t.sure_at != null) fitSureAt = t.sure_at;
-  }
-  if (!t || !fitEnabled || currentResultsView !== 'review') { el.hidden = true; return; }
-  if (!t.active) {
-    el.textContent = 'Suggestions start after ' + t.needed + ' decisions (Add to Board or Not a fit) — '
-      + t.decisions + ' so far.';
-  } else if (t.compared) {
-    el.textContent = 'Suggestions agreed with your call on ' + t.agreed + ' of ' + t.compared + ' projects so far.';
-  } else {
-    el.textContent = 'Suggestions are on — learned from ' + t.decisions + ' of your decisions.';
-  }
-  el.hidden = false;
+  if (!t) return;
+  fitEnabled = t.enabled !== false;
+  if (t.sure_at != null) fitSureAt = t.sure_at;
 }
 
 // Hidden settings window — triple-click (or triple-tap) "Bid Scout".
