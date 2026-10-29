@@ -464,6 +464,8 @@ td.over{color:var(--high);font-weight:600}
 .rcard.drag-src{display:none}
 .rph{border:2px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,transparent);min-height:120px}
 .rgrip{color:var(--muted);display:inline-flex;margin-right:2px}
+.rmiss{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.rmissbtn{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .rcbtn{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted)}
 .rcbtn:hover{background:var(--chip);color:var(--text)}
 .ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
@@ -1414,6 +1416,10 @@ img.who{object-fit:cover;background:var(--chip)}
       });
       state.repFix1=true;savePrefs();
     }
+    if(!state.repFix2){
+      state.reports.forEach(function(r){if(r.name==="Quoted $ by month"&&r.cfg)r.cfg.noteMissing=true});
+      state.repFix2=true;savePrefs();
+    }
     if(p&&p.parentId)return seedFollowUpReports(p);
     if(!p||!isDefaultSpace(p))return;
     state.repSeeded=state.repSeeded||{};if(state.repSeeded[p.id])return;
@@ -1423,7 +1429,7 @@ img.who{object-fit:cover;background:var(--chip)}
       team=F.filter(function(f){return f.type==="team"})[0],dq=F.filter(function(f){return f.type==="date"&&/date quoted/i.test(f.name)})[0];
     var base={chart:"bar",scope:"all",type:"",pri:"",who:"",label:""},add=[];
     if(team&&amt)add.push({name:"Quoted $ by team",cfg:Object.assign({},base,{groupBy:"cf:"+team.id,measure:amt.id})});
-    if(dq&&amt){var dated={};dated[dq.id]="set";add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id,cf:dated})})}
+    if(dq&&amt){var dated={};dated[dq.id]="set";add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id,cf:dated,noteMissing:true})})}
     add.push({name:"Bids received per week",cfg:Object.assign({},base,{groupBy:"created"})});
     add.forEach(function(r){r.space=p.id;if(!state.reports.some(function(x){return x.name===r.name&&x.space===p.id}))state.reports.push(r)});
     state.repSeeded[p.id]=true;savePrefs();
@@ -2596,7 +2602,7 @@ img.who{object-fit:cover;background:var(--chip)}
         if(fd.type==="team")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any team",cv)+opt("__none","None",cv)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,cv)}).join("")+'</select></div>';
         return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("empty","Empty",cv)+'</select></div>';
       }).join("")+
-      '</div></div><div class="rbprev"><div class="rbcap">Preview · '+list.length+' bid'+(list.length===1?'':'s')+'</div><h3>'+title+'</h3>'+chartHTML(groups,s.total)+'</div></div>'+
+      '</div></div><div class="rbprev"><div class="rbcap">Preview · '+list.length+' bid'+(list.length===1?'':'s')+'</div><h3>'+title+'</h3>'+chartHTML(groups,s.total)+missingHTML(null)+'</div></div>'+
       '<div class="rbfoot"><div class="rbname"><label for="rname">Report name</label><input id="rname" maxlength="60" placeholder="Name this report to save it" value="'+esc(c.name||"")+'"></div>'+
       '<button class="btn" data-act="copy">Copy summary</button><button class="btn" data-act="cancelReport">Cancel</button><button class="btn primary" data-act="saveReport">Save report</button></div></section>';
     if(!B){list=withCfg({groupBy:"status",scope:"all"},scoped);s=stats(list)}   // dashboard tiles: the whole space
@@ -2615,13 +2621,14 @@ img.who{object-fit:cover;background:var(--chip)}
         var r=state.reports[i];
         return withCfg(r.cfg,function(){
           var L=scoped(),G=buildGroups(L,state.rcfg.groupBy),keep=ui.rsel;
-          if(sel&&sel.card===i&&G[sel.gi])drill={name:r.name,gr:G[sel.gi]};
-          ui.rsel=sel&&sel.card===i?sel.gi:null;
+          if(sel&&sel.card===i&&sel.miss){var mx=missingFor().filter(function(x){return x.fd.id===sel.miss})[0];if(mx)drill={name:r.name,gr:{label:"No "+mx.fd.name,items:mx.items}}}
+          else if(sel&&sel.card===i&&G[sel.gi])drill={name:r.name,gr:G[sel.gi]};
+          ui.rsel=sel&&sel.card===i&&!sel.miss?sel.gi:null;
           var out='<section class="panel rcard" draggable="true" data-repdrag="'+i+'"><div class="phead"><span class="rgrip" title="Drag to reorder" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span><h3 style="margin:0">'+esc(r.name)+'</h3><span class="spacer" style="flex:1"></span>'+
             '<button class="icon rcbtn" data-editrep="'+i+'" aria-label="Edit '+esc(r.name)+'" title="Edit">'+PEN_SVG+'</button>'+
             '<button class="icon rcbtn" data-delrep="'+i+'" aria-label="Delete '+esc(r.name)+'" title="'+(ui.armRep===i?'Tap again to delete':'Delete')+'"'+(ui.armRep===i?' style="color:var(--high)"':'')+'>'+ic("x",16)+'</button></div>'+
             '<div class="rbcap">'+L.length+' bid'+(L.length===1?'':'s')+(measureField()?' · Total '+esc(measureField().name)+' '+fmtM(mval(L)):'')+'</div>'+
-            '<div data-rcard="'+i+'">'+chartHTML(G,L.length)+'</div></section>';
+            '<div data-rcard="'+i+'">'+chartHTML(G,L.length)+'</div>'+missingHTML(i)+'</section>';
           ui.rsel=keep;return out;
         });
       }).join("")+'</div>':'<section class="panel"><p class="fine" style="margin:0">No reports yet. Use + to make one.</p></section>';
@@ -2639,7 +2646,30 @@ img.who{object-fit:cover;background:var(--chip)}
     return h+'</div>';
   }
   // run fn with a saved report's settings in place of the builder's (scoped/measureField read state.rcfg)
-  function withCfg(cfg,fn){var keep=state.rcfg;state.rcfg=Object.assign({type:"",pri:"",who:"",label:"",scope:"all"},cfg);try{return fn()}finally{state.rcfg=keep}}
+  function withCfg(cfg,fn){var keep=state.rcfg;state.rcfg=Object.assign({type:"",pri:"",who:"",label:"",scope:"all"},clone(cfg));try{return fn()}finally{state.rcfg=keep}}
+  // Bids a report leaves out because a field it requires ("Filled in") is empty — e.g. quoted bids with
+  // no Date Quoted. Only reports flagged noteMissing (where an empty value is a gap to fix, not normal —
+  // "Why we lose" leaves out every bid that wasn't lost). When the report adds up a number, only bids with an amount count (an empty one
+  // adds nothing anyway). Returns [{fd, items}] for the current state.rcfg.
+  function missingFor(){
+    if(!state.rcfg.noteMissing)return [];
+    var cf=state.rcfg.cf||{},out=[],m=measureField();
+    Object.keys(cf).forEach(function(fid){
+      if(cf[fid]!=="set")return;
+      var fd=rFields().filter(function(x){return x.id===fid})[0];if(!fd)return;
+      delete cf[fid];var all=scoped();cf[fid]="set";
+      var gone=all.filter(function(t){var f=t.fields||{};return !f[fid]&&(!m||Number(f[m.id]))});
+      if(gone.length)out.push({fd:fd,items:gone});
+    });
+    return out;
+  }
+  function missingHTML(card){
+    return missingFor().map(function(x){
+      var n=x.items.length;
+      return '<div class="rmiss">'+n+' bid'+(n===1?'':'s')+(measureField()?' ('+fmtM(mval(x.items))+')':'')+(n===1?' has':' have')+' no '+esc(x.fd.name)+'.'+
+        (card!=null?' <button class="rmissbtn" data-missing="'+card+'|'+esc(x.fd.id)+'">Show '+(n===1?'it':'them')+'</button>':'')+'</div>';
+    }).join("");
+  }
   function summaryText(){
     var c=state.rcfg,list=scoped(),s=stats(list),groups=buildGroups(list,c.groupBy);
     var lines=[(c.name||(proj().name+" report"))+": by "+groupLabel(c.groupBy).toLowerCase(),
@@ -4065,6 +4095,8 @@ img.who{object-fit:cover;background:var(--chip)}
       else ui.rsel=ui.rsel===gi?null:gi;
       render();return;
     }
+    if((el=t.closest("[data-missing]"))){var mp=el.getAttribute("data-missing").split("|"),mc=+mp[0];
+      ui.rsel=ui.rsel&&ui.rsel.card===mc&&ui.rsel.miss===mp[1]?null:{card:mc,miss:mp[1]};render();return}
     if((el=t.closest("[data-editrep]"))){var er2=+el.getAttribute("data-editrep"),rr=state.reports[er2];if(!rr)return;
       ui.repPrev=clone(state.rcfg);state.rcfg=Object.assign({type:""},clone(rr.cfg),{name:rr.name});ui.repEdit=er2;ui.repBuild="edit";ui.rsel=null;ui.armRep=null;render();return}
     if((el=t.closest("[data-load]"))){var r=state.reports[parseInt(el.getAttribute("data-load"),10)];state.rcfg=Object.assign({type:""},clone(r.cfg),{name:r.name});ui.rsel=null;ui.repBuild=false;ui.repPrev=null;save();render();return}
