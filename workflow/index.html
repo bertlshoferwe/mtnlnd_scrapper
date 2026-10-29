@@ -1406,6 +1406,14 @@ img.who{object-fit:cover;background:var(--chip)}
   // space (state.repSeeded): quoted dollars by team and by month, and bids received per week.
   // (state.repSeedGB is the older Geo-only flag, so Geo's aren't added back after being deleted.)
   function seedSpaceReports(p){
+    // "Quoted $ by month" first went out without a filter, so undated bids made a huge "No Date Quoted" bar
+    if(!state.repFix1){
+      state.reports.forEach(function(r){
+        if(r.name!=="Quoted $ by month"||!r.cfg||String(r.cfg.groupBy||"").indexOf("cf:")!==0)return;
+        var fid=r.cfg.groupBy.slice(3);r.cfg.cf=r.cfg.cf||{};if(!r.cfg.cf[fid])r.cfg.cf[fid]="set";
+      });
+      state.repFix1=true;savePrefs();
+    }
     if(p&&p.parentId)return seedFollowUpReports(p);
     if(!p||!isDefaultSpace(p))return;
     state.repSeeded=state.repSeeded||{};if(state.repSeeded[p.id])return;
@@ -1415,7 +1423,7 @@ img.who{object-fit:cover;background:var(--chip)}
       team=F.filter(function(f){return f.type==="team"})[0],dq=F.filter(function(f){return f.type==="date"&&/date quoted/i.test(f.name)})[0];
     var base={chart:"bar",scope:"all",type:"",pri:"",who:"",label:""},add=[];
     if(team&&amt)add.push({name:"Quoted $ by team",cfg:Object.assign({},base,{groupBy:"cf:"+team.id,measure:amt.id})});
-    if(dq&&amt)add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id})});
+    if(dq&&amt){var dated={};dated[dq.id]="set";add.push({name:"Quoted $ by month",cfg:Object.assign({},base,{groupBy:"cf:"+dq.id,measure:amt.id,cf:dated})})}
     add.push({name:"Bids received per week",cfg:Object.assign({},base,{groupBy:"created"})});
     add.forEach(function(r){r.space=p.id;if(!state.reports.some(function(x){return x.name===r.name&&x.space===p.id}))state.reports.push(r)});
     state.repSeeded[p.id]=true;savePrefs();
