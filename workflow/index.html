@@ -2451,9 +2451,21 @@ img.who{object-fit:cover;background:var(--chip)}
   function measureField(){var m=state.rcfg.measure||"";return m?rFields().filter(function(x){return x.id===m&&(x.type==="money"||x.type==="number")})[0]||null:null}
   function mval(items){var fd=measureField();if(!fd)return items.length;return items.reduce(function(a,t){var v=Number((t.fields||{})[fd.id]);return a+(isFinite(v)?v:0)},0)}
   function fmtM(n){var fd=measureField();if(!fd)return String(n);return fd.type==="money"?"$"+Math.round(n).toLocaleString():n.toLocaleString(undefined,{maximumFractionDigits:2})}
+  // Time range (cfg.since: "7" / "30" / "90" / "365" days back, or "ytd"), measured on cfg.sinceBy:
+  // "created" (default), "due", or "cf:<date field id>". Bids without that date are left out.
+  var RANGES=[["","All time"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["365","Last 12 months"],["ytd","This year"]];
+  function rangeStart(since){if(!since)return "";return since==="ytd"?today().slice(0,4)+"-01-01":addDays(today(),-parseInt(since,10))}
+  function rangeDate(t,by){by=by||"created";return by==="due"?t.due||"":by.indexOf("cf:")===0?(t.fields||{})[by.slice(3)]||"":t.created||""}
+  function rangeLabel(c){
+    if(!c.since)return "";var r=RANGES.filter(function(x){return x[0]===c.since})[0],by=c.sinceBy||"created";
+    var fd=by.indexOf("cf:")===0?rFields().filter(function(x){return "cf:"+x.id===by})[0]:null;
+    return (r?r[1]:"")+" by "+(by==="due"?"due date":fd?fd.name:"created date");
+  }
   function scoped(){
     var c=state.rcfg,cf=c.cf||{},F=rFields();
+    var cut=rangeStart(c.since);
     return proj().issues.filter(function(t){
+      if(cut&&!(rangeDate(t,c.sinceBy)>=cut))return false;
       if(c.rep&&(t.reporter||"__none")!==c.rep)return false;
       for(var i=0;i<F.length;i++){
         var fd=F[i],want=cf[fd.id],v=(t.fields||{})[fd.id]||"";if(!want)continue;
@@ -2588,6 +2600,9 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div><label for="rc-g">Group by</label><select id="rc-g" data-rc="groupBy">'+groupChoices().map(function(x){return opt(x[0],x[1],c.groupBy)}).join("")+'</select></div>'+
       '<div><label for="rc-m">Show</label><select id="rc-m" data-rc="measure">'+opt("","Number of bids",c.measure||"")+rFields().filter(function(f){return f.type==="money"||f.type==="number"}).map(function(f){return opt(f.id,"Total "+f.name,c.measure||"")}).join("")+'</select></div>'+
       '<div><label for="rc-c">Chart</label><select id="rc-c" data-rc="chart">'+opt("bar","Bars",c.chart)+opt("donut","Donut",c.chart)+opt("table","Table",c.chart)+'</select></div>'+
+      '<div><label for="rc-rg">Time range</label><select id="rc-rg" data-rc="since">'+RANGES.map(function(x){return opt(x[0],x[1],c.since||"")}).join("")+'</select></div>'+
+      '<div><label for="rc-rb">Based on</label><select id="rc-rb" data-rc="sinceBy">'+opt("created","Created date",c.sinceBy||"created")+opt("due","Due date",c.sinceBy||"created")+
+        rFields().filter(function(f){return f.type==="date"}).map(function(f){return opt("cf:"+f.id,f.name,c.sinceBy||"created")}).join("")+'</select></div>'+
       '<div><label for="rc-s">Bids</label><select id="rc-s" data-rc="scope">'+opt("all","All bids",c.scope)+opt("open","Open only",c.scope)+opt("done","Done only",c.scope)+opt("overdue","Overdue only",c.scope)+'</select></div>'+
       '<div><label for="rc-t">Type</label><select id="rc-t" data-rc="type">'+opt("","Any type",c.type)+TYPES.map(function(x){return opt(x,x,c.type)}).join("")+'</select></div>'+
       '<div><label for="rc-p">Priority</label><select id="rc-p" data-rc="pri">'+opt("","Any priority",c.pri)+PRI.map(function(x){return opt(x,x,c.pri)}).join("")+'</select></div>'+
@@ -2602,7 +2617,7 @@ img.who{object-fit:cover;background:var(--chip)}
         if(fd.type==="team")return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any team",cv)+opt("__none","None",cv)+divTeams(curDiv()).map(function(x){return opt(x.id,x.name,cv)}).join("")+'</select></div>';
         return '<div>'+lab+'<select id="'+id+'" data-rcf="'+fd.id+'">'+opt("","Any",cv)+opt("set","Filled in",cv)+opt("empty","Empty",cv)+'</select></div>';
       }).join("")+
-      '</div></div><div class="rbprev"><div class="rbcap">Preview · '+list.length+' bid'+(list.length===1?'':'s')+'</div><h3>'+title+'</h3>'+chartHTML(groups,s.total)+missingHTML(null)+'</div></div>'+
+      '</div></div><div class="rbprev"><div class="rbcap">Preview · '+(rangeLabel(c)?esc(rangeLabel(c))+' · ':'')+list.length+' bid'+(list.length===1?'':'s')+'</div><h3>'+title+'</h3>'+chartHTML(groups,s.total)+missingHTML(null)+'</div></div>'+
       '<div class="rbfoot"><div class="rbname"><label for="rname">Report name</label><input id="rname" maxlength="60" placeholder="Name this report to save it" value="'+esc(c.name||"")+'"></div>'+
       '<button class="btn" data-act="copy">Copy summary</button><button class="btn" data-act="cancelReport">Cancel</button><button class="btn primary" data-act="saveReport">Save report</button></div></section>';
     if(!B){list=withCfg({groupBy:"status",scope:"all"},scoped);s=stats(list)}   // dashboard tiles: the whole space
@@ -2627,7 +2642,7 @@ img.who{object-fit:cover;background:var(--chip)}
           var out='<section class="panel rcard" draggable="true" data-repdrag="'+i+'"><div class="phead"><span class="rgrip" title="Drag to reorder" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span><h3 style="margin:0">'+esc(r.name)+'</h3><span class="spacer" style="flex:1"></span>'+
             '<button class="icon rcbtn" data-editrep="'+i+'" aria-label="Edit '+esc(r.name)+'" title="Edit">'+PEN_SVG+'</button>'+
             '<button class="icon rcbtn" data-delrep="'+i+'" aria-label="Delete '+esc(r.name)+'" title="'+(ui.armRep===i?'Tap again to delete':'Delete')+'"'+(ui.armRep===i?' style="color:var(--high)"':'')+'>'+ic("x",16)+'</button></div>'+
-            '<div class="rbcap">'+L.length+' bid'+(L.length===1?'':'s')+(measureField()?' · Total '+esc(measureField().name)+' '+fmtM(mval(L)):'')+'</div>'+
+            '<div class="rbcap">'+(rangeLabel(state.rcfg)?esc(rangeLabel(state.rcfg))+' · ':'')+L.length+' bid'+(L.length===1?'':'s')+(measureField()?' · Total '+esc(measureField().name)+' '+fmtM(mval(L)):'')+'</div>'+
             '<div data-rcard="'+i+'">'+chartHTML(G,L.length)+'</div>'+missingHTML(i)+'</section>';
           ui.rsel=keep;return out;
         });
