@@ -9,8 +9,7 @@ in a done column.
 
 The draft is saved in divisions.settings["weekly_email"] and stays the same
 until the next Monday (or until someone presses Rebuild now). Nothing is sent —
-the board copies it so it can be pasted into Outlook. The opening line is kept
-in divisions.settings["weekly_email_intro"].
+the board copies it so it can be pasted into Outlook, opening line and all.
 """
 
 import sys

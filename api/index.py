@@ -34,7 +34,7 @@ Routes:
   POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
   POST /api/<division_id>/projects/jira      Add to Board: put a project on the bid board (no Jira issue any more)
   GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
-  GET  /api/<division_id>/weekly-email          the bid board's Monday email draft + its opening line (PATCH saves the line, POST rebuilds)
+  GET  /api/<division_id>/weekly-email          the bid board's Monday email draft (POST rebuilds it)
   GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
   GET  /api/<division_id>/bids/<bid_id>/project-candidates  Bid Scout projects a hand-made bid might be
   POST /api/<division_id>/bids/<bid_id>/link-project        tie a hand-made bid to a Bid Scout project
@@ -937,20 +937,15 @@ def api_save_settings(division_id):
     return jsonify({"settings": saved, "fit_training": supabase_store.fit_training_stats(division_id)})
 
 
-@app.route("/api/<division_id>/weekly-email", methods=["GET", "PATCH", "POST"])
+@app.route("/api/<division_id>/weekly-email", methods=["GET", "POST"])
 def api_weekly_email(division_id):
-    """The Monday email draft (see weekly_email.py). PATCH {"intro"} saves the
-    opening line; POST rebuilds the draft for this week now."""
+    """The Monday email draft (see weekly_email.py). POST rebuilds it for this week now."""
     _, err = _require_division(division_id)
     if err:
         return err
-    if request.method == "PATCH":
-        intro = str((request.get_json(force=True, silent=True) or {}).get("intro") or "")[:2000]
-        supabase_store.save_division_extra(division_id, {"weekly_email_intro": intro})
-    elif request.method == "POST":
+    if request.method == "POST":
         weekly_email.build(division_id)
-    return jsonify({"draft": supabase_store.get_division_extra(division_id, "weekly_email"),
-                    "intro": supabase_store.get_division_extra(division_id, "weekly_email_intro") or ""})
+    return jsonify({"draft": supabase_store.get_division_extra(division_id, "weekly_email")})
 
 
 def _project_listing(division_id, key, site):
