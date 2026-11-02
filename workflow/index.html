@@ -3025,13 +3025,26 @@ img.who{object-fit:cover;background:var(--chip)}
     WK.busy=true;WK.err="";if(method!=="PATCH")render();
     fetch("/api/"+encodeURIComponent(div)+"/weekly-email",method?{method:method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}:undefined)
       .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||r.status);return j})})
-      .then(function(j){if(WK.div!==div)return;WK.draft=j.draft||null;if(method!=="PATCH")WK.intro=j.intro||"";WK.busy=false;if(method!=="PATCH")render();else toast("Opening line saved")})
-      .catch(function(e){if(WK.div!==div)return;WK.busy=false;WK.err=method==="PATCH"?"Couldn’t save the opening line. Try again.":"Couldn’t load the Monday email. Try again in a minute.";render()});
+      .then(function(j){if(WK.div!==div)return;WK.draft=j.draft||null;if(method!=="PATCH")WK.intro=j.intro||"";WK.busy=false;if(method!=="PATCH")render();else toast("Note saved")})
+      .catch(function(e){if(WK.div!==div)return;WK.busy=false;WK.err=method==="PATCH"?"Couldn’t save the note. Try again.":"Couldn’t load the Monday email. Try again in a minute.";render()});
   }
   function wkDay(s){var d=parse(s);return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]+" "+(d.getMonth()+1)+"/"+d.getDate()}
   function wkSubject(dr){return "Bids due "+wkDay(dr.week)+" – "+wkDay(dr.end)}
   function wkWhen(b){return wkDay(b.due)+(b.time?", "+fmtTime(b.time):"")}
   function wkHead(g){return g.name+(g.sales.length?" — "+g.sales.map(function(x){return x.name}).join(", "):"")}
+  // The opening line, written from the draft: the week, how many bids, how many quoted, the busiest day
+  function wkOpening(dr){
+    var dated=[],undated=0,quoted=0,days={};
+    dr.teams.forEach(function(g){g.bids.forEach(function(b){if(b.due){dated.push(b);if(b.quoted)quoted++;days[b.due]=(days[b.due]||0)+1}else undated++})});
+    var wk=wkDay(dr.week)+" – "+wkDay(dr.end),n=dated.length;
+    if(!n)return "Good morning, everyone. No bids are due this week ("+wk+")."+(undated?" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.":"");
+    var teams=dr.teams.filter(function(g){return g.bids.some(function(b){return b.due})}).length;
+    var t="Good morning, everyone. Here’s where we sit for this week ("+wk+"): "+n+" bid"+(n===1?"":"s")+" due"+(teams>1?" across "+teams+" teams":"")+", "+(quoted===n?(n===1?"already quoted":"all already quoted"):quoted?quoted+" already quoted":"none quoted yet")+".";
+    var top=Object.keys(days).sort(function(a,b){return days[b]-days[a]||(a<b?-1:1)})[0];
+    if(n>2&&days[top]>1)t+=" The busiest day is "+wkDay(top)+" with "+days[top]+" bids.";
+    if(undated)t+=" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.";
+    return t;
+  }
   function wkSplit(g){return [g.bids.filter(function(b){return b.due}),g.bids.filter(function(b){return !b.due})]}
   // The email itself, as Outlook-friendly HTML (inline styles) or plain text
   function wkHTML(dr,intro){
@@ -3041,8 +3054,8 @@ img.who{object-fit:cover;background:var(--chip)}
         rows.map(function(b){return '<tr><td style="'+td+'">'+esc(b.title)+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}).join("")+'</table>';
     }
     var h='<div style="font:14px Calibri,Arial,sans-serif;color:#1d2433">';
+    h+='<p style="margin:0 0 14px">'+esc(wkOpening(dr))+'</p>';
     if(intro.trim())h+='<p style="margin:0 0 14px;white-space:pre-wrap">'+esc(intro.trim())+'</p>';
-    if(!dr.teams.length)h+='<p style="margin:0">No bids are due this week.</p>';
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       h+='<p style="margin:16px 0 6px;font-weight:700;font-size:15px">'+esc(wkHead(g))+'</p>';
@@ -3052,8 +3065,7 @@ img.who{object-fit:cover;background:var(--chip)}
     return h+'</div>';
   }
   function wkText(dr,intro){
-    var L=[];if(intro.trim())L.push(intro.trim(),"");
-    if(!dr.teams.length)L.push("No bids are due this week.");
+    var L=[wkOpening(dr),""];if(intro.trim())L.push(intro.trim(),"");
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       L.push(wkHead(Object.assign({},g,{name:g.name.toUpperCase()})));
@@ -3083,7 +3095,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var dr=WK.draft;
     var h='<section class="panel"><div class="phead"><h3>Monday email</h3></div>'+
       '<p class="fine" style="margin:0 0 10px">A ready-to-send list of this week’s bids in '+esc(d.name)+', by team. It’s made fresh every Monday morning and stays the same all week. Open in Outlook starts a new email to everyone in the division, with the subject filled in. Click in the message and paste to add the list.</p>'+
-      '<div class="sheet" style="padding:0;background:none;box-shadow:none"><label for="wk-intro">Opening line</label><textarea id="wk-intro" data-wkintro placeholder="e.g. Good morning, here are the bids due this week.">'+esc(WK.intro)+'</textarea></div>';
+      '<div class="sheet" style="padding:0;background:none;box-shadow:none"><label for="wk-intro">Add a note <span class="fine" style="font-weight:400">· optional, goes under the opening line, which is written for you</span></label><textarea id="wk-intro" data-wkintro placeholder="e.g. Reminder: the office is closed Friday.">'+esc(WK.intro)+'</textarea></div>';
     if(WK.err)h+='<p class="fine" style="color:var(--high)">'+esc(WK.err)+'</p>';
     if(!dr){
       h+='<p class="fine">'+(WK.busy?'Loading…':'There’s no draft for this week yet. It will be made Monday at 6 AM, or use Rebuild now.')+'</p>'+
