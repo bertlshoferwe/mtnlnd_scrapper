@@ -3076,12 +3076,13 @@ img.who{object-fit:cover;background:var(--chip)}
       else fallback();
     }catch(e){fallback()}
   }
-  function wkAddresses(dr){var seen={},out=[];dr.teams.forEach(function(g){g.sales.forEach(function(x){if(x.email&&!seen[x.email.toLowerCase()]){seen[x.email.toLowerCase()]=1;out.push(x.email)}})});return out}
+  // Everyone in the division (Settings → Members) with an email, taken live so new people are included
+  function wkAddresses(){var seen={},out=[];D.people.forEach(function(p){var em=(p.email||"").trim();if(p.divisionId===WK.div&&em&&!seen[em.toLowerCase()]){seen[em.toLowerCase()]=1;out.push(em)}});return out}
   function mondayHTML(d){
     if(WK.div!==d.id){WK.div=d.id;WK.draft=null;WK.intro="";setTimeout(function(){wkLoad(d.id)},0)}
     var dr=WK.draft;
     var h='<section class="panel"><div class="phead"><h3>Monday email</h3></div>'+
-      '<p class="fine" style="margin:0 0 10px">A ready-to-send list of this week’s bids in '+esc(d.name)+', by team. It’s made fresh every Monday morning and stays the same all week. Open in Outlook starts a new email with the addresses and subject filled in. Click in the message and paste to add the list.</p>'+
+      '<p class="fine" style="margin:0 0 10px">A ready-to-send list of this week’s bids in '+esc(d.name)+', by team. It’s made fresh every Monday morning and stays the same all week. Open in Outlook starts a new email to everyone in the division, with the subject filled in. Click in the message and paste to add the list.</p>'+
       '<div class="sheet" style="padding:0;background:none;box-shadow:none"><label for="wk-intro">Opening line</label><textarea id="wk-intro" data-wkintro placeholder="e.g. Good morning, here are the bids due this week.">'+esc(WK.intro)+'</textarea></div>';
     if(WK.err)h+='<p class="fine" style="color:var(--high)">'+esc(WK.err)+'</p>';
     if(!dr){
@@ -3089,14 +3090,14 @@ img.who{object-fit:cover;background:var(--chip)}
         '<div class="acts" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-wkrebuild'+(WK.busy?' disabled':'')+'>Rebuild now</button></div>';
       return h+'</section>';
     }
-    var built=new Date(dr.built_at),adr=wkAddresses(dr);
+    var built=new Date(dr.built_at),adr=wkAddresses();
     h+='<div class="acts" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">'+
       '<button class="btn primary" data-wkcopy="outlook">Open in Outlook</button>'+
       '<button class="btn" data-wkcopy="body">Copy email</button>'+
       '<button class="btn" data-wkcopy="subject">Copy subject</button>'+
       (adr.length?'<button class="btn" data-wkcopy="to">Copy addresses</button>':'')+
       '<span class="spacer" style="flex:1"></span><button class="btn" data-wkrebuild'+(WK.busy?' disabled':'')+'>'+(WK.busy?'Rebuilding…':'Rebuild now')+'</button></div>'+
-      '<p class="fine" style="margin:0 0 8px">Made '+esc(built.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+(adr.length?' · Outside Sales: '+adr.length+' address'+(adr.length===1?'':'es'):'')+'</p>'+
+      '<p class="fine" style="margin:0 0 8px">Made '+esc(built.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+(adr.length?' · To: everyone in '+esc(d.name)+' with an email ('+adr.length+')':'')+'</p>'+
       '<div style="background:#fff;color:#1d2433;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto">'+
       '<p style="margin:0 0 12px;font:600 14px Calibri,Arial,sans-serif;color:#5b6475">Subject: '+esc(wkSubject(dr))+'</p>'+wkHTML(dr,WK.intro)+'</div>';
     return h+'</section>';
@@ -3979,11 +3980,11 @@ img.who{object-fit:cover;background:var(--chip)}
       // formatted email goes on the clipboard first (a link can only carry plain text, and long ones get cut off).
       if(wk==="outlook"){
         wkCopy(wkHTML(WK.draft,WK.intro),wkText(WK.draft,WK.intro),"Email copied — click in the message and paste");
-        window.open("https://outlook.office.com/mail/deeplink/compose?"+["to="+encodeURIComponent(wkAddresses(WK.draft).join(",")),"subject="+encodeURIComponent(wkSubject(WK.draft))].join("&"),"outlook");
+        window.open("https://outlook.office.com/mail/deeplink/compose?"+["to="+encodeURIComponent(wkAddresses().join(",")),"subject="+encodeURIComponent(wkSubject(WK.draft))].join("&"),"outlook");
       }
       else if(wk==="body")wkCopy(wkHTML(WK.draft,WK.intro),wkText(WK.draft,WK.intro),"Email copied — paste it into a new email");
       else if(wk==="subject")wkCopy("",wkSubject(WK.draft),"Subject copied");
-      else wkCopy("",wkAddresses(WK.draft).join("; "),"Addresses copied");
+      else wkCopy("",wkAddresses().join("; "),"Addresses copied");
       return}
     if(t.closest("[data-tmnew]")){ui.editTeam="new";ui.draftTeam={name:"",members:[]};renderTeamModal();openOv("ov-team");var tnn=$("tm-name");if(tnn)tnn.focus();return}
     if((el=t.closest("[data-tmdraft]"))){
