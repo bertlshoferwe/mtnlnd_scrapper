@@ -3081,7 +3081,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(WK.div!==d.id){WK.div=d.id;WK.draft=null;WK.intro="";setTimeout(function(){wkLoad(d.id)},0)}
     var dr=WK.draft;
     var h='<section class="panel"><div class="phead"><h3>Monday email</h3></div>'+
-      '<p class="fine" style="margin:0 0 10px">A ready-to-send list of this week’s bids in '+esc(d.name)+', by team. It’s made fresh every Monday morning and stays the same all week. Copy it into a new email in Outlook.</p>'+
+      '<p class="fine" style="margin:0 0 10px">A ready-to-send list of this week’s bids in '+esc(d.name)+', by team. It’s made fresh every Monday morning and stays the same all week. Open in Outlook starts a new email with the addresses and subject filled in. Click in the message and paste to add the list.</p>'+
       '<div class="sheet" style="padding:0;background:none;box-shadow:none"><label for="wk-intro">Opening line</label><textarea id="wk-intro" data-wkintro placeholder="e.g. Good morning, here are the bids due this week.">'+esc(WK.intro)+'</textarea></div>';
     if(WK.err)h+='<p class="fine" style="color:var(--high)">'+esc(WK.err)+'</p>';
     if(!dr){
@@ -3091,7 +3091,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     var built=new Date(dr.built_at),adr=wkAddresses(dr);
     h+='<div class="acts" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">'+
-      '<button class="btn primary" data-wkcopy="body">Copy email</button>'+
+      '<button class="btn primary" data-wkcopy="outlook">Open in Outlook</button>'+
+      '<button class="btn" data-wkcopy="body">Copy email</button>'+
       '<button class="btn" data-wkcopy="subject">Copy subject</button>'+
       (adr.length?'<button class="btn" data-wkcopy="to">Copy addresses</button>':'')+
       '<span class="spacer" style="flex:1"></span><button class="btn" data-wkrebuild'+(WK.busy?' disabled':'')+'>'+(WK.busy?'Rebuilding…':'Rebuild now')+'</button></div>'+
@@ -3974,7 +3975,13 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-meskip]")){state.meSkip=state.meSkip||{};state.meSkip[state.div]=true;savePrefs();closeOv("ov-me");return}
     if(t.closest("[data-wkrebuild]")){if(!WK.busy&&WK.div)wkLoad(WK.div,"POST");return}
     if((el=t.closest("[data-wkcopy]"))&&WK.draft){var wk=el.getAttribute("data-wkcopy");
-      if(wk==="body")wkCopy(wkHTML(WK.draft,WK.intro),wkText(WK.draft,WK.intro),"Email copied — paste it into a new email");
+      // Outlook on the web: a new message in an "outlook" tab with the To line and subject filled in. The
+      // formatted email goes on the clipboard first (a link can only carry plain text, and long ones get cut off).
+      if(wk==="outlook"){
+        wkCopy(wkHTML(WK.draft,WK.intro),wkText(WK.draft,WK.intro),"Email copied — click in the message and paste");
+        window.open("https://outlook.office.com/mail/deeplink/compose?"+["to="+encodeURIComponent(wkAddresses(WK.draft).join(",")),"subject="+encodeURIComponent(wkSubject(WK.draft))].join("&"),"outlook");
+      }
+      else if(wk==="body")wkCopy(wkHTML(WK.draft,WK.intro),wkText(WK.draft,WK.intro),"Email copied — paste it into a new email");
       else if(wk==="subject")wkCopy("",wkSubject(WK.draft),"Subject copied");
       else wkCopy("",wkAddresses(WK.draft).join("; "),"Addresses copied");
       return}
