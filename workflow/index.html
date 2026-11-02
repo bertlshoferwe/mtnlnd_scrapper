@@ -3043,6 +3043,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(undated)t+=" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.";
     return t;
   }
+  // Each project links to its bid on the board (drafts made before links were added have no ids)
+  function wkLink(b){return b.id?location.origin+"/workflow/?bid="+encodeURIComponent(b.id):""}
   function wkSplit(g){return [g.bids.filter(function(b){return b.due}),g.bids.filter(function(b){return !b.due})]}
   // The email itself, as Outlook-friendly HTML (inline styles) or plain text
   // One table for the whole email so the columns line up: the column headings once at the top,
@@ -3055,7 +3057,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!dr.teams.length)return h+'</div>';
     h+='<table cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;width:100%;max-width:760px">'+
       '<tr><th style="'+th+'">Project</th><th width="160" style="'+th+'width:160px">Bid date</th><th width="64" style="'+th+'width:64px">Quoted</th></tr>';
-    function row(b){return '<tr><td style="'+td+'">'+esc(b.title)+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}
+    function row(b){var u=wkLink(b);return '<tr><td style="'+td+'">'+(u?'<a href="'+esc(u)+'" style="color:#1f5fbf;text-decoration:underline">'+esc(b.title)+'</a>':esc(b.title))+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       h+='<tr><td colspan="3" style="'+F+'padding:12px 10px 6px;background:#eef2f8;border-bottom:1px solid #c9d2e3;font-weight:700;font-size:15px;color:#1d2433">'+esc(g.name)+
@@ -3071,9 +3073,9 @@ img.who{object-fit:cover;background:var(--chip)}
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       L.push(wkHead(Object.assign({},g,{name:g.name.toUpperCase()})));
-      sp[0].forEach(function(b){L.push("  "+b.title+" — "+wkWhen(b)+(b.quoted?" — Quoted":""))});
+      sp[0].forEach(function(b){L.push("  "+b.title+" — "+wkWhen(b)+(b.quoted?" — Quoted":"")+(wkLink(b)?" — "+wkLink(b):""))});
       if(!g.bids.length)L.push("  No bids this week");
-      if(sp[1].length){L.push("  No bid date:");sp[1].forEach(function(b){L.push("    "+b.title)})}
+      if(sp[1].length){L.push("  No bid date:");sp[1].forEach(function(b){L.push("    "+b.title+(wkLink(b)?" — "+wkLink(b):""))})}
       L.push("");
     });
     return L.join("\n").trim();
@@ -3113,7 +3115,7 @@ img.who{object-fit:cover;background:var(--chip)}
       '<span class="spacer" style="flex:1"></span><button class="btn" data-wkrebuild'+(WK.busy?' disabled':'')+'>'+(WK.busy?'Rebuilding…':'Rebuild now')+'</button></div>'+
       '<button data-wktoggle aria-expanded="'+WK.open+'" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer">'+
         ic(WK.open?"chevD":"chevR",16)+'<span style="flex:1;min-width:0"><b>'+esc(wkSubject(dr))+'</b><span class="fine" style="display:block;margin:2px 0 0">Made '+esc(built.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+(adr.length?' · To: everyone in '+esc(d.name)+' with an email ('+adr.length+')':'')+'</span></span></button>'+
-      (WK.open?'<div style="background:#fff;color:#1d2433;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;margin-top:8px">'+
+      (WK.open?'<div data-wkprev style="background:#fff;color:#1d2433;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;margin-top:8px">'+
         '<p style="margin:0 0 12px;font:600 14px Calibri,Arial,sans-serif;color:#5b6475">Subject: '+esc(wkSubject(dr))+'</p>'+wkHTML(dr)+'</div>':'');
     return h+'</section>';
   }
@@ -3989,6 +3991,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-mepick]"))){state.me=state.me||{};state.me[state.div]=el.getAttribute("data-mepick");savePrefs();closeOv("ov-me");render();return}
     if(t.closest("[data-meskip]")){state.meSkip=state.meSkip||{};state.meSkip[state.div]=true;savePrefs();closeOv("ov-me");return}
     if(t.closest("[data-wkrebuild]")){if(!WK.busy&&WK.div){WK.open=true;wkLoad(WK.div,"POST")}return}
+    // a project link in the draft opens that bid right here instead of reloading the board
+    if((el=t.closest("[data-wkprev] a[href]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();closeOv("ov-settings");if(!window.wfOpenLink(el.href))location.href=el.href;return}
     if(t.closest("[data-wktoggle]")){WK.open=!WK.open;render();return}
     if((el=t.closest("[data-wkcopy]"))&&WK.draft){var wk=el.getAttribute("data-wkcopy");
       // Outlook on the web: a new message in an "outlook" tab with the To line and subject filled in. The

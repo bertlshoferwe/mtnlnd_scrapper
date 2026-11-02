@@ -48,7 +48,7 @@ def build(division_id, now=None):
                  .eq("division_id", division_id).execute().data or []}
         sales = {p["id"]: p for p in c.table("wf_people").select("id,name,email,role").execute().data or []
                  if (p.get("role") or "").strip().lower() == "outside sales"}
-        bids = (c.table("wf_bids").select("title,type,status,due,due_time,fields")
+        bids = (c.table("wf_bids").select("id,title,type,status,due,due_time,fields")
                 .eq("space_id", space_id).execute().data or [])
 
         groups = {}
@@ -66,7 +66,7 @@ def build(division_id, now=None):
             if tid not in teams:
                 tid = ""
             groups.setdefault(tid, []).append({
-                "title": b.get("title") or "", "due": due[:10],
+                "id": b.get("id") or "", "title": b.get("title") or "", "due": due[:10],
                 "time": str(b.get("due_time") or "")[:5], "quoted": quoted})
 
         for tid in teams:   # every team is listed, even with nothing due this week
