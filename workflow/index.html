@@ -3032,16 +3032,14 @@ img.who{object-fit:cover;background:var(--chip)}
   function wkSubject(dr){return "Bids due "+wkDay(dr.week)+" – "+wkDay(dr.end)}
   function wkWhen(b){return wkDay(b.due)+(b.time?", "+fmtTime(b.time):"")}
   function wkHead(g){return g.name+(g.sales.length?" — "+g.sales.map(function(x){return x.name}).join(", "):"")}
-  // The opening line, written from the draft: the week, how many bids, how many quoted, the busiest day
+  // The opening line, written from the draft: the week, how many bids, how many quoted
   function wkOpening(dr){
-    var dated=[],undated=0,quoted=0,days={};
-    dr.teams.forEach(function(g){g.bids.forEach(function(b){if(b.due){dated.push(b);if(b.quoted)quoted++;days[b.due]=(days[b.due]||0)+1}else undated++})});
+    var dated=[],undated=0,quoted=0;
+    dr.teams.forEach(function(g){g.bids.forEach(function(b){if(b.due){dated.push(b);if(b.quoted)quoted++}else undated++})});
     var wk=wkDay(dr.week)+" – "+wkDay(dr.end),n=dated.length;
     if(!n)return "Good morning, everyone. No bids are due this week ("+wk+")."+(undated?" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.":"");
     var teams=dr.teams.filter(function(g){return g.bids.some(function(b){return b.due})}).length;
     var t="Good morning, everyone. Here’s where we sit for this week ("+wk+"): "+n+" bid"+(n===1?"":"s")+" due"+(teams>1?" across "+teams+" teams":"")+", "+(quoted===n?(n===1?"already quoted":"all already quoted"):quoted?quoted+" already quoted":"none quoted yet")+".";
-    var top=Object.keys(days).sort(function(a,b){return days[b]-days[a]||(a<b?-1:1)})[0];
-    if(n>2&&days[top]>1)t+=" The busiest day is "+wkDay(top)+" with "+days[top]+" bids.";
     if(undated)t+=" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.";
     return t;
   }
