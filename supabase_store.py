@@ -163,11 +163,28 @@ def save_division_settings(division_id, patch):
     current.update(clean)
     saved = {k: current[k] for k in DEFAULT_SETTINGS}
     try:
-        get_client().table("divisions").update({"settings": saved}).eq("id", division_id).execute()
+        # keep what else is stored there (the Monday email draft, its opening line)
+        raw = get_division(division_id) or {}
+        extra = {k: v for k, v in (raw.get("settings") or {}).items() if k not in DEFAULT_SETTINGS}
+        get_client().table("divisions").update({"settings": {**extra, **saved}}).eq("id", division_id).execute()
     except Exception as e:
         raise ValueError("couldn't save — add the settings column from schema.sql") from e
     _fit_stats_cache.pop(division_id, None)
     return saved
+
+
+def get_division_extra(division_id, key):
+    """A non-setting value kept in divisions.settings (e.g. "weekly_email"), or None."""
+    d = get_division(division_id) or {}
+    return (d.get("settings") or {}).get(key)
+
+
+def save_division_extra(division_id, patch):
+    """Merge `patch` into divisions.settings without touching the settings themselves."""
+    d = get_division(division_id) or {}
+    settings = dict(d.get("settings") or {})
+    settings.update(patch)
+    get_client().table("divisions").update({"settings": settings}).eq("id", division_id).execute()
 
 
 def create_division(name):

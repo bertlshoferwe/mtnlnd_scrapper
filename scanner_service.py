@@ -392,4 +392,6 @@ if __name__ == "__main__":
 import notifier  # noqa: E402
 threading.Thread(target=notifier.loop, daemon=True).start()
 
-
+# The Monday email draft for the bid board, built Mondays at 6 AM — see weekly_email.py.
+import weekly_email  # noqa: E402
+threading.Thread(target=weekly_email.loop, daemon=True).start()

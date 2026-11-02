@@ -21,3 +21,4 @@ playwright>=1.44
 anthropic>=0.40
 google-genai>=1.0
 numpy>=1.26  # fast cosine-similarity clustering for the keyword cleanup tool
+tzdata  # Mountain time for the Monday email draft (weekly_email.py)

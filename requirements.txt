@@ -8,3 +8,4 @@ requests>=2.31
 pypdf>=4.0
 python-docx>=1.1
 cryptography>=42  # encrypts a site's login password before it's saved
+tzdata  # Mountain time for the Monday email draft (weekly_email.py)
