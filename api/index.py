@@ -875,7 +875,7 @@ def api_set_project_decision(division_id):
         return jsonify({"error": "pick a reason"}), 400
     if (decision == "jira" and not supabase_store.load_project_jira_keys(division_id).get(key)
             and not supabase_store.board_links(division_id).get(key)):
-        return jsonify({"error": "this project hasn't been added to Jira"}), 400
+        return jsonify({"error": "this project isn't on the Bid Board"}), 400
     try:
         supabase_store.set_project_decision(
             division_id, key, None if decision == "review" else decision, reason, note,

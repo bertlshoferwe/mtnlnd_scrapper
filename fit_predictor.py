@@ -8,7 +8,7 @@ How it works, per undecided matched project:
      per matched file, AI notes, bid timing, plan holders).
   2. Find the most similar past decisions — embeddings when a Gemini key is
      set (cached per decision in project_decisions.embedding), otherwise
-     keyword/site overlap — keeping both kinds (Jira and Not a fit) in the
+     keyword/site overlap — keeping both kinds (Bid Board and Not a fit) in the
      mix so the comparison isn't one-sided.
   3. Ask the AI to judge the new project against those examples, including
      the user's reasons and notes, and answer with a verdict + one plain
@@ -153,7 +153,7 @@ def pick_similar(target_snap, target_vec, examples, k=FIT_EXAMPLES):
 
 PROMPT = """You help an estimator at Mountainland Supply, a construction materials supplier, decide which public bid projects are worth pursuing. Many projects match their product keywords but turn out to be mostly paperwork, too small, out of area, or not for products they sell.
 
-Below are past projects the estimator already decided on, most similar first. "ADDED TO JIRA" means worth pursuing. "NOT A FIT" includes their reason, and sometimes a note in their own words. Learn their judgment from these — especially the reasons and notes — rather than from generic assumptions.
+Below are past projects the estimator already decided on, most similar first. "ADDED TO THE BID BOARD" means worth pursuing. "NOT A FIT" includes their reason, and sometimes a note in their own words. Learn their judgment from these — especially the reasons and notes — rather than from generic assumptions.
 
 {examples}
 
@@ -165,7 +165,7 @@ Reply with ONLY a JSON object, no other text:
 
 
 def _example_block(i, ex, sim):
-    head = (f"PAST PROJECT {i} — ADDED TO JIRA" if ex["decision"] == "jira"
+    head = (f"PAST PROJECT {i} — ADDED TO THE BID BOARD" if ex["decision"] == "jira"
             else f"PAST PROJECT {i} — NOT A FIT ({ex.get('reason') or 'no reason'})")
     if ex.get("note"):
         head += f'\nEstimator\'s note: "{ex["note"]}"'
@@ -221,7 +221,7 @@ def judge_by_vote(similar):
     # similarity, which would otherwise read as a near-certain 100%.
     share = n / len(similar)
     reason = max(reasons, key=reasons.get) if verdict == "not_fit" and reasons else None
-    expl = (f"{n} of the {len(similar)} most similar past projects went to Jira."
+    expl = (f"{n} of the {len(similar)} most similar past projects went on the Bid Board."
             if verdict == "fit" else
             f"{n} of the {len(similar)} most similar past projects were marked not a fit"
             + (f", mostly \"{reason}\"." if reason else "."))

@@ -1200,7 +1200,9 @@ def load_project_fit(division_id):
         return {}
     return {r["project_key"]: {
         "verdict": r["fit_verdict"], "reason": r.get("fit_reason"),
-        "confidence": r.get("fit_confidence"), "explanation": r.get("fit_explanation"),
+        "confidence": r.get("fit_confidence"),
+        # older saved explanations said "Jira"; it's the Bid Board now
+        "explanation": (r.get("fit_explanation") or "").replace("went to Jira", "went on the Bid Board").replace("Jira", "the Bid Board") or None,
         "predicted_at": r.get("fit_predicted_at"), "basis_count": r.get("fit_basis_count"),
     } for r in res.data}
 
