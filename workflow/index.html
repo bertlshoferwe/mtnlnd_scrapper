@@ -3045,21 +3045,25 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function wkSplit(g){return [g.bids.filter(function(b){return b.due}),g.bids.filter(function(b){return !b.due})]}
   // The email itself, as Outlook-friendly HTML (inline styles) or plain text
+  // One table for the whole email so the columns line up: the column headings once at the top,
+  // then each team as a shaded full-width row, with "No bid date" as a smaller row inside it
   function wkHTML(dr){
-    var td='padding:4px 14px 4px 0;border-bottom:1px solid #e3e7ef;vertical-align:top;',th='padding:4px 14px 4px 0;text-align:left;color:#5b6475;font-weight:600;border-bottom:1px solid #c9d2e3;';
-    function table(rows){
-      return '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 6px;font:14px Calibri,Arial,sans-serif"><tr><th style="'+th+'">Project</th><th style="'+th+'">Bid date</th><th style="'+th+'">Quoted</th></tr>'+
-        rows.map(function(b){return '<tr><td style="'+td+'">'+esc(b.title)+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}).join("")+'</table>';
-    }
-    var h='<div style="font:14px Calibri,Arial,sans-serif;color:#1d2433">';
-    h+='<p style="margin:0 0 14px">'+esc(wkOpening(dr))+'</p>';
+    var F="font-family:Calibri,Arial,sans-serif;font-size:14px;",
+      td=F+'padding:6px 10px;border-bottom:1px solid #e3e7ef;vertical-align:top;color:#1d2433;',
+      th=F+'padding:7px 10px;text-align:left;font-weight:700;color:#ffffff;background:#1f3a68;';
+    var h='<div style="'+F+'color:#1d2433"><p style="margin:0 0 14px">'+esc(wkOpening(dr))+'</p>';
+    if(!dr.teams.length)return h+'</div>';
+    h+='<table cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;width:100%;max-width:760px">'+
+      '<tr><th style="'+th+'">Project</th><th width="160" style="'+th+'width:160px">Bid date</th><th width="64" style="'+th+'width:64px">Quoted</th></tr>';
+    function row(b){return '<tr><td style="'+td+'">'+esc(b.title)+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
-      h+='<p style="margin:16px 0 6px;font-weight:700;font-size:15px">'+esc(wkHead(g))+'</p>';
-      if(sp[0].length)h+=table(sp[0]);
-      if(sp[1].length)h+='<p style="margin:10px 0 4px;font-weight:600;color:#5b6475">No bid date</p>'+table(sp[1]);
+      h+='<tr><td colspan="3" style="'+F+'padding:12px 10px 6px;background:#eef2f8;border-bottom:1px solid #c9d2e3;font-weight:700;font-size:15px;color:#1d2433">'+esc(g.name)+
+        (g.sales.length?'<span style="font-weight:400;color:#5b6475"> — '+esc(g.sales.map(function(x){return x.name}).join(", "))+'</span>':'')+'</td></tr>';
+      h+=sp[0].map(row).join("");
+      if(sp[1].length)h+='<tr><td colspan="3" style="'+F+'padding:8px 10px 4px;font-size:12px;font-weight:700;color:#5b6475;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e3e7ef">No bid date</td></tr>'+sp[1].map(row).join("");
     });
-    return h+'</div>';
+    return h+'</table></div>';
   }
   function wkText(dr){
     var L=[wkOpening(dr),""];
