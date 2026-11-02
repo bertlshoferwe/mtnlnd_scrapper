@@ -3,9 +3,10 @@
 Every Monday at 6:00 AM Mountain time the scanner container builds, for each
 division, the list of bids in its main board space (e.g. Geo Bids) that are due
 that Monday through Sunday, grouped by team (alphabetical, "No team set" last),
-each team with its Outside Sales people. Teams with no bids are listed too. Bids with no bid date that aren't in a
-done column are listed under their team too. A bid counts as quoted when it is
-in a done column.
+each team with its Outside Sales people. Teams with no bids are listed too. Bids
+with no bid date that aren't in a done column are listed under their team too.
+A bid's status is "Quoted" when it is in a done column and "Ready for review"
+when it sits in the Ready for Review column.
 
 The draft is saved in divisions.settings["weekly_email"] and stays the same
 until the next Monday (or until someone presses Rebuild now). Nothing is sent —
@@ -41,7 +42,9 @@ def build(division_id, now=None):
     space_id = supabase_store._main_space_id(division_id)
     if space_id:
         sp = c.table("wf_spaces").select("statuses").eq("id", space_id).limit(1).execute().data
-        done = {s.get("id") for s in (sp[0].get("statuses") if sp else None) or [] if s.get("cat") == "done"}
+        cols = (sp[0].get("statuses") if sp else None) or []
+        done = {s.get("id") for s in cols if s.get("cat") == "done"}
+        review = {s.get("id") for s in cols if (s.get("name") or "").strip().lower() == "ready for review"}
         team_field = next((f["id"] for f in supabase_store._space_fields(space_id)
                            if f.get("type") == "team" and f.get("id")), None)
         teams = {t["id"]: t for t in c.table("wf_teams").select("id,name,members")
@@ -67,7 +70,8 @@ def build(division_id, now=None):
                 tid = ""
             groups.setdefault(tid, []).append({
                 "id": b.get("id") or "", "title": b.get("title") or "", "due": due[:10],
-                "time": str(b.get("due_time") or "")[:5], "quoted": quoted})
+                "time": str(b.get("due_time") or "")[:5], "quoted": quoted,
+                "review": b.get("status") in review})
 
         for tid in teams:   # every team is listed, even with nothing due this week
             groups.setdefault(tid, [])

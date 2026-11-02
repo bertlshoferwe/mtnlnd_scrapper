@@ -3032,19 +3032,20 @@ img.who{object-fit:cover;background:var(--chip)}
   function wkSubject(dr){return "Bids due "+wkDay(dr.week)+" – "+wkDay(dr.end)}
   function wkWhen(b){return wkDay(b.due)+(b.time?", "+fmtTime(b.time):"")}
   function wkHead(g){return g.name+(g.sales.length?" — "+g.sales.map(function(x){return x.name}).join(", "):"")}
-  // The opening line, written from the draft: the week, how many bids, how many quoted
+  // The opening line, written from the draft: the week, how many bids, how many quoted or ready for review
   function wkOpening(dr){
-    var dated=[],undated=0,quoted=0;
-    dr.teams.forEach(function(g){g.bids.forEach(function(b){if(b.due){dated.push(b);if(b.quoted)quoted++}else undated++})});
+    var dated=[],undated=0,quoted=0,review=0;
+    dr.teams.forEach(function(g){g.bids.forEach(function(b){if(b.due){dated.push(b);if(b.quoted)quoted++;else if(b.review)review++}else undated++})});
     var wk=wkDay(dr.week)+" – "+wkDay(dr.end),n=dated.length;
     if(!n)return "Good morning, everyone. No bids are due this week ("+wk+")."+(undated?" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.":"");
     var teams=dr.teams.filter(function(g){return g.bids.some(function(b){return b.due})}).length;
-    var t="Good morning, everyone. Here’s where we sit for this week ("+wk+"): "+n+" bid"+(n===1?"":"s")+" due"+(teams>1?" across "+teams+" teams":"")+", "+(quoted===n?(n===1?"already quoted":"all already quoted"):quoted?quoted+" already quoted":"none quoted yet")+".";
+    var t="Good morning, everyone. Here’s where we sit for this week ("+wk+"): "+n+" bid"+(n===1?"":"s")+" due"+(teams>1?" across "+teams+" teams":"")+", "+(quoted===n?(n===1?"already quoted":"all already quoted"):quoted?quoted+" already quoted":"none quoted yet")+(review?", "+review+" ready for review":"")+".";
     if(undated)t+=" "+undated+" open bid"+(undated===1?" doesn’t have a bid date yet; it’s":"s don’t have a bid date yet; they’re")+" listed under their team.";
     return t;
   }
   // Each project links to its bid on the board (drafts made before links were added have no ids)
   function wkLink(b){return b.id?location.origin+"/workflow/?bid="+encodeURIComponent(b.id):""}
+  function wkStatus(b){return b.quoted?"Quoted":b.review?"Ready for review":""}
   function wkSplit(g){return [g.bids.filter(function(b){return b.due}),g.bids.filter(function(b){return !b.due})]}
   // The email itself, as Outlook-friendly HTML (inline styles) or plain text
   // One table for the whole email so the columns line up: the column headings once at the top,
@@ -3056,8 +3057,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var h='<div style="'+F+'color:#1d2433"><p style="margin:0 0 14px">'+esc(wkOpening(dr))+'</p>';
     if(!dr.teams.length)return h+'</div>';
     h+='<table cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;width:100%;max-width:760px">'+
-      '<tr><th style="'+th+'">Project</th><th width="160" style="'+th+'width:160px">Bid date</th><th width="64" style="'+th+'width:64px">Quoted</th></tr>';
-    function row(b){var u=wkLink(b);return '<tr><td style="'+td+'">'+(u?'<a href="'+esc(u)+'" style="color:#1f5fbf;text-decoration:underline">'+esc(b.title)+'</a>':esc(b.title))+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'">'+(b.quoted?'Yes':'')+'</td></tr>'}
+      '<tr><th style="'+th+'">Project</th><th width="160" style="'+th+'width:160px">Bid date</th><th width="130" style="'+th+'width:130px">Status</th></tr>';
+    function row(b){var u=wkLink(b);return '<tr><td style="'+td+'">'+(u?'<a href="'+esc(u)+'" style="color:#1f5fbf;text-decoration:underline">'+esc(b.title)+'</a>':esc(b.title))+'</td><td style="'+td+'white-space:nowrap">'+(b.due?esc(wkWhen(b)):'')+'</td><td style="'+td+'white-space:nowrap">'+wkStatus(b)+'</td></tr>'}
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       h+='<tr><td colspan="3" style="'+F+'padding:12px 10px 6px;background:#eef2f8;border-bottom:1px solid #c9d2e3;font-weight:700;font-size:15px;color:#1d2433">'+esc(g.name)+
@@ -3073,7 +3074,7 @@ img.who{object-fit:cover;background:var(--chip)}
     dr.teams.forEach(function(g){
       var sp=wkSplit(g);
       L.push(wkHead(Object.assign({},g,{name:g.name.toUpperCase()})));
-      sp[0].forEach(function(b){L.push("  "+b.title+" — "+wkWhen(b)+(b.quoted?" — Quoted":"")+(wkLink(b)?" — "+wkLink(b):""))});
+      sp[0].forEach(function(b){L.push("  "+b.title+" — "+wkWhen(b)+(wkStatus(b)?" — "+wkStatus(b):"")+(wkLink(b)?" — "+wkLink(b):""))});
       if(!g.bids.length)L.push("  No bids this week");
       if(sp[1].length){L.push("  No bid date:");sp[1].forEach(function(b){L.push("    "+b.title+(wkLink(b)?" — "+wkLink(b):""))})}
       L.push("");
