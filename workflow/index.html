@@ -3061,6 +3061,7 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<tr><td colspan="3" style="'+F+'padding:12px 10px 6px;background:#eef2f8;border-bottom:1px solid #c9d2e3;font-weight:700;font-size:15px;color:#1d2433">'+esc(g.name)+
         (g.sales.length?'<span style="font-weight:400;color:#5b6475"> — '+esc(g.sales.map(function(x){return x.name}).join(", "))+'</span>':'')+'</td></tr>';
       h+=sp[0].map(row).join("");
+      if(!g.bids.length)h+='<tr><td colspan="3" style="'+td+'color:#8a92a3;font-style:italic">No bids this week</td></tr>';
       if(sp[1].length)h+='<tr><td colspan="3" style="'+F+'padding:8px 10px 4px;font-size:12px;font-weight:700;color:#5b6475;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e3e7ef">No bid date</td></tr>'+sp[1].map(row).join("");
     });
     return h+'</table></div>';
@@ -3071,6 +3072,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var sp=wkSplit(g);
       L.push(wkHead(Object.assign({},g,{name:g.name.toUpperCase()})));
       sp[0].forEach(function(b){L.push("  "+b.title+" — "+wkWhen(b)+(b.quoted?" — Quoted":""))});
+      if(!g.bids.length)L.push("  No bids this week");
       if(sp[1].length){L.push("  No bid date:");sp[1].forEach(function(b){L.push("    "+b.title)})}
       L.push("");
     });

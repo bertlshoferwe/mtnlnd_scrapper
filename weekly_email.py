@@ -3,7 +3,7 @@
 Every Monday at 6:00 AM Mountain time the scanner container builds, for each
 division, the list of bids in its main board space (e.g. Geo Bids) that are due
 that Monday through Sunday, grouped by team (alphabetical, "No team set" last),
-each team with its Outside Sales people. Bids with no bid date that aren't in a
+each team with its Outside Sales people. Teams with no bids are listed too. Bids with no bid date that aren't in a
 done column are listed under their team too. A bid counts as quoted when it is
 in a done column.
 
@@ -69,6 +69,8 @@ def build(division_id, now=None):
                 "title": b.get("title") or "", "due": due[:10],
                 "time": str(b.get("due_time") or "")[:5], "quoted": quoted})
 
+        for tid in teams:   # every team is listed, even with nothing due this week
+            groups.setdefault(tid, [])
         for tid, rows in groups.items():
             rows.sort(key=lambda r: (r["due"] or "9999", r["time"] or "99:99", r["title"].lower()))
             t = teams.get(tid)
