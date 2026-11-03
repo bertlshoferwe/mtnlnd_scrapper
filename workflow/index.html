@@ -678,6 +678,11 @@ textarea{min-height:90px;resize:vertical}
 .phl td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 .phl tr:last-child td{border-bottom:0}
 .phl .phc{font-weight:600}
+.phl .phk{width:1%;padding-right:0}
+.phl .phk input{width:16px;height:16px;margin:0;accent-color:var(--c1);cursor:pointer}
+.phbar{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13px;color:var(--muted)}
+.phbar .sp{flex:1}
+.phbar .btn{padding:6px 12px}
 .phl .phs{color:var(--muted);font-size:12px}
 .phl{min-width:640px}
 .phl .phc{min-width:150px}
@@ -3496,17 +3501,32 @@ img.who{object-fit:cover;background:var(--chip)}
     if(/sub|supplier|planholder/.test(r))return 1;
     return 2;
   }
+  // Plan holders with an email can be ticked; Email in Outlook starts a new message to them
+  // with the bid's name as the subject. Ticks are kept per bid while the board is open.
+  function phKey(x){return (x.company||"")+"|"+(x.emails||[]).join(",")}
+  function phSelOf(bid){ui.phSel=ui.phSel||{};return ui.phSel[bid]=ui.phSel[bid]||{}}
+  function phMailable(hold){return (hold||[]).filter(function(x){return (x.emails||[]).length})}
   function holdersHTML(hold){
     var L=hold.slice().sort(function(a,b){return holderRank(a)-holderRank(b)||(a.company||"").localeCompare(b.company||"",undefined,{numeric:true})});
     var has=function(fn){return L.some(fn)};
-    var cols=[["Company",function(x){return '<div class="phc">'+esc(x.company)+'</div>'+(x.cert?'<div class="phs">'+esc(x.cert)+'</div>':'')}]];
+    var M=phMailable(L),S=phSelOf(ui.issueId),n=M.filter(function(x){return S[phKey(x)]}).length,bar="";
+    var cols=[];
+    if(M.length){
+      var all=n===M.length;
+      cols.push(['<input type="checkbox" data-phall aria-label="Select everyone with an email"'+(all?' checked':'')+'>',function(x){
+        return (x.emails||[]).length?'<input type="checkbox" data-phsel="'+esc(phKey(x))+'" aria-label="Select '+esc(x.company)+'"'+(S[phKey(x)]?' checked':'')+'>':'';
+      },"phk"]);
+      bar='<div class="phbar"><span>'+(n?n+' of '+M.length+' selected':M.length+(M.length===1?' company has':' companies have')+' an email — tick the ones to email')+'</span><span class="sp"></span>'+
+        '<button class="btn primary small" data-phmail'+(n?'':' disabled')+'>Email in Outlook</button></div>';
+    }
+    cols.push(["Company",function(x){return '<div class="phc">'+esc(x.company)+'</div>'+(x.cert?'<div class="phs">'+esc(x.cert)+'</div>':'')}]);
     if(has(function(x){return x.role}))cols.push(["Role",function(x){return esc(x.role||"")}]);
     if(has(function(x){return x.contact}))cols.push(["Contact",function(x){return esc(x.contact||"")+(x.title?'<div class="phs">'+esc(x.title)+'</div>':'')}]);
     if(has(function(x){return (x.emails||[]).length}))cols.push(["Email",function(x){return (x.emails||[]).map(function(e){return '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>'}).join("<br>")}]);
     if(has(function(x){return x.phone}))cols.push(["Phone",function(x){return x.phone?'<a href="tel:'+esc(x.phone.replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':''}]);
     if(has(function(x){return x.city||x.state}))cols.push(["City / State",function(x){return '<span class="nw">'+esc([x.city,x.state].filter(Boolean).join(", "))+'</span>'}]);
-    return '<div class="phwrap"><table class="phl"><thead><tr>'+cols.map(function(c){return '<th scope="col">'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
-      L.map(function(x){return '<tr>'+cols.map(function(c){return '<td>'+c[1](x)+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>';
+    return bar+'<div class="phwrap"><table class="phl"><thead><tr>'+cols.map(function(c){return '<th scope="col"'+(c[2]?' class="'+c[2]+'"':'')+'>'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
+      L.map(function(x){return '<tr>'+cols.map(function(c){return '<td'+(c[2]?' class="'+c[2]+'"':'')+'>'+c[1](x)+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>';
   }
   // Fetch the Bid Scout project behind a bid, then fill in its blank due time,
   // "Original RFQ" (the site it was found on) and Team (its state). Never overwrites what's there.
@@ -4105,6 +4125,14 @@ img.who{object-fit:cover;background:var(--chip)}
     // a project link in the draft opens that bid right here instead of reloading the board
     if((el=t.closest("[data-wkprev] a[href]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();closeOv("ov-settings");if(!window.wfOpenLink(el.href))location.href=el.href;return}
     if(t.closest("[data-wktoggle]")){WK.open=!WK.open;render();return}
+    if(t.closest("[data-phmail]")){
+      var pmi=byId(ui.issueId),pmb=pmi&&ui.bs[pmi.id],pS=pmi&&phSelOf(pmi.id),to=[];
+      phMailable(pmb&&pmb.data&&pmb.data.holders).forEach(function(x){if(pS[phKey(x)])(x.emails||[]).forEach(function(a){if(to.indexOf(a)<0)to.push(a)})});
+      if(!to.length)return;
+      // same "outlook" tab as the Monday email: a new message with the To line and subject filled in
+      window.open("https://outlook.office.com/mail/deeplink/compose?"+["to="+encodeURIComponent(to.join(",")),"subject="+encodeURIComponent(pmi.title||"")].join("&"),"outlook");
+      return;
+    }
     if((el=t.closest("[data-wkcopy]"))&&WK.draft){var wk=el.getAttribute("data-wkcopy");
       // Outlook on the web: a new message in an "outlook" tab with the To line and subject filled in. The
       // formatted email goes on the clipboard first (a link can only carry plain text, and long ones get cut off).
@@ -4806,6 +4834,15 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.fileTab&&ui.fileTab!=="att"){ui.fileTab="att";renderAttach()}
     uploadFiles(fl,"att");
     toast(fl.length>1?fl.length+" screenshots added to Supporting Docs":"Screenshot added to Supporting Docs");
+  });
+  document.addEventListener("change",function(e){
+    var t=e.target;if(!t.hasAttribute||!ui.issueId)return;
+    if(t.hasAttribute("data-phsel")||t.hasAttribute("data-phall")){
+      var S=phSelOf(ui.issueId),b=ui.bs[ui.issueId],M=phMailable(b&&b.data&&b.data.holders);
+      if(t.hasAttribute("data-phall"))M.forEach(function(x){if(t.checked)S[phKey(x)]=1;else delete S[phKey(x)]});
+      else if(t.checked)S[t.getAttribute("data-phsel")]=1;else delete S[t.getAttribute("data-phsel")];
+      renderAttach();
+    }
   });
   document.addEventListener("change",function(e){
     if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
