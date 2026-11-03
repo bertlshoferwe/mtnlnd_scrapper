@@ -582,7 +582,36 @@ textarea{min-height:90px;resize:vertical}
 .atm{font-size:12px;flex:0 0 auto}
 .att.in{margin-left:calc(10px + var(--d,0) * 18px)}
 .att .danger{color:var(--high);font-size:12px}
+.att .attdel{opacity:0}
+.att:hover .attdel,.att .attdel:focus-visible{opacity:1}
+.att .attdel:hover{color:var(--high)}
+@media (hover:none){.att .attdel{opacity:1}}
+.attth{flex:0 0 auto;width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:var(--chip);padding:0;overflow:hidden;display:grid;place-items:center;color:var(--muted);cursor:zoom-in}
+.attth img{width:100%;height:100%;object-fit:cover;display:block}
+.attb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.attb .attn{flex:0 1 auto}
+.attnote{background:none;border:0;padding:0;text-align:left;color:var(--muted);font-size:12.5px;font-weight:400;text-transform:none;letter-spacing:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attnote:hover{color:var(--ink);text-decoration:underline}
+.attin{width:100%;box-sizing:border-box;border:1px solid var(--line2);border-radius:6px;padding:4px 8px;background:var(--surface);color:var(--ink);font-size:13.5px}
+.lbx{position:fixed;inset:0;z-index:200;background:rgba(8,12,20,.88);display:flex;flex-direction:column;color:#fff}
+.lbxh{display:flex;align-items:center;gap:10px;padding:12px 16px}
+.lbxh .lbxn{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbxh .lbxc{color:rgba(255,255,255,.7);font-size:13px;font-variant-numeric:tabular-nums}
+.lbx button.lbxb{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;border:0;background:none;color:#fff;padding:0}
+.lbx .lbxb:hover{background:rgba(255,255,255,.14)}
+.lbxm{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 8px}
+.lbxm img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+.lbxm .lbxi{flex:1;min-width:0;height:100%;display:flex;align-items:center;justify-content:center}
+.lbxm .lbxb{flex:0 0 auto;width:44px;height:44px}
+.lbxm .lbxb[disabled]{visibility:hidden}
+.lbxf{padding:12px 16px 18px;display:flex;justify-content:center}
+.lbxf input{width:min(640px,100%);box-sizing:border-box;border:1px solid transparent;border-radius:8px;padding:8px 12px;background:rgba(255,255,255,.08);color:#fff;font-size:14px;text-align:center}
+.lbxf input::placeholder{color:rgba(255,255,255,.55)}
+.lbxf input:hover,.lbxf input:focus{border-color:rgba(255,255,255,.35);outline:none}
+@media (max-width:600px){.lbxm .lbxb{display:none}}
 .dropz{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px;border:1.5px dashed var(--line2);border-radius:10px;color:var(--muted);font-size:14px;cursor:pointer;padding:10px}
+.dropz .dzp{color:var(--muted)}
+@media (hover:none){.dropz .dzp{display:none}}
 .dropz:hover,.dropz.over{border-color:var(--c1);color:var(--ink);background:color-mix(in srgb,var(--c1) 6%,transparent)}
 .upst{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:14px}
 .uph{display:flex;align-items:center;gap:8px;color:var(--ink)}
@@ -1032,6 +1061,7 @@ img.who{object-fit:cover;background:var(--chip)}
     grip:'<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></g>',
     trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     sort:'<path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/>',
+    image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
@@ -3348,11 +3378,18 @@ img.who{object-fit:cover;background:var(--chip)}
   var DL_IC='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
   var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
   function attRow(f,depth){
-    var nm=depth!=null?f.name.split("/").pop():f.name;
-    return '<div class="att'+(depth!=null?' in" style="--d:'+depth:'')+'">'+FILE_IC+'<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(nm)+'</button>'+
+    var nm=depth!=null?f.name.split("/").pop():f.name,img=isImg(f),ed=ui.attEdit&&ui.attEdit.id===f.id?ui.attEdit.f:"";
+    var lead=img?'<button class="attth" data-attopen="'+esc(f.id)+'" title="View '+esc(f.name)+'" aria-label="View '+esc(f.name)+'">'+(thumbUrl(f)?'<img src="'+esc(thumbUrl(f))+'" alt="" loading="lazy">':ic("image",18))+'</button>':FILE_IC;
+    var body=ed==="name"?'<input class="attin" data-attname="'+esc(f.id)+'" value="'+esc(nm.replace(/\.[^.\/]+$/,""))+'" aria-label="File name">':
+      '<button class="attn" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+esc(nm)+'</button>';
+    if(img)body+=ed==="note"?'<input class="attin" data-attnotein="'+esc(f.id)+'" value="'+esc(f.note||"")+'" placeholder="What this shows, e.g. Spec 33 16 13, tank coating" aria-label="Note">':
+      '<button class="attnote" data-attnote="'+esc(f.id)+'">'+(f.note?esc(f.note):'Add a note')+'</button>';
+    return '<div class="att'+(depth!=null?' in" style="--d:'+depth:'')+'">'+lead+'<div class="attb">'+body+'</div>'+
       '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
+      '<button class="dlbtn" data-attren="'+esc(f.id)+'" title="Rename '+esc(f.name)+'" aria-label="Rename '+esc(f.name)+'">'+ic("pencil",15)+'</button>'+
       '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'</button>'+
-      '<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">'+(ui.armAtt===f.id?'Tap to confirm':'Remove')+'</button></div>';
+      (ui.armAtt===f.id?'<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">Tap to confirm</button>':
+        '<button class="dlbtn attdel" data-attdel="'+esc(f.id)+'" title="Remove '+esc(f.name)+'" aria-label="Remove '+esc(f.name)+'">'+ic("trash",15)+'</button>')+'</div>';
   }
   // Uploaded files; ones that came in a folder ("Plans/Civil/C-101.pdf") nest
   // under closed folders like Bid Scout's documents.
@@ -3368,7 +3405,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function dropzHTML(kind,label){
     if(!HAS_FILES)return '';
     return upHTML(ui.issueId,kind)+'<label class="dropz" data-dropz="'+kind+'">'+
-      ('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files or folders here or <u>'+label+'</u></span>')+
+      ('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files or folders here or <u>'+label+'</u>'+(kind==="att"?'<span class="dzp"> · or paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')</span>':'')+'</span>')+
       '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
   }
   // a bid copied to another space shows the Bid Scout project of the bid it was copied from
@@ -3494,7 +3531,11 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(ch){renderIssueSideOnly();renderIssueAct()}
   }
-  function renderAttach(){var is=byId(ui.issueId),el=$("i-att");if(is&&el)el.innerHTML=attachHTML(is)}
+  function renderAttach(){
+    var is=byId(ui.issueId),el=$("i-att");if(!is||!el)return;
+    el.innerHTML=attachHTML(is);loadThumbs(is);
+    var fi=el.querySelector(".attin");if(fi){fi.focus();fi.select()}
+  }
   /* ---------- a bid typed in by hand: find its Bid Scout project and link the two ---------- */
   // Bid Scout's projects that aren't on the board yet, most alike first. A close one is offered above
   // the files; any can be picked from a searchable list. Linking brings in the project's Bid Docs,
@@ -3699,8 +3740,72 @@ img.who{object-fit:cover;background:var(--chip)}
       var nl=document.querySelector("#upst .upl");if(nl)nl.scrollTop=top;
     });
   }
+  /* ---------- screenshots and other pictures: previews in the list, a viewer, notes, paste to attach ---------- */
+  // HEIC and TIFF are left out: most browsers can't show them, so they stay plain files
+  function isImg(f){return /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(f.type||"")||/\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name||"")}
+  // signed links for previews, one hour each; fetched in one go for the bid's pictures
+  var TH={},thBusy={};
+  function thumbUrl(f){var t=TH[f.path];return t&&Date.now()-t.at<50*60000?t.url:""}
+  function loadThumbs(is){
+    if(!sb||!is)return;
+    var need=(is.attachments||[]).filter(function(f){return isImg(f)&&!thumbUrl(f)&&!thBusy[f.path]}).map(function(f){return f.path});
+    if(!need.length)return;
+    need.forEach(function(p){thBusy[p]=1});
+    sb.storage.from(FILE_BUCKET).createSignedUrls(need,3600).then(function(r){
+      need.forEach(function(p){delete thBusy[p]});
+      if(r.error||!r.data)return;
+      r.data.forEach(function(x){if(x.signedUrl&&x.path)TH[x.path]={url:x.signedUrl,at:Date.now()}});
+      if(ui.issueId===is.id&&!document.querySelector("#i-att .attin"))renderAttach();
+      if(ui.lbx)renderLbx();
+    },function(){need.forEach(function(p){delete thBusy[p]})});
+  }
+  // the viewer steps through the pictures in the same tab as the one opened
+  function attById(is,aid){return (is.attachments||[]).filter(function(x){return x.id===aid})[0]}
+  function lbxList(is,f){return (is.attachments||[]).filter(function(x){return isImg(x)&&(x.kind==="doc")===(f.kind==="doc")})}
+  function openLbx(is,f){ui.lbx={bid:is.id,id:f.id};renderLbx()}
+  function closeLbx(){ui.lbx=null;var el=$("lbx");if(el)el.remove()}
+  function renderLbx(){
+    var L=ui.lbx,is=L&&byId(L.bid),f=is&&attById(is,L.id);
+    if(!f){closeLbx();return}
+    var list=lbxList(is,f),i=list.indexOf(f),u=thumbUrl(f);if(!u)loadThumbs(is);
+    var el=$("lbx"),had=!!el,act=document.activeElement,typing=had&&act&&act.id==="lbx-note"&&act.getAttribute("data-attnotein")===f.id;
+    if(!el){el=document.createElement("div");el.id="lbx";el.className="lbx";el.setAttribute("role","dialog");el.setAttribute("aria-modal","true");document.body.appendChild(el)}
+    el.setAttribute("aria-label",f.name);
+    var head='<div class="lbxh"><span class="lbxn">'+esc(f.name.split("/").pop())+'</span>'+(list.length>1?'<span class="lbxc">'+(i+1)+' of '+list.length+'</span>':'')+
+      '<button class="lbxb" data-lbxdl title="Download" aria-label="Download">'+DL_IC+'</button>'+
+      '<button class="lbxb" data-lbxclose title="Close" aria-label="Close">'+ic("x",20)+'</button></div>';
+    var mid='<div class="lbxm"><button class="lbxb" data-lbxgo="-1" aria-label="Previous"'+(i>0?'':' disabled')+'>'+ic("chevL",26)+'</button>'+
+      '<div class="lbxi" data-lbxbg>'+(u?'<img src="'+esc(u)+'" alt="'+esc(f.note||f.name)+'">':'<span>Loading…</span>')+'</div>'+
+      '<button class="lbxb" data-lbxgo="1" aria-label="Next"'+(i<list.length-1?'':' disabled')+'>'+ic("chevR",26)+'</button></div>';
+    if(typing){el.querySelector(".lbxh").outerHTML=head;el.querySelector(".lbxm").outerHTML=mid;return}
+    el.innerHTML=head+mid+'<div class="lbxf"><input id="lbx-note" data-attnotein="'+esc(f.id)+'" value="'+esc(f.note||"")+'" placeholder="Add a note — what this shows" aria-label="Note"></div>';
+    if(!had)el.querySelector("[data-lbxclose]").focus();
+  }
+  function lbxGo(d){
+    var L=ui.lbx,is=L&&byId(L.bid),f=is&&attById(is,L.id);if(!f)return;
+    var list=lbxList(is,f),n=list[list.indexOf(f)+d];if(n){ui.lbx.id=n.id;renderLbx()}
+  }
+  // rename keeps the folder and the extension; the note is one line under the picture
+  function saveAttName(is,aid,v){
+    var f=attById(is,aid);ui.attEdit=null;if(!f)return;
+    var parts=f.name.split("/"),last=parts.pop(),ext=(last.match(/\.[^.]+$/)||[""])[0];v=v.trim().replace(/[\/]+/g,"-");
+    if(v&&v+ext!==last){var old=last;parts.push(v+ext);f.name=parts.join("/");logH(is,"File name",old,v+ext);is.updated=Date.now();save();renderIssueAct()}
+  }
+  function saveAttNote(is,aid,v){
+    var f=attById(is,aid);if(!f)return;v=v.trim();
+    if(v!==(f.note||"")){if(v)f.note=v;else delete f.note;is.updated=Date.now();save()}
+  }
+  // "Screenshot Nov 3, 1:24 PM.png"; another one with the same name gets "(2)"
+  function shotName(is,type,taken){
+    var d=new Date(),h=d.getHours(),base="Screenshot "+d.toLocaleString("en-US",{month:"short"})+" "+d.getDate()+", "+((h%12)||12)+":"+String(d.getMinutes()).padStart(2,"0")+" "+(h<12?"AM":"PM");
+    var ext="."+((type.split("/")[1]||"png").replace("jpeg","jpg")),names=(is.attachments||[]).map(function(x){return x.name}).concat(taken);
+    var n=1,nm=base+ext;
+    while(names.indexOf(nm)>-1)nm=base+" ("+(++n)+")"+ext;
+    return nm;
+  }
   async function openAttachment(is,aid){
     var f=(is.attachments||[]).filter(function(x){return x.id===aid})[0];if(!f)return;
+    if(isImg(f)){openLbx(is,f);return}
     var w=window.open("","_blank");   // opened now so the browser doesn't block it
     var r=await sb.storage.from(FILE_BUCKET).createSignedUrl(f.path,3600);
     if(r.error||!r.data){if(w)w.close();toast("Couldn’t open "+f.name+": "+((r.error&&r.error.message)||"unknown error"));return}
@@ -4284,6 +4389,11 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
     if(t.closest("[data-fmore]")){ui.fmenu=!ui.fmenu;renderAttach();return}
     if(t.closest("[data-dlall]")){ui.fmenu=false;setTimeout(renderAttach,0);toast("Preparing the download — big projects can take a minute…")}
+    if(t.closest("[data-lbxclose]")||(t.hasAttribute&&t.hasAttribute("data-lbxbg"))){closeLbx();return}
+    if((el=t.closest("[data-lbxgo]"))){lbxGo(+el.getAttribute("data-lbxgo"));return}
+    if(t.closest("[data-lbxdl]")){var lbi=ui.lbx&&byId(ui.lbx.bid);if(lbi)downloadAttachment(lbi,ui.lbx.id);return}
+    if((el=t.closest("[data-attren]"))){ui.attEdit={id:el.getAttribute("data-attren"),f:"name"};renderAttach();return}
+    if((el=t.closest("[data-attnote]"))){ui.attEdit={id:el.getAttribute("data-attnote"),f:"note"};renderAttach();return}
     if((el=t.closest("[data-attopen]"))){var aoi=byId(ui.issueId);if(aoi)openAttachment(aoi,el.getAttribute("data-attopen"));return}
     if((el=t.closest("[data-attdel]"))){
       var adi=byId(ui.issueId),aid=el.getAttribute("data-attdel");if(!adi)return;
@@ -4513,6 +4623,16 @@ img.who{object-fit:cover;background:var(--chip)}
     },0);
   });
   document.addEventListener("keydown",function(e){
+    var ain=e.target.hasAttribute&&(e.target.hasAttribute("data-attname")||e.target.hasAttribute("data-attnotein"));
+    if(ain&&(e.key==="Enter"||e.key==="Escape")){
+      e.preventDefault();e.stopPropagation();
+      if(e.key==="Escape"){e.target.value=e.target.defaultValue;if(e.target.id==="lbx-note"){closeLbx();return}}
+      e.target.blur();return;
+    }
+    if(ui.lbx&&!ain){
+      if(e.key==="Escape"){e.preventDefault();closeLbx();return}
+      if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();lbxGo(e.key==="ArrowLeft"?-1:1);return}
+    }
     if(e.target.id==="ls-url"&&(e.key==="Enter"||e.key==="Escape")){
       e.preventDefault();e.stopPropagation();var lb=byId(ui.issueId);
       if(e.key==="Enter"&&lb)saveListing(lb);else{ui.lsEdit=null;renderIssueSideOnly()}
@@ -4651,6 +4771,36 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.gOpen&&!e.target.closest(".gwrap")){ui.gOpen=false;var gp=document.querySelector(".gpop");if(gp)gp.remove()}
     if(ui.fOpen&&!e.target.closest(".fwrap")){ui.fOpen=false;var fp=document.querySelector(".fpop");if(fp)fp.remove();var fb=document.querySelector("[data-fopen]");if(fb)fb.setAttribute("aria-expanded","false")}
     if(ui.calPop&&!e.target.closest(".jpop")&&!e.target.closest("[data-more]"))closeCalPop();
+  });
+  // leaving a rename or note box saves it
+  document.addEventListener("focusout",function(e){
+    var t=e.target;if(!t.hasAttribute)return;
+    var is=(ui.lbx&&t.id==="lbx-note")?byId(ui.lbx.bid):byId(ui.issueId);if(!is)return;
+    if(t.hasAttribute("data-attname")){saveAttName(is,t.getAttribute("data-attname"),t.value);setTimeout(renderAttach,0)}
+    else if(t.hasAttribute("data-attnotein")){
+      var nid=t.getAttribute("data-attnotein");saveAttNote(is,nid,t.value);
+      if(ui.attEdit&&ui.attEdit.id===nid)ui.attEdit=null;
+      setTimeout(renderAttach,0);
+    }
+  });
+  // Paste a screenshot anywhere on an open bid and it goes to Supporting Docs. Pasting text into
+  // a box works as usual; a picture pasted into a box (where it would do nothing) is attached.
+  document.addEventListener("paste",function(e){
+    if(!HAS_FILES||!ui.issueId||ui.lbx||!$("ov-issue").classList.contains("open"))return;
+    var is=byId(ui.issueId),cd=e.clipboardData;if(!is||!cd)return;
+    var t=e.target,inBox=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    if(inBox&&(cd.getData("text/plain")||"").trim())return;
+    var imgs=Array.prototype.filter.call(cd.items||[],function(it){return it.kind==="file"&&/^image\/(png|jpe?g|gif|webp|bmp)$/.test(it.type)}).map(function(it){return it.getAsFile()}).filter(Boolean);
+    if(!imgs.length)return;
+    e.preventDefault();
+    var taken=[],fl=imgs.map(function(f){
+      // screenshots arrive as "image.png"; a copied picture file keeps its own name
+      var nm=!f.name||/^image\.\w+$/i.test(f.name)?shotName(is,f.type,taken):f.name;taken.push(nm);
+      return {file:new File([f],nm,{type:f.type}),rel:nm};
+    });
+    if(ui.fileTab&&ui.fileTab!=="att"){ui.fileTab="att";renderAttach()}
+    uploadFiles(fl,"att");
+    toast(fl.length>1?fl.length+" screenshots added to Supporting Docs":"Screenshot added to Supporting Docs");
   });
   document.addEventListener("change",function(e){
     if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
