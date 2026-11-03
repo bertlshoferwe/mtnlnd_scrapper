@@ -3533,8 +3533,13 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function renderAttach(){
     var is=byId(ui.issueId),el=$("i-att");if(!is||!el)return;
-    el.innerHTML=attachHTML(is);loadThumbs(is);
-    var fi=el.querySelector(".attin");if(fi){fi.focus();fi.select()}
+    // a rename or note box that's open keeps what's typed (and the cursor) when the list redraws,
+    // e.g. when an upload finishes; attRedraw stops the redraw's blur from saving it early
+    var old=el.querySelector(".attin"),keep=old&&{v:old.value,a:old.selectionStart,b:old.selectionEnd,f:document.activeElement===old};
+    ui.attRedraw=true;el.innerHTML=attachHTML(is);ui.attRedraw=false;loadThumbs(is);
+    var fi=el.querySelector(".attin");
+    if(fi&&keep){fi.value=keep.v;if(keep.f){fi.focus();try{fi.setSelectionRange(keep.a,keep.b)}catch(x){}}}
+    else if(fi){fi.focus();fi.select()}
   }
   /* ---------- a bid typed in by hand: find its Bid Scout project and link the two ---------- */
   // Bid Scout's projects that aren't on the board yet, most alike first. A close one is offered above
@@ -3755,7 +3760,7 @@ img.who{object-fit:cover;background:var(--chip)}
       need.forEach(function(p){delete thBusy[p]});
       if(r.error||!r.data)return;
       r.data.forEach(function(x){if(x.signedUrl&&x.path)TH[x.path]={url:x.signedUrl,at:Date.now()}});
-      if(ui.issueId===is.id&&!document.querySelector("#i-att .attin"))renderAttach();
+      if(ui.issueId===is.id)renderAttach();
       if(ui.lbx)renderLbx();
     },function(){need.forEach(function(p){delete thBusy[p]})});
   }
@@ -4774,7 +4779,7 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   // leaving a rename or note box saves it
   document.addEventListener("focusout",function(e){
-    var t=e.target;if(!t.hasAttribute)return;
+    var t=e.target;if(!t.hasAttribute||ui.attRedraw)return;
     var is=(ui.lbx&&t.id==="lbx-note")?byId(ui.lbx.bid):byId(ui.issueId);if(!is)return;
     if(t.hasAttribute("data-attname")){saveAttName(is,t.getAttribute("data-attname"),t.value);setTimeout(renderAttach,0)}
     else if(t.hasAttribute("data-attnotein")){
