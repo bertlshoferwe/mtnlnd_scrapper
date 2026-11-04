@@ -2266,13 +2266,15 @@ img.who{object-fit:cover;background:var(--chip)}
     p.statuses.forEach(function(s,ci){
       var items=p.issues.filter(function(i){return i.status===s.id});
       var mode=colSort(p,s.id),shown=items.filter(visible).sort(colCmp(mode));
+      // the count follows the filters; hovering it shows the column's full total while filtered
+      var cnt='<span class="count"'+(shown.length!==items.length?' title="'+shown.length+' of '+items.length+' match your filters"':'')+'>'+shown.length+'</span>';
       // collapsed column: a narrow strip with the name on its side (still a drop target)
       if(folded[s.id]){
-        h+='<section class="col folded" data-col="'+s.id+'"><span class="vn">'+esc(s.name)+'</span><span class="count">'+items.length+'</span>'+
+        h+='<section class="col folded" data-col="'+s.id+'"><span class="vn">'+esc(s.name)+'</span>'+cnt+
           '<button class="colbtn" data-colfold="'+s.id+'" title="Expand" aria-label="Expand '+esc(s.name)+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button></section>';
         return;
       }
-      h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+'<span class="count">'+items.length+'</span>'+
+      h+='<section class="col" data-col="'+s.id+'"><h2><span class="nm">'+esc(s.name)+'</span>'+(s.cat==="done"?'<span class="chip">Done</span>':'')+cnt+
         '<span class="csort"><button class="colbtn'+(mode!=="due"?' on':'')+'" data-colsort="'+s.id+'" title="Sort" aria-label="Sort '+esc(s.name)+'" aria-expanded="'+(ui.colSortOpen===s.id)+'">'+ic("sort",14)+'</button>'+
         (ui.colSortOpen===s.id?'<div class="fpop cspop" role="menu" aria-label="Sort '+esc(s.name)+'">'+CSORTS.map(function(x){
           return '<button class="gopt'+(x[0]===mode?' on':'')+'" role="menuitemradio" aria-checked="'+(x[0]===mode)+'" data-colsortset="'+s.id+'|'+x[0]+'">'+esc(x[1])+'</button>';
