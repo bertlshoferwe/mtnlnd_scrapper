@@ -1433,6 +1433,27 @@ def _document_bytes(division_id, doc, url):
     return r.content if len(r.content) <= PROXY_MAX_BYTES else None
 
 
+@app.route("/api/<division_id>/read-quote", methods=["POST"])
+def api_read_quote(division_id):
+    """Body: a quote PDF (raw bytes; ?name= its file name). Returns the Amount
+    Due and quote number for the bid board's Quoted window (quote_reader.py).
+    Nothing is stored — the board uploads the file itself."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_data(cache=False)
+    if not data:
+        return jsonify({"error": "no file"}), 400
+    if len(data) > 40 * 1024 * 1024:
+        return jsonify({"error": "file too large to read"}), 413
+    import quote_reader
+    try:
+        return jsonify(quote_reader.read(data, request.args.get("name") or ""))
+    except Exception as e:
+        app.logger.warning("read-quote failed: %s", e)
+        return jsonify({"amount": None, "quote": None, "where": None, "error": "couldn't read this PDF"})
+
+
 @app.route("/api/<division_id>/bids/<bid_id>/zip", methods=["GET"])
 def api_bid_zip(division_id, bid_id):
     """Every file on one tab of a bid board bid, as a zip. ?tab=docs (the Bid

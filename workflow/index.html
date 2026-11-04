@@ -515,6 +515,14 @@ td.over{color:var(--high);font-weight:600}
 .fine{font-size:12px;color:var(--muted);margin:8px 0 0}
 .srow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .srow:first-of-type{border-top:0}
+.askq .dropz{min-height:72px}
+.askq .qfile{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:13px}
+.askq .qfile .qn{flex:1;min-width:0;color:var(--ink);font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.askq .qmsg{font-size:13px;margin:8px 0 0;color:var(--muted)}
+.askq .qmsg.ok{color:var(--ink)}
+.askq .qmsg.bad{color:var(--high)}
+.askq .upbar{margin:8px 0 0}
+.qchip{flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:color-mix(in srgb,var(--c1) 16%,transparent);color:var(--ink)}
 .asksub{margin:-4px 0 14px;font-size:14px;color:var(--muted);text-transform:none;letter-spacing:0}
 .askopts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 4px}
 @media (max-width:420px){.askopts{grid-template-columns:1fr}}
@@ -1229,9 +1237,82 @@ img.who{object-fit:cover;background:var(--chip)}
   function fieldVal(is,f){return f.indexOf("cf:")===0?(is.fields||{})[f.slice(3)]||"":f==="priority"?"":is[f]||""}
   function askFirst(p,is,sid,go){
     if(ui.askPass)return false;
-    var rs=askRules(p,is,sid);if(!rs.length)return false;
-    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:""};
+    var rs=askRules(p,is,sid),qn=needsQuote(p,is,sid);
+    if(qn){var qf=quoteFields(p);rs=rs.filter(function(r){return r.field!=="cf:"+qf.amt.id&&!(qf.tkt&&r.field==="cf:"+qf.tkt.id)})}
+    if(!rs.length&&!qn)return false;
+    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:"",quote:qn?{state:"none"}:null};
     renderAsk();openOv("ov-ask");return true;
+  }
+  /* Moving a bid into a column named Quoted (in a space with a Quoted amount field) asks for our quote
+     PDF in the same window. The server reads its Amount Due and quote number (quote_reader.py); the
+     amount fills Quoted amount (replacing what's there, still editable first) and the quote number fills
+     Ticket # if that's empty. The PDF lands in Supporting Docs tagged Quote. "Upload a new quote" on a
+     quoted bid opens the same window without moving it (re-quotes; the old file and amount stay in history). */
+  function quoteFields(p){
+    var F=spaceFields(p);
+    return {amt:F.filter(function(f){return f.type==="money"&&/quoted amount/i.test(f.name)})[0],
+      tkt:F.filter(function(f){return (f.name||"").trim().toLowerCase()==="ticket #"})[0]};
+  }
+  function isQuotedCol(p,sid){var st=stat(p,sid);return !!st&&/^quoted$/i.test((st.name||"").trim())}
+  function needsQuote(p,is,sid){return HAS_FILES&&!!sb&&is.type!=="Subtask"&&is.status!==sid&&isQuotedCol(p,sid)&&!!quoteFields(p).amt}
+  function canRequote(p,is){return HAS_FILES&&!!sb&&is.type!=="Subtask"&&!!quoteFields(p).amt&&(isQuotedCol(p,is.status)||(is.attachments||[]).some(function(f){return f.quote}))}
+  function openRequote(is){ui.ask={bid:is.id,status:null,rules:[],go:null,ans:{},note:"",quote:{state:"none"}};renderAsk();openOv("ov-ask")}
+  function quoteHTML(k){
+    var Q=k.quote,p=proj(),is=byId(k.bid),qf=quoteFields(p),h='';
+    if(Q.state==="none"||Q.state==="err"){
+      h+='<label class="dropz" data-qdrop>'+ic("arrowU",16)+'<span>Drop the quote PDF here or <u>choose it</u></span><input type="file" accept=".pdf,application/pdf" data-qinput hidden></label>';
+      if(Q.state==="err")h+='<p class="qmsg bad">Couldn’t upload '+esc(Q.name)+': '+esc(Q.err||"unknown error")+'. Try again.</p>';
+      return h;
+    }
+    h+='<div class="qfile">'+FILE_IC+'<span class="qn">'+esc(Q.name)+'</span><span>'+fsize(Q.size||0)+'</span>'+(Q.state==="ok"?'<button class="linkbtn" data-qchange>Change</button>':'')+'</div>';
+    if(Q.state==="up")return h+'<div class="upbar"><i style="width:'+pct(Q.loaded,Q.size||1)+'%"></i></div><p class="qmsg">Uploading…</p>';
+    if(Q.state==="read")return h+'<p class="qmsg">Reading the quote…</p>';
+    var amt=qf.amt,old=is&&is.fields&&is.fields[amt.id];
+    h+=Q.found?'<p class="qmsg ok">Found <b>'+esc(cfShow(amt,Q.found))+'</b> ('+esc(Q.where||"Amount Due")+')'+(Q.quoteNo?' · quote '+esc(Q.quoteNo):'')+'</p>':
+      '<p class="qmsg bad">Couldn’t find the Amount Due in this PDF. Type the quoted amount below.</p>';
+    h+='<label for="ask-qamt">'+esc(amt.name)+'</label><input id="ask-qamt" type="number" step="0.01" min="0" inputmode="decimal" data-qamt value="'+esc(Q.amount)+'">';
+    var notes=[];
+    if(old)notes.push('Replaces the current '+esc(cfShow(amt,old))+'.');
+    if(qf.tkt&&Q.quoteNo){var tk=is&&is.fields&&String(is.fields[qf.tkt.id]||"").trim();if(!tk)notes.push(esc(qf.tkt.name)+' will be set to '+esc(Q.quoteNo)+'.')}
+    if(notes.length)h+='<p class="fine" style="margin:6px 0 0">'+notes.join(" ")+'</p>';
+    return h;
+  }
+  function renderAskQuote(){var el=$("ask-q");if(el&&ui.ask&&ui.ask.quote)el.innerHTML=quoteHTML(ui.ask)}
+  // a quote uploaded but not kept (Cancel, Change, a newer pick) comes back out of storage
+  function quoteDrop(Q){
+    if(!Q||!Q.rec||Q.saved)return;Q.dropped=true;
+    if(Q.uploaded&&sb)sb.storage.from(FILE_BUCKET).remove([Q.rec.path]).then(function(){},function(){});
+  }
+  async function quotePick(f){
+    var k=ui.ask,is=k&&byId(k.bid);if(!k||!k.quote||!is||!f)return;
+    if(!/\.pdf$/i.test(f.name||"")&&f.type!=="application/pdf"){toast("The quote needs to be a PDF.");return}
+    quoteDrop(k.quote);
+    var id=uuid(),path=is.id+"/"+id+"-"+f.name.replace(/[^\w.\-]+/g,"_");
+    var Q=k.quote={state:"up",name:f.name,size:f.size,loaded:0,amount:"",rec:{id:id,name:f.name,path:path,size:f.size,type:f.type||"application/pdf",by:ME,quote:true}};
+    var live=function(){return ui.ask===k&&k.quote===Q};
+    renderAskQuote();
+    // read it while it uploads
+    var read=fetch("/api/"+encodeURIComponent(is.divisionId)+"/read-quote?name="+encodeURIComponent(f.name),{method:"POST",headers:{"Content-Type":"application/pdf"},body:f})
+      .then(function(r){return r.ok?r.json():{}}).catch(function(){return {}});
+    try{await putFile(path,f,function(n){Q.loaded=n;if(live())renderAskQuote()})}
+    catch(err){if(live()){Q.state="err";Q.err=(err&&err.message)||"";renderAskQuote()}return}
+    Q.uploaded=true;
+    if(Q.dropped){quoteDrop(Q);return}
+    Q.state="read";if(live())renderAskQuote();
+    var d=await read;if(!live())return;
+    Q.state="ok";Q.found=d.amount||"";Q.amount=d.amount||"";Q.where=d.where||"";Q.quoteNo=d.quote||"";
+    renderAskQuote();
+    if(!Q.found){var ai=$("ask-qamt");if(ai)ai.focus()}
+  }
+  // write the quote onto the bid: the file, the amount (always), the quote number (only into an empty Ticket #)
+  function applyQuote(p,is,Q){
+    var qf=quoteFields(p),v=String(Math.round(+Q.amount*100)/100);
+    Q.saved=true;Q.rec.at=Date.now();
+    is.attachments=(is.attachments||[]).concat([Q.rec]);logH(is,"Quote","",Q.rec.name);
+    is.fields=is.fields||{};
+    if(qf.amt&&is.fields[qf.amt.id]!==v){logH(is,qf.amt.name,cfShow(qf.amt,is.fields[qf.amt.id]),cfShow(qf.amt,v));is.fields[qf.amt.id]=v}
+    if(qf.tkt&&Q.quoteNo&&!String(is.fields[qf.tkt.id]||"").trim()){logH(is,qf.tkt.name,"None",Q.quoteNo);is.fields[qf.tkt.id]=Q.quoteNo}
+    is.updated=Date.now();save();
   }
   function askInput(p,r,v){
     var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0],ty=tg[2],a=' data-askf="'+esc(r.field)+'"';
@@ -1248,8 +1329,9 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function renderAsk(){
     var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is){closeOv("ov-ask");return}
-    $("askTitle").textContent="Moving to "+stat(p,k.status).name;
+    $("askTitle").textContent=k.status?"Moving to "+stat(p,k.status).name:"Upload a new quote";
     var h='<p class="asksub">'+esc(is.title)+'</p>';
+    if(k.quote)h+='<label>Our quote <span class="fine">(PDF)</span></label><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>';
     k.rules.forEach(function(r){
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
       h+='<label>'+esc(tg[1])+(r.must?'':' <span class="fine">(optional)</span>')+'</label>'+askInput(p,r,k.ans[r.field]||"");
@@ -1258,16 +1340,24 @@ img.who{object-fit:cover;background:var(--chip)}
     h+='<label for="ask-note">Note'+(other?'':' <span class="fine">(optional)</span>')+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering')+'">'+esc(k.note)+'</textarea>'+
       '<p class="fine" style="margin:6px 0 0">The note is added to the bid as a comment.</p>';
     $("askBody").innerHTML=h;
-    $("askActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-ask">Cancel</button><button class="btn primary" data-asksave>Move it</button>';
+    $("askActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-ask">Cancel</button><button class="btn primary" data-asksave>'+(k.go?'Move it':'Save quote')+'</button>';
   }
   function saveAsk(){
     var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is)return;
     var miss=k.rules.filter(function(r){return r.must&&!String(k.ans[r.field]||"").trim()})[0];
     if(miss){var mt=fillTargets(p).filter(function(x){return x[0]===miss.field})[0];toast("Choose a "+(mt?mt[1]:"value")+" first.");return}
     if(k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")})&&!k.note.trim()){toast("Add a short note about what happened.");var n=$("ask-note");if(n)n.focus();return}
+    var Q=k.quote;
+    if(Q){
+      if(Q.state==="up"||Q.state==="read"){toast("One moment — the quote is still "+(Q.state==="up"?"uploading.":"being read."));return}
+      if(Q.state!=="ok"){toast("Upload the quote PDF first.");return}
+      if(String(Q.amount).trim()===""||!isFinite(+Q.amount)||+Q.amount<0){toast("Type the quoted amount.");var qa=$("ask-qamt");if(qa)qa.focus();return}
+    }
     ui.ask=null;$("ov-ask").classList.remove("open");
+    if(Q)applyQuote(p,is,Q);
     ui.askAns=k.ans;ui.askPass=true;
-    try{k.go()}finally{ui.askAns=null;ui.askPass=false}
+    try{if(k.go)k.go()}finally{ui.askAns=null;ui.askPass=false}
+    if(!k.go){render();if(ui.issueId===is.id){renderAttach();renderIssueAct()}toast("Quote saved")}
     if(k.note.trim()){is.comments.push({id:uid("c"),by:ME,at:Date.now(),text:k.note.trim()});is.updated=Date.now();save()}
     askRefreshBid();
   }
@@ -3325,7 +3415,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){if(ui.ask&&ui.ask.quote)quoteDrop(ui.ask.quote);ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -3390,6 +3480,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(img)body+=ed==="note"?'<input class="attin" data-attnotein="'+esc(f.id)+'" value="'+esc(f.note||"")+'" placeholder="What this shows, e.g. Spec 33 16 13, tank coating" aria-label="Note">':
       '<button class="attnote" data-attnote="'+esc(f.id)+'">'+(f.note?esc(f.note):'Add a note')+'</button>';
     return '<div class="att'+(depth!=null?' in" style="--d:'+depth:'')+'">'+lead+'<div class="attb">'+body+'</div>'+
+      (f.quote?'<span class="qchip">Quote</span>':'')+
       '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
       '<button class="dlbtn" data-attren="'+esc(f.id)+'" title="Rename '+esc(f.name)+'" aria-label="Rename '+esc(f.name)+'">'+ic("pencil",15)+'</button>'+
       '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'</button>'+
@@ -3447,6 +3538,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }else if(tab==="att"){
       h+=attListHTML(atts,"att",is);
       if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No supporting docs.</p>';
+      if(canRequote(proj(),is))h+='<p style="margin:0 0 8px"><button class="btn small" data-newquote>Upload a new quote</button></p>';
       h+=dropzHTML("att","add a supporting doc");
     }else{
       if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they show once this bid is linked to its Bid Scout project.'+bsLinkBtn(is)+'</p>';
@@ -4125,6 +4217,8 @@ img.who{object-fit:cover;background:var(--chip)}
     // a project link in the draft opens that bid right here instead of reloading the board
     if((el=t.closest("[data-wkprev] a[href]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();closeOv("ov-settings");if(!window.wfOpenLink(el.href))location.href=el.href;return}
     if(t.closest("[data-wktoggle]")){WK.open=!WK.open;render();return}
+    if(t.closest("[data-qchange]")&&ui.ask&&ui.ask.quote){quoteDrop(ui.ask.quote);ui.ask.quote={state:"none"};renderAskQuote();return}
+    if(t.closest("[data-newquote]")){var nqi=byId(ui.issueId);if(nqi)openRequote(nqi);return}
     if(t.closest("[data-phmail]")){
       var pmi=byId(ui.issueId),pmb=pmi&&ui.bs[pmi.id],pS=pmi&&phSelOf(pmi.id),to=[];
       phMailable(pmb&&pmb.data&&pmb.data.holders).forEach(function(x){if(pS[phKey(x)])(x.emails||[]).forEach(function(a){if(to.indexOf(a)<0)to.push(a)})});
@@ -4635,6 +4729,7 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;return}
+    if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="bs-q"&&ui.bsPick){
@@ -4836,7 +4931,9 @@ img.who{object-fit:cover;background:var(--chip)}
     toast(fl.length>1?fl.length+" screenshots added to Supporting Docs":"Screenshot added to Supporting Docs");
   });
   document.addEventListener("change",function(e){
-    var t=e.target;if(!t.hasAttribute||!ui.issueId)return;
+    var t=e.target;if(!t.hasAttribute)return;
+    if(t.hasAttribute("data-qinput")){var qf0=t.files&&t.files[0];t.value="";quotePick(qf0);return}
+    if(!ui.issueId)return;
     if(t.hasAttribute("data-phsel")||t.hasAttribute("data-phall")){
       var S=phSelOf(ui.issueId),b=ui.bs[ui.issueId],M=phMailable(b&&b.data&&b.data.holders);
       if(t.hasAttribute("data-phall"))M.forEach(function(x){if(t.checked)S[phKey(x)]=1;else delete S[phKey(x)]});
@@ -4847,6 +4944,18 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("change",function(e){
     if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
   });
+  (function(){
+    var box=$("ov-ask");
+    box.addEventListener("dragover",function(e){
+      var z=e.target.closest&&e.target.closest("[data-qdrop]");
+      if(z&&e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1){e.preventDefault();z.classList.add("over")}
+    });
+    box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-qdrop]");if(z)z.classList.remove("over")});
+    box.addEventListener("drop",function(e){
+      var z=e.target.closest&&e.target.closest("[data-qdrop]");
+      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");quotePick(e.dataTransfer.files[0])}
+    });
+  })();
   (function(){
     var box=$("ov-issue");
     box.addEventListener("dragover",function(e){
