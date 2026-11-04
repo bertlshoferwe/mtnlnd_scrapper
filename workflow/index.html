@@ -1239,8 +1239,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.askPass)return false;
     var rs=askRules(p,is,sid),qn=needsQuote(p,is,sid);
     if(qn){var qf=quoteFields(p);rs=rs.filter(function(r){return r.field!=="cf:"+qf.amt.id&&!(qf.tkt&&r.field==="cf:"+qf.tkt.id)})}
-    if(!rs.length&&!qn)return false;
-    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:"",quote:qn?{state:"none"}:null};
+    // the "who should handle the copy" question is asked here too, so it's all one window
+    var hand=handoffsFor(p,is,sid).map(function(h){var g=predictPick(is,h.role);return Object.assign(h,{auto:g.pid,team:g.team,pick:g.pid})});
+    if(!rs.length&&!qn&&!hand.length)return false;
+    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:"",quote:qn?{state:"none"}:null,hand:hand};
     renderAsk();openOv("ov-ask");return true;
   }
   /* Moving a bid into a column named Quoted (in a space with a Quoted amount field) asks for our quote
@@ -1331,6 +1333,12 @@ img.who{object-fit:cover;background:var(--chip)}
     var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is){closeOv("ov-ask");return}
     $("askTitle").textContent=k.status?"Moving to "+stat(p,k.status).name:"Upload a new quote";
     var h='<p class="asksub">'+esc(is.title)+'</p>';
+    (k.hand||[]).forEach(function(x,i){
+      h+='<label for="ask-h'+i+'">'+(k.hand.length>1?'Assign the copy in '+esc(x.toName)+' to':'Assign to')+'</label><select id="ask-h'+i+'" data-askhand="'+i+'">'+teamOptions(x.pick)+'</select>'+
+        '<p class="fine" style="margin:4px 0 12px">'+(x.auto?esc(nameOf(x.auto).split(" ")[0])+' is next in line for '+esc(x.team?x.team.name:"the team")+'’s '+esc(x.role)+'.':
+          x.team?'Nobody on '+esc(x.team.name)+' has the role '+esc(x.role)+'.':'No team is set on this bid, so nobody is picked automatically.')+
+        (k.hand.length>1?'':' A copy goes to '+esc(x.toName)+'.')+'</p>';
+    });
     if(k.quote)h+='<label>Our quote <span class="fine">(PDF)</span></label><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>';
     k.rules.forEach(function(r){
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
@@ -1356,7 +1364,8 @@ img.who{object-fit:cover;background:var(--chip)}
     ui.ask=null;$("ov-ask").classList.remove("open");
     if(Q)applyQuote(p,is,Q);
     ui.askAns=k.ans;ui.askPass=true;
-    try{if(k.go)k.go()}finally{ui.askAns=null;ui.askPass=false}
+    if(k.hand&&k.hand.length){ui.handPick={};k.hand.forEach(function(x){ui.handPick[x.to]=x.pick})}
+    try{if(k.go)k.go()}finally{ui.askAns=null;ui.askPass=false;ui.handPick=null}
     if(!k.go){render();if(ui.issueId===is.id){renderAttach();renderIssueAct()}toast("Quote saved")}
     if(k.note.trim()){is.comments.push({id:uid("c"),by:ME,at:Date.now(),text:k.note.trim()});is.updated=Date.now();save()}
     askRefreshBid();
@@ -1392,15 +1401,39 @@ img.who{object-fit:cover;background:var(--chip)}
 
   // An automation set to "ask" (rule.ask): the database still makes the copy and picks the team's
   // person for the role (taking turns); once it exists, this window lets whoever moved the bid keep
-  // that pick or choose someone else. Closing it keeps the pick.
-  function queueHandoff(p,is,sid){
-    if(is.type==="Subtask"||!HAS_PROLE)return;
-    var st=stat(p,sid);if(!st)return;
+  // that pick or choose someone else. Closing it keeps the pick. A move made through the ask window
+  // (askFirst) asks this up front instead, and the copy just takes that answer.
+  // The "ask" automations a move into sid sets off: [{to, toName, role}].
+  function handoffsFor(p,is,sid){
+    var st=stat(p,sid),out=[];
+    if(is.type==="Subtask"||!HAS_PROLE||!st||is.status===sid)return out;
     (p.rules||[]).forEach(function(r){
       if(r.kind==="fill"||!r.ask||!r.assign||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
       var t=D.spaces.filter(function(x){return x.id===r.to&&x.parentId===p.id})[0];if(!t)return;
       if((t.issues||[]).some(function(x){return x.originBidId===is.id}))return;
-      ui.handoffQ=(ui.handoffQ||[]).concat([{bid:is.id,title:is.title,to:t.id,toName:t.name,role:r.assign,tries:0}]);
+      out.push({to:t.id,toName:t.name,role:r.assign});
+    });
+    return out;
+  }
+  // Who the database will pick (016_rotate_by_role.sql): the bid's team (first by name), its members
+  // with the role in name order, the one after last time's pick.
+  function predictPick(is,role){
+    var F=is.fields||{},vals=Object.keys(F).map(function(k){return String(F[k])}),rl=String(role||"").toLowerCase();
+    var tm=(D.teams||[]).filter(function(t){return t.divisionId===is.divisionId&&vals.indexOf(String(t.id))>-1}).sort(byName)[0];
+    if(!tm)return {team:null,pid:""};
+    var c=D.people.filter(function(x){return (tm.members||[]).indexOf(x.id)>-1&&String(x.role||"").toLowerCase()===rl})
+      .sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:a.id<b.id?-1:1}).map(function(x){return x.id});
+    if(!c.length)return {team:tm,pid:""};
+    var i=c.indexOf((tm.rotation||{})[rl]);
+    return {team:tm,pid:c[i<0?0:(i+1)%c.length]};
+  }
+  // ui.handPick {spaceId: personId}, set by the ask window just before the move: those copies get
+  // that person without a second window.
+  function queueHandoff(p,is,sid){
+    handoffsFor(p,is,sid).forEach(function(h){
+      var q={bid:is.id,title:is.title,to:h.to,toName:h.toName,role:h.role,tries:0};
+      if(ui.handPick&&h.to in ui.handPick)q.preset=ui.handPick[h.to];
+      ui.handoffQ=(ui.handoffQ||[]).concat([q]);
     });
     if(ui.handoffQ&&ui.handoffQ.length)setTimeout(nextHandoff,600);
   }
@@ -1411,6 +1444,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var row=res&&res.data&&res.data[0];
     if(!row){if(++h.tries<8){setTimeout(nextHandoff,700)}else{ui.handoffQ.shift();nextHandoff()}return}
     ui.handoffQ.shift();
+    if("preset" in h){assignCopy(row,h.preset);nextHandoff();return}
     ui.handoff=Object.assign({},h,{copy:row,pick:row.assignee||""});
     renderHandoff();openOv("ov-handoff");
   }
@@ -1424,8 +1458,12 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   async function saveHandoff(){
     var h=ui.handoff;if(!h)return;
-    var pid=$("ho-p").value,c=h.copy,now=Date.now(),hist=(c.history||[]).slice();
+    var pid=$("ho-p").value;
     closeOv("ov-handoff");
+    assignCopy(h.copy,pid);
+  }
+  async function assignCopy(c,pid){
+    var now=Date.now(),hist=(c.history||[]).slice();
     if(pid!==(c.assignee||"")){var e={by:ME,at:now,field:"Assignee",from:c.assignee||"",to:pid};hist.push(e)}
     if(pid!==(c.reporter||"")){var e2={by:ME,at:now,field:"Reporter",from:c.reporter?nameOf(c.reporter):"None",to:pid?nameOf(pid):"None"};if(pid)e2.toId=pid;hist.push(e2)}
     if(hist.length!==(c.history||[]).length){
@@ -1745,7 +1783,7 @@ img.who{object-fit:cover;background:var(--chip)}
     raw.people={};rs[1].data.forEach(function(r){raw.people[r.id]={divisionId:String(r.division_id),name:r.name,first:r.first_name||"",last:r.last_name||"",email:r.email||"",role:r.role||""}});
     HAS_TEAMS=!rs[9].error;
     HAS_FILES=!rs[10].error;   // attachments need workflow/sql/006_attachments.sql   // teams need workflow/sql/005_teams.sql
-    raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[]}});
+    raw.teams={};if(HAS_TEAMS)(rs[9].data||[]).forEach(function(r){raw.teams[r.id]={divisionId:String(r.division_id),name:r.name,members:r.members||[],rotation:r.rotation||{}}});
     // custom fields need the "fields" columns (workflow/sql/003_fields.sql); without them they stay hidden
     HAS_FIELDS=!rs[6].error&&!rs[7].error;
     HAS_DUETIME=!rs[8].error;   // the optional due time needs workflow/sql/004_due_time.sql
@@ -1792,7 +1830,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function rebuild(){
     D.config={templates:clone((raw.config&&raw.config.templates)||[]),fieldSets:clone((raw.config&&raw.config.fieldSets)||[])};
     D.people=Object.keys(raw.people).map(function(id){var p=raw.people[id];return {id:id,divisionId:p.divisionId,name:p.name,first:p.first||"",last:p.last||"",email:p.email||"",role:p.role||""}}).sort(byName);
-    D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[])}}).sort(byName);
+    D.teams=Object.keys(raw.teams).map(function(id){var t=raw.teams[id];return {id:id,divisionId:t.divisionId,name:t.name,members:clone(t.members||[]),rotation:t.rotation||{}}}).sort(byName);
     D.people.forEach(function(p){PROF[p.id]={name:p.name,avatarUrl:""}});
     D.divs=Object.keys(raw.divs).map(function(id){return {id:id,name:raw.divs[id].name,members:[],admins:[]}}).sort(byName);
     var seenIds={};
@@ -4730,6 +4768,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;return}
     if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;return}
+    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askhand")){var hx=ui.ask.hand[+el.getAttribute("data-askhand")];if(hx)hx.pick=el.value;return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="bs-q"&&ui.bsPick){
