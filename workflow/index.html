@@ -1209,6 +1209,21 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // The built-in "Date Quoted" stamp became a fill rule: add it once to spaces that have both a Quoted
   // column and a Date Quoted date field (and no fill rules yet), so nothing stops working.
+  function seedQuoteRules(){
+    if(!CANWRITE)return;
+    var made=false;
+    D.spaces.forEach(function(sp){
+      if((sp.marks||[]).some(function(m){return m.id==="quote-seed"}))return;
+      var F=spaceFields(sp),q=sp.statuses.filter(function(x){return (x.name||"").trim().toLowerCase()==="quoted"})[0],
+        amt=F.filter(function(f){return f.type==="money"&&/quoted amount/i.test(f.name)})[0],
+        tk=F.filter(function(f){return (f.name||"").trim().toLowerCase()==="ticket #"})[0];
+      if(!q||!amt)return;
+      if(!(sp.rules||[]).some(function(r){return r.kind==="quote"}))
+        sp.rules=(sp.rules||[]).concat([{id:uid("r"),kind:"quote",status:q.name,amount:"cf:"+amt.id,number:tk?"cf:"+tk.id:"",must:true}]);
+      sp.marks=(sp.marks||[]).concat([{id:"quote-seed",kind:"mark"}]);made=true;
+    });
+    if(made)save();
+  }
   function seedFillRules(){
     if(!CANWRITE||state.fillSeed1)return;
     var made=false;
@@ -1238,29 +1253,34 @@ img.who{object-fit:cover;background:var(--chip)}
   function askFirst(p,is,sid,go){
     if(ui.askPass)return false;
     var rs=askRules(p,is,sid),qn=needsQuote(p,is,sid);
-    if(qn){var qf=quoteFields(p);rs=rs.filter(function(r){return r.field!=="cf:"+qf.amt.id&&!(qf.tkt&&r.field==="cf:"+qf.tkt.id)})}
+    if(qn){var qf=quoteFields(p,qn);rs=rs.filter(function(r){return r.field!=="cf:"+qf.amt.id&&!(qf.tkt&&r.field==="cf:"+qf.tkt.id)})}
     // the "who should handle the copy" question is asked here too, so it's all one window
     var hand=handoffsFor(p,is,sid).map(function(h){var g=predictPick(is,h.role);return Object.assign(h,{auto:g.pid,team:g.team,pick:g.pid})});
     if(!rs.length&&!qn&&!hand.length)return false;
-    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:"",quote:qn?{state:"none"}:null,hand:hand};
+    ui.ask={bid:is.id,status:sid,rules:rs,go:go,ans:{},note:"",quote:qn?{state:"none"}:null,qrule:qn,hand:hand};
     renderAsk();openOv("ov-ask");return true;
   }
-  /* Moving a bid into a column named Quoted (in a space with a Quoted amount field) asks for our quote
-     PDF in the same window. The server reads its Amount Due and quote number (quote_reader.py); the
-     amount fills Quoted amount (replacing what's there, still editable first) and the quote number fills
-     Ticket # if that's empty. The PDF lands in Supporting Docs tagged Quote. "Upload a new quote" on a
-     quoted bid opens the same window without moving it (re-quotes; the old file and amount stay in history). */
-  function quoteFields(p){
-    var F=spaceFields(p);
-    return {amt:F.filter(function(f){return f.type==="money"&&/quoted amount/i.test(f.name)})[0],
-      tkt:F.filter(function(f){return (f.name||"").trim().toLowerCase()==="ticket #"})[0]};
+  /* "Ask for the quote" automations (kind "quote": {status, amount:"cf:<Amount field>", number:"cf:<field>"
+     or "", must}): moving a bid into that column asks for our quote PDF in the same window. The server
+     reads its Amount Due and quote number (quote_reader.py); the amount fills the amount field (replacing
+     what's there, still editable first) and the quote number fills the number field if that's empty. The
+     PDF lands in Supporting Docs tagged Quote. "Upload a new quote" on a quoted bid opens the same window
+     without moving it (re-quotes; the old file and amount stay in history). */
+  function quoteFields(p,r){
+    var F=spaceFields(p),f=function(k){var id=String((r&&r[k])||"").replace(/^cf:/,"");return id?F.filter(function(x){return x.id===id})[0]:null};
+    var a=f("amount");return {amt:a&&a.type==="money"?a:null,tkt:f("number")||null};
   }
-  function isQuotedCol(p,sid){var st=stat(p,sid);return !!st&&/^quoted$/i.test((st.name||"").trim())}
-  function needsQuote(p,is,sid){return HAS_FILES&&!!sb&&is.type!=="Subtask"&&is.status!==sid&&isQuotedCol(p,sid)&&!!quoteFields(p).amt}
-  function canRequote(p,is){return HAS_FILES&&!!sb&&is.type!=="Subtask"&&!!quoteFields(p).amt&&(isQuotedCol(p,is.status)||(is.attachments||[]).some(function(f){return f.quote}))}
-  function openRequote(is){ui.ask={bid:is.id,status:null,rules:[],go:null,ans:{},note:"",quote:{state:"none"}};renderAsk();openOv("ov-ask")}
+  function quoteRules(p){return (p.rules||[]).filter(function(r){return r.kind==="quote"&&quoteFields(p,r).amt})}
+  function quoteRuleFor(p,sid){var st=stat(p,sid);return st?quoteRules(p).filter(function(r){return String(r.status).toLowerCase()===String(st.name).toLowerCase()})[0]||null:null}
+  function needsQuote(p,is,sid){return HAS_FILES&&sb&&is.type!=="Subtask"&&is.status!==sid?quoteRuleFor(p,sid):null}
+  // a bid sitting in a quote column, or one that already has a quote, can be re-quoted
+  function canRequote(p,is){
+    if(!HAS_FILES||!sb||is.type==="Subtask")return null;
+    return quoteRuleFor(p,is.status)||((is.attachments||[]).some(function(f){return f.quote})?quoteRules(p)[0]:null)||null;
+  }
+  function openRequote(is,r){ui.ask={bid:is.id,status:null,rules:[],go:null,ans:{},note:"",quote:{state:"none"},qrule:r};renderAsk();openOv("ov-ask")}
   function quoteHTML(k){
-    var Q=k.quote,p=proj(),is=byId(k.bid),qf=quoteFields(p),h='';
+    var Q=k.quote,p=proj(),is=byId(k.bid),qf=quoteFields(p,k.qrule),h='';
     if(Q.state==="none"||Q.state==="err"){
       h+='<label class="dropz" data-qdrop>'+ic("arrowU",16)+'<span>Drop the quote PDF here or <u>choose it</u></span><input type="file" accept=".pdf,application/pdf" data-qinput hidden></label>';
       if(Q.state==="err")h+='<p class="qmsg bad">Couldn’t upload '+esc(Q.name)+': '+esc(Q.err||"unknown error")+'. Try again.</p>';
@@ -1307,8 +1327,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(!Q.found){var ai=$("ask-qamt");if(ai)ai.focus()}
   }
   // write the quote onto the bid: the file, the amount (always), the quote number (only into an empty Ticket #)
-  function applyQuote(p,is,Q){
-    var qf=quoteFields(p),v=String(Math.round(+Q.amount*100)/100);
+  function applyQuote(p,is,Q,r){
+    var qf=quoteFields(p,r),v=String(Math.round(+Q.amount*100)/100);
     Q.saved=true;Q.rec.at=Date.now();
     is.attachments=(is.attachments||[]).concat([Q.rec]);logH(is,"Quote","",Q.rec.name);
     is.fields=is.fields||{};
@@ -1339,7 +1359,7 @@ img.who{object-fit:cover;background:var(--chip)}
           x.team?'Nobody on '+esc(x.team.name)+' has the role '+esc(x.role)+'.':'No team is set on this bid, so nobody is picked automatically.')+
         (k.hand.length>1?'':' A copy goes to '+esc(x.toName)+'.')+'</p>';
     });
-    if(k.quote)h+='<label>Our quote <span class="fine">(PDF)</span></label><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>';
+    if(k.quote)h+='<label>Our quote <span class="fine">(PDF'+(k.qrule&&k.qrule.must===false&&k.go?', optional':'')+')</span></label><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>';
     k.rules.forEach(function(r){
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
       h+='<label>'+esc(tg[1])+(r.must?'':' <span class="fine">(optional)</span>')+'</label>'+askInput(p,r,k.ans[r.field]||"");
@@ -1358,11 +1378,14 @@ img.who{object-fit:cover;background:var(--chip)}
     var Q=k.quote;
     if(Q){
       if(Q.state==="up"||Q.state==="read"){toast("One moment — the quote is still "+(Q.state==="up"?"uploading.":"being read."));return}
-      if(Q.state!=="ok"){toast("Upload the quote PDF first.");return}
+      if(Q.state!=="ok"&&(!k.go||k.qrule.must!==false)){toast("Upload the quote PDF first.");return}
+      if(Q.state!=="ok")Q=null;   // optional and skipped
+    }
+    if(Q){
       if(String(Q.amount).trim()===""||!isFinite(+Q.amount)||+Q.amount<0){toast("Type the quoted amount.");var qa=$("ask-qamt");if(qa)qa.focus();return}
     }
     ui.ask=null;$("ov-ask").classList.remove("open");
-    if(Q)applyQuote(p,is,Q);
+    if(Q)applyQuote(p,is,Q,k.qrule);
     ui.askAns=k.ans;ui.askPass=true;
     if(k.hand&&k.hand.length){ui.handPick={};k.hand.forEach(function(x){ui.handPick[x.to]=x.pick})}
     try{if(k.go)k.go()}finally{ui.askAns=null;ui.askPass=false;ui.handPick=null}
@@ -1675,8 +1698,8 @@ img.who{object-fit:cover;background:var(--chip)}
   /* rows <-> documents */
   // The space's "Date on cards" pick is stored in wf_spaces.rules as {kind:"card",field} so it needs
   // no new column (the copy trigger skips rules without "to"); in the browser it's sp.cardDate.
-  function rowToSpace(r){var R=r.rules||[],cd=R.filter(function(x){return x&&x.kind==="card"})[0];return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:R.filter(function(x){return !x||x.kind!=="card"}),cardDate:cd?cd.field||"":"",fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
-  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:(d.rules||[]).concat(d.cardDate?[{id:"card",kind:"card",field:d.cardDate}]:[])};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
+  function rowToSpace(r){var R=r.rules||[],cd=R.filter(function(x){return x&&x.kind==="card"})[0];return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:R.filter(function(x){return !x||(x.kind!=="card"&&x.kind!=="mark")}),marks:R.filter(function(x){return x&&x.kind==="mark"}),cardDate:cd?cd.field||"":"",fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
+  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:(d.rules||[]).concat(d.cardDate?[{id:"card",kind:"card",field:d.cardDate}]:[]).concat(d.marks||[])};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
   function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):"",attachments:r.attachments||[]}}
   function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined,attachments:HAS_FILES?(d.attachments||[]):undefined}}
 
@@ -1855,6 +1878,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(syncTemplates())scheduleFlush();   // a template changed elsewhere, or a space can start following one
     ensureWorkflowSpaces();
     seedFillRules();
+    seedQuoteRules();
     fixSelection();
     render();
     handoff();
@@ -1955,11 +1979,12 @@ img.who{object-fit:cover;background:var(--chip)}
   function automationsHTML(p){
     var rules=p.rules||[];
     var h='<section class="panel"><div class="phead"><h3>Automations</h3><button class="addbtn" data-arnew aria-label="Add an automation" title="Add an automation">'+ic("plus",16)+'</button></div>'+
-      '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields (or ask whoever moved it), remind the assignee to follow up, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
+      '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields (or ask whoever moved it), ask for the quote PDF, remind the assignee to follow up, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
     if(rules.length)h+='<div class="cards arcards">';
     rules.forEach(function(r){
       if(r.kind==="fill"){h+=fillCardHTML(p,r);return}
       if(r.kind==="remind"){h+=remindCardHTML(p,r);return}
+      if(r.kind==="quote"){h+=quoteCardHTML(p,r);return}
       var t=D.spaces.filter(function(x){return x.id===r.to})[0];
       var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
       var warn=!t?'That space no longer exists, so this does nothing.':(t.parentId!==p.id?'That space is no longer a sub-space of this one, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':''));
@@ -1998,6 +2023,15 @@ img.who{object-fit:cover;background:var(--chip)}
       '<div class="arl">Remind the assignee</div><div class="arto"><b>After '+esc(hoursLabel(r.hours))+'</b><br>If it’s still in that column</div>'+
       (!okCol?'<div class="fine" style="color:var(--high);margin:0">This space has no column named “'+esc(r.status)+'”, so this does nothing.</div>':'')+'</div>';
   }
+  function quoteCardHTML(p,r){
+    var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()}),qf=quoteFields(p,r);
+    var warn=!qf.amt?'The amount field is no longer in this space, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':'');
+    return '<div class="mcard arcard"><div class="arl">When a bid enters</div><div class="tname">'+esc(r.status)+'</div>'+
+      '<button class="editbtn" data-aredit="'+esc(r.id)+'" aria-label="Edit automation" title="Edit automation">'+ic("pencil",15)+'</button>'+
+      '<div class="arl">Ask for the quote</div><div class="arto"><b>PDF'+(r.must===false?', optional':', required')+'</b><br>Amount Due → '+esc(qf.amt?qf.amt.name:"a deleted field")+
+        (qf.tkt?'<br>Quote number → '+esc(qf.tkt.name)+' (if empty)':'')+'</div>'+
+      (warn?'<div class="fine" style="color:var(--high);margin:0">'+warn+'</div>':'')+'</div>';
+  }
   function hoursLabel(h){h=+h||48;return h%24===0?(h/24)+(h===24?" day":" days")+(h>=48?" ("+h+" hours)":""):h+(h===1?" hour":" hours")}
   // the value picker for a fill rule, by the field's type
   function fillValueHTML(p,f){
@@ -2024,11 +2058,23 @@ img.who{object-fit:cover;background:var(--chip)}
     var p=proj();if(!p){closeOv("ov-auto");return}
     var kids=childSpaces(p),body,editing=!!ui.editRule;
     $("autoTitle").textContent=editing?"Edit automation":"New automation";
-    var cur=ui.ar.kind==="fill"||ui.ar.kind==="remind"?ui.ar.kind:kids.length?"copy":"fill";
-    var kindSel=editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field",cur)+opt("remind","Remind the assignee to follow up",cur)+(kids.length?opt("copy","Add a copy to a sub-space",cur):'')+'</select>';
+    var cur=ui.ar.kind==="fill"||ui.ar.kind==="remind"||ui.ar.kind==="quote"?ui.ar.kind:kids.length?"copy":"fill";
+    var kindSel=editing?'':'<label for="ar-k">Do this</label><select id="ar-k" data-ar="kind">'+opt("fill","Fill in a field",cur)+opt("quote","Ask for the quote PDF",cur)+opt("remind","Remind the assignee to follow up",cur)+(kids.length?opt("copy","Add a copy to a sub-space",cur):'')+'</select>';
     var acts=(editing?'<button class="btn small danger" data-delrule="'+esc(ui.editRule)+'">'+(ui.armR?'Tap to confirm':'Delete automation')+'</button>':'')+
       '<span class="spacer"></span><button class="btn" data-close="ov-auto">Cancel</button><button class="btn primary" data-addrule>'+(editing?'Save':'Add automation')+'</button>';
-    if(cur==="remind"){
+    if(cur==="quote"){
+      var qa=ui.ar,F=spaceFields(p),money=F.filter(function(f){return f.type==="money"}),texts=F.filter(function(f){return f.type==="text"||f.type==="number"});
+      if(!money.some(function(f){return "cf:"+f.id===qa.amount})){var qm=money.filter(function(f){return /quoted amount/i.test(f.name)})[0]||money[0];qa.amount=qm?"cf:"+qm.id:""}
+      if(qa.number==null){var qt=texts.filter(function(f){return (f.name||"").trim().toLowerCase()==="ticket #"})[0];qa.number=qt?"cf:"+qt.id:""}
+      body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,qa.status||(p.statuses.filter(function(x){return /^quoted$/i.test(x.name)})[0]||p.statuses[0]).name)}).join("")+'</select>'+kindSel+
+        (money.length?'<label for="ar-qa">Put the Amount Due in</label><select id="ar-qa" data-ar="amount">'+money.map(function(f){return opt("cf:"+f.id,f.name,qa.amount)}).join("")+'</select>'+
+          '<label for="ar-qn">Put the quote number in</label><select id="ar-qn" data-ar="number">'+opt("","Nowhere",qa.number)+texts.map(function(f){return opt("cf:"+f.id,f.name,qa.number)}).join("")+'</select>'+
+          '<p class="fine" style="margin:6px 0 0">Only filled in when it’s empty, so a number someone typed stays.</p>'+
+          '<label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:400"><input type="checkbox" data-ar="must" style="width:auto"'+(qa.must!==false?' checked':'')+'> The quote is required (Cancel leaves the bid where it was)</label>'+
+          '<p class="fine" style="margin:6px 0 0">Whoever moves a bid there uploads our quote PDF in the same window. Its Amount Due is read and replaces the amount (they can correct it first), and the PDF is saved in Supporting Docs tagged Quote. A bid in that column also gets an Upload a new quote button for re-quotes.</p>':
+          '<p class="fine" style="color:var(--high)">This space has no Amount ($) field yet. Add one in Settings → Workflows → Fields.</p>');
+      $("autoActs").innerHTML=acts;
+    }else if(cur==="remind"){
       var rm=ui.ar;
       body='<label for="ar-s">When a bid enters</label><select id="ar-s" data-ar="status">'+p.statuses.map(function(s){return opt(s.name,s.name,rm.status||p.statuses[0].name)}).join("")+'</select>'+kindSel+
         '<label for="ar-h">After how many hours</label><input id="ar-h" data-ar="hours" type="number" min="1" step="1" value="'+esc(String(rm.hours||48))+'" style="max-width:120px">'+
@@ -4258,7 +4304,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-wkprev] a[href]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();closeOv("ov-settings");if(!window.wfOpenLink(el.href))location.href=el.href;return}
     if(t.closest("[data-wktoggle]")){WK.open=!WK.open;render();return}
     if(t.closest("[data-qchange]")&&ui.ask&&ui.ask.quote){quoteDrop(ui.ask.quote);ui.ask.quote={state:"none"};renderAskQuote();return}
-    if(t.closest("[data-newquote]")){var nqi=byId(ui.issueId);if(nqi)openRequote(nqi);return}
+    if(t.closest("[data-newquote]")){var nqi=byId(ui.issueId),nqr=nqi&&canRequote(proj(),nqi);if(nqr)openRequote(nqi,nqr);return}
     if(t.closest("[data-phmail]")){
       var pmi=byId(ui.issueId),pmb=pmi&&ui.bs[pmi.id],pS=pmi&&phSelOf(pmi.id),to=[];
       phMailable(pmb&&pmb.data&&pmb.data.holders).forEach(function(x){if(pS[phKey(x)])(x.emails||[]).forEach(function(a){if(to.indexOf(a)<0)to.push(a)})});
@@ -4319,6 +4365,17 @@ img.who{object-fit:cover;background:var(--chip)}
       if(sb)Promise.resolve(sb.from("wf_division_names").delete().eq("division_id",pgid)).then(function(){},function(){});
       delete raw.names[pgid];render();toast("Archived division deleted");return;
     }
+    if(t.closest("[data-addrule]")&&ui.ar.kind==="quote"){
+      var qp=proj();if(!qp)return;
+      var qx=ui.ar,qs=qx.status||(qp.statuses.filter(function(x){return /^quoted$/i.test(x.name)})[0]||qp.statuses[0]).name;
+      if(!qx.amount){toast("Add an Amount ($) field to this space first.");return}
+      qp.rules=qp.rules||[];
+      var qex=qp.rules.filter(function(x){return x.id===ui.editRule})[0];
+      if(qp.rules.some(function(x){return x!==qex&&x.kind==="quote"&&String(x.status).toLowerCase()===qs.toLowerCase()})){toast("That column already asks for the quote.");return}
+      var qrule={kind:"quote",status:qs,amount:qx.amount,number:qx.number||"",must:qx.must!==false};
+      if(qex)Object.assign(qex,qrule);else qp.rules.push(Object.assign({id:uid("r")},qrule));
+      ui.ar={status:"",to:"",col:"",assign:""};closeOv("ov-auto");save();render();toast(qex?"Automation saved":"Automation added");return;
+    }
     if(t.closest("[data-addrule]")&&ui.ar.kind==="remind"){
       var mp=proj();if(!mp)return;
       var ms=ui.ar.status||mp.statuses[0].name,mh=Math.round(+(($("ar-h")||{}).value||ui.ar.hours||48));
@@ -4362,7 +4419,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-arnew]")){ui.editRule=null;ui.armR=false;ui.ar={status:"",to:"",col:"",assign:""};renderAutoModal();openOv("ov-auto");return}
     if((el=t.closest("[data-aredit]"))){
       var ep=proj(),er=((ep&&ep.rules)||[]).filter(function(x){return x.id===el.getAttribute("data-aredit")})[0];if(!er)return;
-      ui.editRule=er.id;ui.armR=false;ui.ar=er.kind==="remind"?{kind:"remind",status:er.status,hours:er.hours||48}:er.kind==="fill"?{kind:"fill",status:er.status,field:er.field,value:er.value,blank:!!er.blank,must:er.must!==false}:{status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
+      ui.editRule=er.id;ui.armR=false;ui.ar=er.kind==="quote"?{kind:"quote",status:er.status,amount:er.amount||"",number:er.number||"",must:er.must!==false}:er.kind==="remind"?{kind:"remind",status:er.status,hours:er.hours||48}:er.kind==="fill"?{kind:"fill",status:er.status,field:er.field,value:er.value,blank:!!er.blank,must:er.must!==false}:{status:er.status,to:er.to,col:er.col||"",assign:er.assign||"",ask:!!er.ask};renderAutoModal();openOv("ov-auto");return;
     }
     if((el=t.closest("[data-delrule]"))){
       var dp=proj(),did=el.getAttribute("data-delrule");
@@ -4716,7 +4773,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.hasAttribute("data-spacecard")){var cp=proj();if(cp){cp.cardDate=el.value;save();render();toast(el.value?"Cards show "+el.options[el.selectedIndex].text:"Cards show the due date")}return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.type==="checkbox"?el.checked:el.value;
       if(v==="mode"){ui.ar.value=el.value==="ask"?"@ask":"";renderAutoModal();return}
-      if((v==="value"&&el.tagName!=="SELECT")||v==="blank"||v==="must"||v==="hours")return;   // nothing else depends on these; re-drawing would swallow a click on Save
+      if((v==="value"&&el.tagName!=="SELECT")||v==="blank"||v==="must"||v==="hours"||v==="amount"||v==="number")return;   // nothing else depends on these; re-drawing would swallow a click on Save
       if(v==="to")ui.ar.col="";if(v==="field")ui.ar.value="";if(v==="kind"&&ui.ar.kind==="copy")delete ui.ar.kind;renderAutoModal();return}
     if((v=el.getAttribute("data-tname"))){
       var tt=tplById(v),tv=el.value.trim();
