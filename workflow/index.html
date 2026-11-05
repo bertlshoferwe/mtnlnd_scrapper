@@ -525,6 +525,10 @@ td.over{color:var(--high);font-weight:600}
 .askwho{display:flex;align-items:center;gap:10px}
 .askwho .who{width:32px;height:32px;font-size:12px}
 .sheet .askwho select{flex:1;min-width:0}
+.askblk.bad{border-color:var(--high);background:color-mix(in srgb,var(--high) 7%,transparent)}
+.askblk.bad .dropz{border-color:var(--high)}
+.sheet .askblk.bad input,.sheet .askblk.bad select,.sheet .askblk.bad textarea{border-color:var(--high)}
+.askerr{display:flex;align-items:center;gap:6px;margin:8px 0 0;font-size:13px;font-weight:600;color:var(--high)}
 .askhint{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.4}
 .askhint .ic{flex:0 0 auto;margin-top:1px}
 .dropz.big{flex-direction:column;gap:4px;min-height:120px;padding:16px;text-align:center;background:var(--bg)}
@@ -1323,6 +1327,11 @@ img.who{object-fit:cover;background:var(--chip)}
     return h;
   }
   function renderAskQuote(){var el=$("ask-q");if(el&&ui.ask&&ui.ask.quote)el.innerHTML=quoteHTML(ui.ask)}
+  function askOk(key){
+    var k=ui.ask;if(!k||!k.err||!k.err[key])return;delete k.err[key];
+    var b=document.querySelector('#askBody [data-askk="'+CSS.escape(key)+'"]');if(!b)return;
+    b.classList.remove("bad");var m=b.querySelector(".askerr");if(m)m.remove();
+  }
   // a quote uploaded but not kept (Cancel, Change, a newer pick) comes back out of storage
   function quoteDrop(Q){
     if(!Q||!Q.rec||Q.saved)return;Q.dropped=true;
@@ -1335,7 +1344,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var id=uuid(),path=is.id+"/"+id+"-"+f.name.replace(/[^\w.\-]+/g,"_");
     var Q=k.quote={state:"up",name:f.name,size:f.size,loaded:0,amount:"",rec:{id:id,name:f.name,path:path,size:f.size,type:f.type||"application/pdf",by:ME,quote:true}};
     var live=function(){return ui.ask===k&&k.quote===Q};
-    renderAskQuote();
+    askOk("quote");renderAskQuote();
     // read it while it uploads
     var read=fetch("/api/"+encodeURIComponent(is.divisionId)+"/read-quote?name="+encodeURIComponent(f.name),{method:"POST",headers:{"Content-Type":"application/pdf"},body:f})
       .then(function(r){return r.ok?r.json():{}}).catch(function(){return {}});
@@ -1377,6 +1386,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("askTitle").textContent=k.status?"Moving to":"Upload a new quote";
     var to=$("askTo");to.hidden=!k.status;to.textContent=k.status?stat(p,k.status).name:"";
     var h='<p class="asksub">'+esc(is.title)+'</p>',tag=function(req){return '<span class="tag'+(req?' req':'')+'">'+(req?'Required':'Optional')+'</span>'};
+    var E=k.err||{},blk=function(key){return '<div class="askblk'+(E[key]?' bad':'')+'" data-askk="'+esc(key)+'">'},msg=function(key){return E[key]?'<p class="askerr">'+ic("info",14)+esc(E[key])+'</p>':''};
     (k.hand||[]).forEach(function(x,i){
       h+='<div class="askblk"><label for="ask-h'+i+'">'+(k.hand.length>1?'Assign the copy in '+esc(x.toName)+' to':'Assign to')+'</label>'+
         '<div class="askwho"><span data-askav="'+i+'">'+avHTML(x.pick)+'</span><select id="ask-h'+i+'" data-askhand="'+i+'">'+teamOptions(x.pick)+'</select></div>'+
@@ -1384,30 +1394,35 @@ img.who{object-fit:cover;background:var(--chip)}
           x.team?'Nobody on '+esc(x.team.name)+' has the role '+esc(x.role)+'.':'No team is set on this bid, so nobody is picked automatically.')+
         (k.hand.length>1?'':' A copy goes to '+esc(x.toName)+'.')+'</span></p></div>';
     });
-    if(k.quote)h+='<div class="askblk"><div class="bl">Our quote (PDF)'+tag(!(k.qrule&&k.qrule.must===false&&k.go))+'</div><div class="askq" id="ask-q">'+quoteHTML(k)+'</div></div>';
+    if(k.quote)h+=blk("quote")+'<div class="bl">Our quote (PDF)'+tag(!(k.qrule&&k.qrule.must===false&&k.go))+'</div><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>'+msg("quote")+'</div>';
     k.rules.forEach(function(r){
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
-      h+='<div class="askblk"><div class="bl">'+esc(tg[1])+tag(r.must)+'</div>'+askInput(p,r,k.ans[r.field]||"")+'</div>';
+      h+=blk("r:"+r.field)+'<div class="bl">'+esc(tg[1])+tag(r.must)+'</div>'+askInput(p,r,k.ans[r.field]||"")+msg("r:"+r.field)+'</div>';
     });
     var other=k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")});
-    h+='<div class="askblk"><label for="ask-note">Note'+tag(other)+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering. It’s added to the bid as a comment.')+'">'+esc(k.note)+'</textarea></div>';
+    if(!other)delete E.note;
+    h+=blk("note")+'<label for="ask-note">Note'+tag(other)+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering. It’s added to the bid as a comment.')+'">'+esc(k.note)+'</textarea>'+msg("note")+'</div>';
     $("askBody").innerHTML=h;
     $("askActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-ask">Cancel</button><button class="btn primary" data-asksave>'+(k.go?'Move it':'Save quote')+'</button>';
   }
   function saveAsk(){
     var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is)return;
-    var miss=k.rules.filter(function(r){return r.must&&!String(k.ans[r.field]||"").trim()})[0];
-    if(miss){var mt=fillTargets(p).filter(function(x){return x[0]===miss.field})[0];toast("Choose a "+(mt?mt[1]:"value")+" first.");return}
-    if(k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")})&&!k.note.trim()){toast("Add a short note about what happened.");var n=$("ask-note");if(n)n.focus();return}
     var Q=k.quote;
-    if(Q){
-      if(Q.state==="up"||Q.state==="read"){toast("One moment — the quote is still "+(Q.state==="up"?"uploading.":"being read."));return}
-      if(Q.state!=="ok"&&(!k.go||k.qrule.must!==false)){toast("Upload the quote PDF first.");return}
-      if(Q.state!=="ok")Q=null;   // optional and skipped
+    if(Q&&(Q.state==="up"||Q.state==="read")){toast("One moment — the quote is still "+(Q.state==="up"?"uploading.":"being read."));return}
+    // every missing answer gets a red outline and a line saying what's needed
+    var E={};
+    if(Q&&Q.state!=="ok"&&(!k.go||k.qrule.must!==false))E.quote="Add the quote PDF.";
+    else if(Q&&Q.state==="ok"&&(String(Q.amount).trim()===""||!isFinite(+Q.amount)||+Q.amount<0))E.quote="Type the quoted amount.";
+    k.rules.forEach(function(r){if(r.must&&!String(k.ans[r.field]||"").trim())E["r:"+r.field]="Choose one to continue."});
+    if(k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")})&&!k.note.trim())E.note="Add a short note about what happened.";
+    if(Object.keys(E).length){
+      var nt=$("ask-note");if(nt)k.note=nt.value;
+      k.err=E;renderAsk();
+      var b=document.querySelector("#askBody .askblk.bad");
+      if(b){b.scrollIntoView({block:"nearest",behavior:"smooth"});var fi=b.querySelector("input:not([hidden]):not([type=radio]),textarea");if(fi)fi.focus()}
+      return;
     }
-    if(Q){
-      if(String(Q.amount).trim()===""||!isFinite(+Q.amount)||+Q.amount<0){toast("Type the quoted amount.");var qa=$("ask-qamt");if(qa)qa.focus();return}
-    }
+    if(Q&&Q.state!=="ok")Q=null;   // optional and skipped
     ui.ask=null;$("ov-ask").classList.remove("open");
     if(Q)applyQuote(p,is,Q,k.qrule);
     ui.askAns=k.ans;ui.askPass=true;
@@ -4847,12 +4862,12 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("input",function(e){
     var el=e.target;
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askf")){
-      var af=el.getAttribute("data-askf"),wasOther=/^other\b/i.test(ui.ask.ans[af]||"");ui.ask.ans[af]=el.value;
+      var af=el.getAttribute("data-askf"),wasOther=/^other\b/i.test(ui.ask.ans[af]||"");ui.ask.ans[af]=el.value;if(String(el.value).trim())askOk("r:"+af);
       if(el.type==="radio"||wasOther!==/^other\b/i.test(el.value)){var nt=$("ask-note");if(nt)ui.ask.note=nt.value;renderAsk()}
       return;
     }
-    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;return}
-    if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;return}
+    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;if(el.value.trim())askOk("note");return}
+    if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;if(el.value.trim())askOk("quote");return}
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askhand")){var hx=ui.ask.hand[+el.getAttribute("data-askhand")];if(hx){hx.pick=el.value;var av=document.querySelector('[data-askav="'+el.getAttribute("data-askhand")+'"]');if(av)av.innerHTML=avHTML(hx.pick)}return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
