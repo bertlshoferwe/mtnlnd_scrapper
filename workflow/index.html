@@ -515,7 +515,28 @@ td.over{color:var(--high);font-weight:600}
 .fine{font-size:12px;color:var(--muted);margin:8px 0 0}
 .srow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .srow:first-of-type{border-top:0}
-.askq .dropz{min-height:72px}
+.askhd{display:flex;align-items:center;gap:10px;margin:0 0 4px}
+#ov-ask .askhd h3{margin:0}
+.askto{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:color-mix(in srgb,var(--c1) 18%,var(--surface));color:var(--c1);white-space:nowrap}
+.askblk{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 12px;background:color-mix(in srgb,var(--bg) 45%,transparent)}
+.askblk>label:first-child,.askblk .bl{display:flex;align-items:baseline;gap:8px;margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink)}
+.askblk .bl .tag,.askblk>label .tag{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted)}
+.askblk .tag.req{color:var(--c1)}
+.askwho{display:flex;align-items:center;gap:10px}
+.askwho .who{width:32px;height:32px;font-size:12px}
+.sheet .askwho select{flex:1;min-width:0}
+.askhint{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.4}
+.askhint .ic{flex:0 0 auto;margin-top:1px}
+.askq .dropz{flex-direction:column;gap:4px;min-height:120px;padding:16px;text-align:center;background:var(--bg)}
+.askq .dropz .dzi{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:color-mix(in srgb,var(--c1) 16%,transparent);color:var(--c1);margin:0 0 4px}
+.askq .dropz b{color:var(--ink);font-size:14px}
+.askq .dropz .dzs{font-size:13px}
+.askq .dropz .dzs u{color:var(--c1);text-decoration:none;font-weight:600}
+.askq .dropz .dzf{font-size:12px;color:var(--muted);margin-top:4px}
+.askq .qfile{background:var(--bg)}
+.sheet .askblk textarea#ask-note{min-height:56px}
+#ov-ask .actions{border-top:1px solid var(--line);margin:16px -16px 0;padding:14px 16px 0}
+@media (min-width:760px){#ov-ask .sheet{padding:22px 24px}#ov-ask .actions{margin:16px -24px 0;padding:14px 24px 0}}
 .askq .qfile{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:13px}
 .askq .qfile .qn{flex:1;min-width:0;color:var(--ink);font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .askq .qmsg{font-size:13px;margin:8px 0 0;color:var(--muted)}
@@ -523,7 +544,7 @@ td.over{color:var(--high);font-weight:600}
 .askq .qmsg.bad{color:var(--high)}
 .askq .upbar{margin:8px 0 0}
 .qchip{flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:color-mix(in srgb,var(--c1) 16%,transparent);color:var(--ink)}
-.asksub{margin:-4px 0 14px;font-size:14px;color:var(--muted);text-transform:none;letter-spacing:0}
+.asksub{margin:0 0 16px;font-size:14px;color:var(--muted);text-transform:none;letter-spacing:0}
 .askopts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 4px}
 @media (max-width:420px){.askopts{grid-template-columns:1fr}}
 .askopt{position:relative;display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 12px;margin:0;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font-size:14px;font-weight:500;line-height:1.3;text-align:left;cursor:pointer;transition:border-color .12s,background .12s}
@@ -1010,7 +1031,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
 <div class="overlay" id="ov-ask" role="dialog" aria-modal="true" aria-labelledby="askTitle">
   <div class="sheet">
-    <h3 id="askTitle">Moving the bid</h3>
+    <div class="askhd"><h3 id="askTitle">Moving the bid</h3><span class="askto" id="askTo" hidden></span></div>
     <div id="askBody"></div>
     <div class="actions" id="askActs"></div>
   </div>
@@ -1077,6 +1098,7 @@ img.who{object-fit:cover;background:var(--chip)}
     image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
@@ -1282,7 +1304,8 @@ img.who{object-fit:cover;background:var(--chip)}
   function quoteHTML(k){
     var Q=k.quote,p=proj(),is=byId(k.bid),qf=quoteFields(p,k.qrule),h='';
     if(Q.state==="none"||Q.state==="err"){
-      h+='<label class="dropz" data-qdrop>'+ic("arrowU",16)+'<span>Drop the quote PDF here or <u>choose it</u></span><input type="file" accept=".pdf,application/pdf" data-qinput hidden></label>';
+      h+='<label class="dropz" data-qdrop><span class="dzi">'+FILE_IC+'</span><b>Drop the quote PDF here</b><span class="dzs">or <u>choose a file</u></span>'+
+        '<span class="dzf">We’ll read the Amount Due'+(qf.tkt?' and quote number':'')+' from it.</span><input type="file" accept=".pdf,application/pdf" data-qinput hidden></label>';
       if(Q.state==="err")h+='<p class="qmsg bad">Couldn’t upload '+esc(Q.name)+': '+esc(Q.err||"unknown error")+'. Try again.</p>';
       return h;
     }
@@ -1351,22 +1374,23 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function renderAsk(){
     var k=ui.ask,p=proj(),is=k&&byId(k.bid);if(!k||!p||!is){closeOv("ov-ask");return}
-    $("askTitle").textContent=k.status?"Moving to "+stat(p,k.status).name:"Upload a new quote";
-    var h='<p class="asksub">'+esc(is.title)+'</p>';
+    $("askTitle").textContent=k.status?"Moving to":"Upload a new quote";
+    var to=$("askTo");to.hidden=!k.status;to.textContent=k.status?stat(p,k.status).name:"";
+    var h='<p class="asksub">'+esc(is.title)+'</p>',tag=function(req){return '<span class="tag'+(req?' req':'')+'">'+(req?'Required':'Optional')+'</span>'};
     (k.hand||[]).forEach(function(x,i){
-      h+='<label for="ask-h'+i+'">'+(k.hand.length>1?'Assign the copy in '+esc(x.toName)+' to':'Assign to')+'</label><select id="ask-h'+i+'" data-askhand="'+i+'">'+teamOptions(x.pick)+'</select>'+
-        '<p class="fine" style="margin:4px 0 12px">'+(x.auto?esc(nameOf(x.auto).split(" ")[0])+' is next in line for '+esc(x.team?x.team.name:"the team")+'’s '+esc(x.role)+'.':
+      h+='<div class="askblk"><label for="ask-h'+i+'">'+(k.hand.length>1?'Assign the copy in '+esc(x.toName)+' to':'Assign to')+'</label>'+
+        '<div class="askwho"><span data-askav="'+i+'">'+avHTML(x.pick)+'</span><select id="ask-h'+i+'" data-askhand="'+i+'">'+teamOptions(x.pick)+'</select></div>'+
+        '<p class="askhint">'+ic("info",14)+'<span>'+(x.auto?esc(nameOf(x.auto).split(" ")[0])+' is next in line for '+esc(x.team?x.team.name:"the team")+'’s '+esc(x.role)+'.':
           x.team?'Nobody on '+esc(x.team.name)+' has the role '+esc(x.role)+'.':'No team is set on this bid, so nobody is picked automatically.')+
-        (k.hand.length>1?'':' A copy goes to '+esc(x.toName)+'.')+'</p>';
+        (k.hand.length>1?'':' A copy goes to '+esc(x.toName)+'.')+'</span></p></div>';
     });
-    if(k.quote)h+='<label>Our quote <span class="fine">(PDF'+(k.qrule&&k.qrule.must===false&&k.go?', optional':'')+')</span></label><div class="askq" id="ask-q">'+quoteHTML(k)+'</div>';
+    if(k.quote)h+='<div class="askblk"><div class="bl">Our quote (PDF)'+tag(!(k.qrule&&k.qrule.must===false&&k.go))+'</div><div class="askq" id="ask-q">'+quoteHTML(k)+'</div></div>';
     k.rules.forEach(function(r){
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];
-      h+='<label>'+esc(tg[1])+(r.must?'':' <span class="fine">(optional)</span>')+'</label>'+askInput(p,r,k.ans[r.field]||"");
+      h+='<div class="askblk"><div class="bl">'+esc(tg[1])+tag(r.must)+'</div>'+askInput(p,r,k.ans[r.field]||"")+'</div>';
     });
     var other=k.rules.some(function(r){return /^other\b/i.test(k.ans[r.field]||"")});
-    h+='<label for="ask-note">Note'+(other?'':' <span class="fine">(optional)</span>')+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering')+'">'+esc(k.note)+'</textarea>'+
-      '<p class="fine" style="margin:6px 0 0">The note is added to the bid as a comment.</p>';
+    h+='<div class="askblk"><label for="ask-note">Note'+tag(other)+'</label><textarea id="ask-note" data-asknote rows="2" placeholder="'+(other?'What happened?':'Anything worth remembering. It’s added to the bid as a comment.')+'">'+esc(k.note)+'</textarea></div>';
     $("askBody").innerHTML=h;
     $("askActs").innerHTML='<span class="spacer"></span><button class="btn" data-close="ov-ask">Cancel</button><button class="btn primary" data-asksave>'+(k.go?'Move it':'Save quote')+'</button>';
   }
@@ -4827,7 +4851,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-asknote")){ui.ask.note=el.value;return}
     if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;return}
-    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askhand")){var hx=ui.ask.hand[+el.getAttribute("data-askhand")];if(hx)hx.pick=el.value;return}
+    if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askhand")){var hx=ui.ask.hand[+el.getAttribute("data-askhand")];if(hx){hx.pick=el.value;var av=document.querySelector('[data-askav="'+el.getAttribute("data-askhand")+'"]');if(av)av.innerHTML=avHTML(hx.pick)}return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="bs-q"&&ui.bsPick){
