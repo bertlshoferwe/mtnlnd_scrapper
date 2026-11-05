@@ -527,12 +527,12 @@ td.over{color:var(--high);font-weight:600}
 .sheet .askwho select{flex:1;min-width:0}
 .askhint{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.4}
 .askhint .ic{flex:0 0 auto;margin-top:1px}
-.askq .dropz{flex-direction:column;gap:4px;min-height:120px;padding:16px;text-align:center;background:var(--bg)}
-.askq .dropz .dzi{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:color-mix(in srgb,var(--c1) 16%,transparent);color:var(--c1);margin:0 0 4px}
-.askq .dropz b{color:var(--ink);font-size:14px}
-.askq .dropz .dzs{font-size:13px}
-.askq .dropz .dzs u{color:var(--c1);text-decoration:none;font-weight:600}
-.askq .dropz .dzf{font-size:12px;color:var(--muted);margin-top:4px}
+.dropz.big{flex-direction:column;gap:4px;min-height:120px;padding:16px;text-align:center;background:var(--bg)}
+.dropz.big .dzi{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:color-mix(in srgb,var(--c1) 16%,transparent);color:var(--c1);margin:0 0 4px}
+.dropz.big b{color:var(--ink);font-size:14px}
+.dropz.big .dzs{font-size:13px}
+.dropz.big .dzs u{color:var(--c1);text-decoration:none;font-weight:600}
+.dropz.big .dzf{font-size:12px;color:var(--muted);margin-top:4px}
 .askq .qfile{background:var(--bg)}
 .sheet .askblk textarea#ask-note{min-height:56px}
 #ov-ask .actions{border-top:1px solid var(--line);margin:16px -16px 0;padding:14px 16px 0}
@@ -1304,7 +1304,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function quoteHTML(k){
     var Q=k.quote,p=proj(),is=byId(k.bid),qf=quoteFields(p,k.qrule),h='';
     if(Q.state==="none"||Q.state==="err"){
-      h+='<label class="dropz" data-qdrop><span class="dzi">'+FILE_IC+'</span><b>Drop the quote PDF here</b><span class="dzs">or <u>choose a file</u></span>'+
+      h+='<label class="dropz big" data-qdrop><span class="dzi">'+FILE_IC+'</span><b>Drop the quote PDF here</b><span class="dzs">or <u>choose a file</u></span>'+
         '<span class="dzf">We’ll read the Amount Due'+(qf.tkt?' and quote number':'')+' from it.</span><input type="file" accept=".pdf,application/pdf" data-qinput hidden></label>';
       if(Q.state==="err")h+='<p class="qmsg bad">Couldn’t upload '+esc(Q.name)+': '+esc(Q.err||"unknown error")+'. Try again.</p>';
       return h;
@@ -3610,8 +3610,10 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function dropzHTML(kind,label){
     if(!HAS_FILES)return '';
-    return upHTML(ui.issueId,kind)+'<label class="dropz" data-dropz="'+kind+'">'+
-      ('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>'+'<span>Drop files or folders here or <u>'+label+'</u>'+(kind==="att"?'<span class="dzp"> · or paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')</span>':'')+'</span>')+
+    return upHTML(ui.issueId,kind)+'<label class="dropz big" data-dropz="'+kind+'">'+
+      '<span class="dzi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg></span>'+
+      '<b>Drop files or folders here</b><span class="dzs">or <u>'+label+'</u></span>'+
+      (kind==="att"?'<span class="dzf dzp">You can also paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')</span>':'')+
       '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
   }
   // a bid copied to another space shows the Bid Scout project of the bid it was copied from
