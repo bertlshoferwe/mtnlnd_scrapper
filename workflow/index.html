@@ -713,7 +713,7 @@ textarea{min-height:90px;resize:vertical}
 .phl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
 .phl th,.phl td{white-space:nowrap}
 .phl .phst{position:sticky;left:0;z-index:1;background:var(--surface)}
-.phl .phst.co{left:var(--phk,0px);box-shadow:inset -1px 0 0 var(--line)}
+.phl .phst{box-shadow:inset -1px 0 0 var(--line)}
 .phl thead th{position:sticky;top:0;z-index:2;background:var(--surface)}
 .phl thead th.phst{z-index:3}
 .phl th{text-align:left;font-weight:700;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -3752,13 +3752,13 @@ img.who{object-fit:cover;background:var(--chip)}
       bar='<div class="phbar"><span>'+(n?n+' of '+M.length+' selected':M.length+(M.length===1?' company has':' companies have')+' an email — tick the ones to email')+'</span><span class="sp"></span>'+
         '<button class="btn primary small" data-phmail'+(n?'':' disabled')+'>Email in Outlook</button></div>';
     }
-    cols.push(["Company",function(x){return '<div class="phc">'+esc(x.company)+'</div>'+(x.cert?'<div class="phs">'+esc(x.cert)+'</div>':'')},"phst co"]);
+    cols.push(["Company",function(x){return '<div class="phc">'+esc(x.company)+'</div>'+(x.cert?'<div class="phs">'+esc(x.cert)+'</div>':'')}]);
     if(has(function(x){return x.role}))cols.push(["Role",function(x){return esc(x.role||"")}]);
     if(has(function(x){return x.contact}))cols.push(["Contact",function(x){return esc(x.contact||"")+(x.title?'<div class="phs">'+esc(x.title)+'</div>':'')}]);
     if(has(function(x){return (x.emails||[]).length}))cols.push(["Email",function(x){return (x.emails||[]).map(function(e){return '<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>'}).join("<br>")}]);
     if(has(function(x){return x.phone}))cols.push(["Phone",function(x){return x.phone?'<a href="tel:'+esc(x.phone.replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':''}]);
     if(has(function(x){return x.city||x.state}))cols.push(["City / State",function(x){return '<span class="nw">'+esc([x.city,x.state].filter(Boolean).join(", "))+'</span>'}]);
-    return bar+'<div class="phwrap"><table class="phl"'+(M.length?' style="--phk:36px"':'')+'><thead><tr>'+cols.map(function(c){return '<th scope="col"'+(c[2]?' class="'+c[2]+'"':'')+'>'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
+    return bar+'<div class="phwrap"><table class="phl"><thead><tr>'+cols.map(function(c){return '<th scope="col"'+(c[2]?' class="'+c[2]+'"':'')+'>'+c[0]+'</th>'}).join("")+'</tr></thead><tbody>'+
       L.map(function(x){return '<tr>'+cols.map(function(c){return '<td'+(c[2]?' class="'+c[2]+'"':'')+'>'+c[1](x)+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>';
   }
   // Fetch the Bid Scout project behind a bid, then fill in its blank due time,
