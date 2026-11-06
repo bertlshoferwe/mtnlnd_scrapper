@@ -1578,7 +1578,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if(f==="title"){v=v.trim();if(!v||v===is.title)return false;logH(is,"Summary",is.title,v);is.title=v}
     else if(f==="desc"){v=v.trim();if(v===is.desc)return false;is.desc=v;logH(is,"Description","","")}
-    else if(f==="status"){if(v===is.status||askFirst(p,is,v,function(){setField(is,"status",v)}))return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);applyFills(p,is,v);queueHandoff(p,is,v)}
+    else if(f==="status"){if(v===is.status||askFirst(p,is,v,function(){var cur=byId(is.id);if(cur)setField(cur,"status",v)}))return false;logH(is,"Status",stat(p,is.status).name,stat(p,v).name);applyStatus(p,is,v);applyFills(p,is,v);queueHandoff(p,is,v)}
     else if(f==="assignee"){if(v===is.assignee)return false;logH(is,"Assignee",is.assignee||"",v||"");is.assignee=v}
     else if(f==="reporter"){if(v===(is.reporter||""))return false;logH(is,"Reporter",is.reporter?nameOf(is.reporter):"None",v?nameOf(v):"None",v);is.reporter=v}
     else if(f==="priority"){if(v===is.priority)return false;logH(is,"Priority",is.priority,v);is.priority=v}
