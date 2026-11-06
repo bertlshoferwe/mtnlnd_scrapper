@@ -1298,7 +1298,12 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function quoteRules(p){return (p.rules||[]).filter(function(r){return r.kind==="quote"&&quoteFields(p,r).amt})}
   function quoteRuleFor(p,sid){var st=stat(p,sid);return st?quoteRules(p).filter(function(r){return String(r.status).toLowerCase()===String(st.name).toLowerCase()})[0]||null:null}
-  function needsQuote(p,is,sid){return HAS_FILES&&sb&&is.type!=="Subtask"&&is.status!==sid?quoteRuleFor(p,sid):null}
+  // a bid that already has its quote PDF, amount and quote number (when the rule fills one) isn't asked again
+  function needsQuote(p,is,sid){
+    var r=HAS_FILES&&sb&&is.type!=="Subtask"&&is.status!==sid?quoteRuleFor(p,sid):null;if(!r)return null;
+    var qf=quoteFields(p,r),F=is.fields||{},has=function(fd){return !fd||String(F[fd.id]||"").trim()!==""};
+    return (is.attachments||[]).some(function(f){return f.quote})&&has(qf.amt)&&has(qf.tkt)?null:r;
+  }
   // a bid sitting in a quote column, or one that already has a quote, can be re-quoted
   function canRequote(p,is){
     if(!HAS_FILES||!sb||is.type==="Subtask")return null;
