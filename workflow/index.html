@@ -705,14 +705,17 @@ textarea{min-height:90px;resize:vertical}
 .dtn .tct{flex:0 0 auto;font-size:12px;color:var(--muted)}
 .dtn .tic{flex:0 0 auto;color:var(--muted)}
 .dtn .tsp{flex:0 0 14px}
-.phwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
-.phwrap::-webkit-scrollbar{height:10px}
+.phwrap{overflow:auto;max-height:456px;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.phwrap::-webkit-scrollbar{width:10px;height:10px}
+.phwrap::-webkit-scrollbar-corner{background:transparent}
 .phwrap::-webkit-scrollbar-thumb{background:var(--line2);border-radius:99px;border:2px solid var(--surface)}
 .phwrap::-webkit-scrollbar-track{background:transparent}
 .phl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
 .phl th,.phl td{white-space:nowrap}
 .phl .phst{position:sticky;left:0;z-index:1;background:var(--surface)}
 .phl .phst.co{left:var(--phk,0px);box-shadow:inset -1px 0 0 var(--line)}
+.phl thead th{position:sticky;top:0;z-index:2;background:var(--surface)}
+.phl thead th.phst{z-index:3}
 .phl th{text-align:left;font-weight:700;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 .phl td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 .phl tr:last-child td{border-bottom:0}
