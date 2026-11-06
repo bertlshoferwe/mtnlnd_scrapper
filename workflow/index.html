@@ -1707,7 +1707,8 @@ img.who{object-fit:cover;background:var(--chip)}
       ]};
   }
   function loadPrefs(){
-    try{var r=localStorage.getItem(PKEY);if(r)return Object.assign(defaultPrefs(),JSON.parse(r))}catch(e){}
+    // the calendar always opens on today; Month/Week is remembered, the month you were looking at isn't
+    try{var r=localStorage.getItem(PKEY),d=defaultPrefs();if(r)return Object.assign(d,JSON.parse(r),{calMonth:d.calMonth,calSel:d.calSel})}catch(e){}
     return defaultPrefs();
   }
   function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(state))}catch(e){}saveHere()}
