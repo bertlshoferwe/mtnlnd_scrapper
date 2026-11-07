@@ -733,6 +733,18 @@ textarea{min-height:90px;resize:vertical}
 .duprow .dt{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .duprow .dm{flex:0 0 auto;font-size:12px;color:var(--muted);white-space:nowrap}
 .dupgrp{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin:0 0 10px}
+.dupgrp .dgh{display:flex;justify-content:flex-end;gap:6px;margin:0 -6px -2px 0}
+.dupgrp.dis{opacity:.7}
+.dupgrp.merging{border-color:var(--c1)}
+.dupkeep{display:flex;align-items:center;gap:10px;margin:0 -8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-weight:400}
+.dupkeep:hover{background:color-mix(in srgb,var(--c1) 8%,transparent)}
+.dupkeep input{width:16px;height:16px;margin:0;accent-color:var(--c1);flex:0 0 auto}
+.dupkeep .dk{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--muted)}
+.dupkeep .dt{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dupkeep .dm{flex:0 0 auto;font-size:12px;color:var(--muted);white-space:nowrap}
+.dupkeep .kt{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--c1)}
+.dupmsg{font-size:13px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+.dupacts{display:flex;justify-content:flex-end;gap:8px;margin:10px 0 4px}
 @media (max-width:560px){.duprow{flex-wrap:wrap}.duprow .dt{flex-basis:calc(100% - 60px)}.duprow .dm{flex-basis:100%;white-space:normal}}
 .phbar{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13px;color:var(--muted)}
 .phbar .sp{flex:1}
@@ -4374,12 +4386,92 @@ img.who{object-fit:cover;background:var(--chip)}
     var byTitle=function(l){return l.sort(function(a,b){return (a.is.num-b.is.num)})};
     return {same:same.map(byTitle).sort(function(a,b){return a[0].is.title.localeCompare(b[0].is.title)}),maybe:maybe.map(byTitle)};
   }
+  // Which bid a merge keeps by default: the one tied to Bid Scout, then the one with the most on it,
+  // then the oldest.
+  function dupDefaultKeep(l){
+    var w=function(x){return (x.is.sourceProjectId?1e6:0)+((x.is.comments||[]).length+(x.is.attachments||[]).length)*10-x.is.num/1e6};
+    return l.slice().sort(function(a,b){return w(b)-w(a)})[0].is.id;
+  }
+  // "Not the same": a group someone dismissed is saved as a mark {kind:"mark", notdup:"<ids>"} on its
+  // first bid's space, so it stays hidden for everyone. A bid joining the group brings it back.
+  function dupDismissed(divId){
+    var o={};D.spaces.forEach(function(sp){if(sp.divisionId===divId)(sp.marks||[]).forEach(function(m){if(m.notdup)o[m.notdup]=sp})});return o;
+  }
+  function dupIds(l){return l.map(function(x){return x.is.id}).sort().join(",")}
+  function dupGroupHTML(l,dis){
+    var ids=dupIds(l),M=ui.dupMerge&&ui.dupMerge.ids===ids?ui.dupMerge:null;
+    if(dis)return '<div class="dupgrp dis">'+(canAct()?'<div class="dgh"><button class="btn small" data-dupundo="'+esc(ids)+'">Undo “Not the same”</button></div>':'')+l.map(dupRowHTML).join("")+'</div>';
+    if(!M)return '<div class="dupgrp">'+(canAct()?'<div class="dgh"><button class="btn small" data-dupnot="'+esc(ids)+'">Not the same</button><button class="btn small" data-dupmerge="'+esc(ids)+'" data-dupkeep="'+esc(dupDefaultKeep(l))+'">Merge</button></div>':'')+l.map(dupRowHTML).join("")+'</div>';
+    var keep=l.filter(function(x){return x.is.id===M.keep})[0]||l[0],kk=keep.sp.key+"-"+keep.is.num,others=l.filter(function(x){return x!==keep});
+    var h='<div class="dupgrp merging"><p class="dupmsg" style="margin:4px 0 6px"><b>Pick the bid to keep</b></p>';
+    l.forEach(function(x){
+      var st=stat(x.sp,x.is.status),bits=[x.sp.name+" · "+st.name];if(x.is.due)bits.push("bid "+shortDate(x.is.due));
+      var n=(x.is.comments||[]).length,f=(x.is.attachments||[]).length;if(n)bits.push(n+" comment"+(n===1?"":"s"));if(f)bits.push(f+" file"+(f===1?"":"s"));
+      if(x.is.sourceProjectId)bits.push("from Bid Scout");
+      h+='<label class="dupkeep"><input type="radio" name="dupkeep" data-dupkeepset="'+esc(x.is.id)+'"'+(x===keep?' checked':'')+'><span class="dk">'+esc(x.sp.key+"-"+x.is.num)+'</span><span class="dt">'+esc(x.is.title)+'</span><span class="dm">'+(x===keep?'<span class="kt">Keep</span> · ':'')+esc(bits.join(" · "))+'</span></label>';
+    });
+    var linked=others.filter(function(x){return x.is.sourceProjectId});
+    h+='<p class="dupmsg">'+esc(others.map(function(x){return x.sp.key+"-"+x.is.num}).join(", "))+' will be deleted. Their comments, files, history and subtasks move to '+esc(kk)+', and any field '+esc(kk)+' has blank is filled in from them. '+esc(kk)+'’s own column, name and fields stay as they are.'+
+      (linked.length&&!keep.is.sourceProjectId?' '+esc(kk)+' takes over the Bid Scout link.':'')+
+      (linked.length&&keep.is.sourceProjectId?' The Bid Scout listing tied to '+esc(linked.map(function(x){return x.sp.key+"-"+x.is.num}).join(", "))+' goes back to having no bid on the board (mark it a duplicate in Bid Scout).':'')+'</p>'+
+      '<div class="dupacts"><button class="btn small" data-dupcancel>Cancel</button><button class="btn small primary" data-dupgo'+(ui.dupBusy?' disabled':'')+'>'+(ui.dupBusy?'Merging…':'Merge into '+esc(kk))+'</button></div></div>';
+    return h;
+  }
+  // Move everything from each of drops into keep, then delete them. Comments, files and history are
+  // added; blank fields, labels, due date/time, assignee and description filled; subtasks re-parented;
+  // automation copies pointed at keep (or merged into keep's own copy in that space). The Bid Scout
+  // link moves over when keep has none; its row is cleared in the database first, since only one bid
+  // can hold a project.
+  async function mergeBids(keepId,dropIds){
+    var keep=byId(keepId);if(!keep)return;
+    var drops=dropIds.map(byId).filter(Boolean);if(!drops.length)return;
+    var take=!keep.sourceProjectId&&drops.filter(function(d){return d.sourceProjectId})[0];
+    var linked=drops.filter(function(d){return d.sourceProjectId});
+    if(linked.length){
+      var r=await sb.from("wf_bids").update({source_project_id:null}).in("id",linked.map(function(d){return d.id}));
+      if(r.error)throw r.error;
+    }
+    drops.forEach(function(d){mergeInto(keep,d,take===d)});
+    save();render();
+  }
+  function spaceOf(is){return D.spaces.filter(function(s){return s.id===is.spaceId})[0]}
+  function mergeInto(keep,d,takeLink){
+    var ks=spaceOf(keep),ds=spaceOf(d),dkey=(ds?ds.key:"")+"-"+d.num,now=Date.now();
+    keep.comments=(keep.comments||[]).concat(d.comments||[]).sort(function(a,b){return (a.at||0)-(b.at||0)});
+    var have={};(keep.attachments||[]).forEach(function(f){have[f.path||f.id]=1});
+    keep.attachments=(keep.attachments||[]).concat((d.attachments||[]).filter(function(f){return !have[f.path||f.id]}));
+    keep.history=(keep.history||[]).concat(d.history||[]).sort(function(a,b){return (a.at||0)-(b.at||0)});
+    keep.fields=keep.fields||{};Object.keys(d.fields||{}).forEach(function(k){if(!String(keep.fields[k]||"").trim()&&String(d.fields[k]||"").trim())keep.fields[k]=d.fields[k]});
+    (d.labels||[]).forEach(function(x){if((keep.labels||[]).indexOf(x)<0)keep.labels=(keep.labels||[]).concat([x])});
+    if(!keep.due&&d.due){keep.due=d.due;if(!keep.dueTime)keep.dueTime=d.dueTime||""}
+    if(!keep.assignee&&d.assignee)keep.assignee=d.assignee;
+    if(String(d.desc||"").trim()&&String(d.desc).trim()!==String(keep.desc||"").trim())keep.desc=String(keep.desc||"").trim()?keep.desc+"\n\n"+d.desc:d.desc;
+    if(takeLink){keep.sourceProjectId=d.sourceProjectId;keep.sourceUrl=d.sourceUrl}
+    keep.history.push({by:ME,at:now,field:"Merged in",from:"",to:dkey+" "+d.title});
+    keep.updated=now;
+    // subtasks follow; one in another space gets the next number there
+    D.spaces.forEach(function(sp){sp.issues.slice().forEach(function(i){
+      if(i.parent!==d.id)return;
+      i.parent=keep.id;
+      if(ks&&sp!==ks){sp.issues=sp.issues.filter(function(x){return x!==i});var mx=ks.issues.reduce(function(a,x){return Math.max(a,x.num)},0);i.num=Math.max(ks.next||1,mx+1);ks.next=i.num+1;i.spaceId=ks.id;ks.issues.push(i)}
+    })});
+    // automation copies: keep's own copy in that space takes this one in; otherwise it now belongs to keep
+    D.spaces.forEach(function(sp){sp.issues.slice().forEach(function(c){
+      if(c.originBidId!==d.id)return;
+      var mine=sp.issues.filter(function(x){return x.originBidId===keep.id})[0];
+      if(mine)mergeInto(mine,c,false);else c.originBidId=keep.id;
+    })});
+    if(ds)ds.issues=ds.issues.filter(function(x){return x!==d});
+  }
   function dupsHTML(d){
-    var G=dupGroups(d.id),h='<section class="panel"><h3>Duplicate bids</h3><p class="fine" style="margin:4px 0 12px">Bids in '+esc(d.name)+' that look like the same project. Open one to compare, then delete the extra from its ⋯ menu. Follow-Up copies made by automations aren’t counted.</p>';
-    if(!G.same.length&&!G.maybe.length)return h+'<p class="fine">No duplicates found.</p></section>';
-    if(G.same.length){h+='<h4 style="margin:6px 0 8px">Same name · '+G.same.length+'</h4>';G.same.forEach(function(l){h+='<div class="dupgrp">'+l.map(dupRowHTML).join("")+'</div>'})}
-    if(G.maybe.length){h+='<h4 style="margin:14px 0 4px">Maybe the same · '+G.maybe.length+'</h4><p class="fine" style="margin:0 0 8px">One name has every important word of the other.</p>';G.maybe.slice(0,100).forEach(function(l){h+='<div class="dupgrp">'+l.map(dupRowHTML).join("")+'</div>'})}
-    return h+'</section>';
+    var G=dupGroups(d.id),X=dupDismissed(d.id),hid=[],keep=function(l){if(X[dupIds(l)]){hid.push(l);return false}return true};
+    G.same=G.same.filter(keep);G.maybe=G.maybe.filter(keep);
+    var h='<section class="panel"><h3>Duplicate bids</h3><p class="fine" style="margin:4px 0 12px">Bids in '+esc(d.name)+' that look like the same project. Open one to compare, then delete the extra from its ⋯ menu. Follow-Up copies made by automations aren’t counted.</p>';
+    var disH=hid.length?'<p class="fine" style="margin:14px 0 8px">'+hid.length+' marked not the same · <button class="linkbtn" data-dupshowdis>'+(ui.dupShowDis?'Hide':'Show')+'</button></p>'+(ui.dupShowDis?hid.map(function(l){return dupGroupHTML(l,true)}).join(""):''):'';
+    if(!G.same.length&&!G.maybe.length)return h+'<p class="fine">No duplicates found.</p>'+disH+'</section>';
+    if(G.same.length){h+='<h4 style="margin:6px 0 8px">Same name · '+G.same.length+'</h4>';G.same.forEach(function(l){h+=dupGroupHTML(l)})}
+    if(G.maybe.length){h+='<h4 style="margin:14px 0 4px">Maybe the same · '+G.maybe.length+'</h4><p class="fine" style="margin:0 0 8px">One name has every important word of the other.</p>';G.maybe.slice(0,100).forEach(function(l){h+=dupGroupHTML(l)})}
+    return h+disH+'</section>';
   }
   function submitCreate(e){
     // Enter in Summary doesn't make a bid that's already on the board; clicking Create anyway does
@@ -4693,6 +4785,26 @@ img.who{object-fit:cover;background:var(--chip)}
       savePrefs();render();return;
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
+    if((el=t.closest("[data-dupmerge]"))){ui.dupMerge={ids:el.getAttribute("data-dupmerge"),keep:el.getAttribute("data-dupkeep")};render();return}
+    if(t.closest("[data-dupcancel]")){ui.dupMerge=null;render();return}
+    if((el=t.closest("[data-dupnot]"))){
+      var nid=el.getAttribute("data-dupnot"),nb=byId(nid.split(",")[0]),nsp=nb&&spaceOf(nb);
+      if(nsp){nsp.marks=(nsp.marks||[]).concat([{id:"notdup-"+uid("m"),kind:"mark",notdup:nid}]);save();render();toast("Marked not the same")}
+      return;
+    }
+    if((el=t.closest("[data-dupundo]"))){
+      var uidk=el.getAttribute("data-dupundo");
+      D.spaces.forEach(function(sp){if((sp.marks||[]).some(function(m){return m.notdup===uidk}))sp.marks=sp.marks.filter(function(m){return m.notdup!==uidk})});
+      save();render();return;
+    }
+    if(t.closest("[data-dupshowdis]")){ui.dupShowDis=!ui.dupShowDis;render();return}
+    if((el=t.closest("[data-dupkeepset]"))){if(ui.dupMerge){ui.dupMerge.keep=el.getAttribute("data-dupkeepset");render()}return}
+    if(t.closest("[data-dupgo]")&&ui.dupMerge&&!ui.dupBusy){
+      var M=ui.dupMerge,drop=M.ids.split(",").filter(function(x){return x!==M.keep});
+      ui.dupBusy=true;render();
+      mergeBids(M.keep,drop).then(function(){ui.dupMerge=null;toast("Merged")}).catch(function(err){toast("Couldn’t merge: "+((err&&err.message)||"unknown error"))}).then(function(){ui.dupBusy=false;render()});
+      return;
+    }
     if((el=t.closest("[data-dupopen]"))){var did=el.getAttribute("data-dupopen");closeOv("ov-create");closeOv("ov-settings");gotoBid(did);return}
     if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
     if(t.closest(".cpick"))return;
