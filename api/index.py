@@ -33,6 +33,7 @@ Routes:
   GET  /api/<division_id>/results-grouped    results collapsed to one entry per project, files nested (search, status, site, keyword, bid_window, sort, include_closed, updated, new, view=review|jira|not_fit, project=<key>)
   POST /api/<division_id>/projects/decision  move a project to Jira / Not a fit / back to review
   POST /api/<division_id>/projects/jira      Add to Board: put a project on the bid board (no Jira issue any more)
+  POST /api/<division_id>/projects/addendum  Add as addendum: update the bid already on the board from this listing
   GET  /api/<division_id>/projects/bid-info  a project's site, bid time, files and plan holders, for the bid board's bid window
   GET  /api/<division_id>/weekly-email          the bid board's Monday email draft (POST rebuilds it)
   GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
@@ -1069,6 +1070,36 @@ def api_board_candidates(division_id):
         b["score"] = round(difflib.SequenceMatcher(None, name, (b["title"] or "").lower()).ratio(), 3)
     bids.sort(key=lambda b: -b["score"])
     return jsonify({"bids": bids})
+
+
+@app.route("/api/<division_id>/projects/addendum", methods=["POST"])
+def api_project_addendum(division_id):
+    """Body {"project_key", "bid_id"}: this project is an addendum to a bid already on the board
+    (Add to Board found the same name). The bid takes this listing's link, bid date and documents,
+    moves back to Takeoff with the Addendum flag and a comment (see add_addendum); this project
+    goes to the Bid Board tab and the bid's old listing is marked a duplicate of it."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key = (data.get("project_key") or "").strip()
+    bid_id = (data.get("bid_id") or "").strip()
+    if not key or not bid_id:
+        return jsonify({"error": "project_key and bid_id are required"}), 400
+    back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
+    try:
+        res = supabase_store.add_addendum(division_id, bid_id, key, source_url=back)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"couldn't update the bid board: {e}"}), 424
+    try:
+        supabase_store.set_project_decision(division_id, key, "jira")
+        if res.get("old_project_key"):
+            supabase_store.set_project_decision(division_id, res["old_project_key"], "duplicate", duplicate_of=key)
+    except Exception as e:
+        print(f"  ! couldn't record the addendum decisions for {key} ({e})")
+    return jsonify({"ok": True, "bid_id": bid_id, "old_project_key": res.get("old_project_key")})
 
 
 @app.route("/api/<division_id>/projects/board-link", methods=["POST"])

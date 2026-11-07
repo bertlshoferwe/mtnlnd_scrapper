@@ -1332,6 +1332,7 @@
         <input type="search" id="linkSearch" placeholder="Search bids on the board" autocomplete="off" oninput="renderLinkCandidates()">
         <div class="dup-list" id="linkList" role="listbox" aria-label="Bids on the board"></div>
         <div class="nf-actions">
+          <button type="button" class="btn-primary" id="linkAddendumBtn" onclick="saveAddendum()" hidden>Add as addendum</button>
           <button type="button" class="btn-primary" id="linkSaveBtn" onclick="saveBoardLink()" disabled>Link to this bid</button>
           <button type="button" class="btn-ghost" id="linkNewBtn" onclick="addProjectToJira(true)">No, add as a new bid</button>
           <button type="button" class="btn-primary" id="linkOpenBtn" onclick="openExistingBid()" hidden>Open it on the board</button>
@@ -3918,14 +3919,20 @@ const LINK_DESC = 'Pick the bid someone typed in by hand to connect it to this p
 function setLinkMode(ex) {
   linkExisting = ex;
   document.getElementById('linkTitle').textContent = ex ? 'This is already on the bid board' : 'Is this already on the bid board?';
-  document.getElementById('linkDesc').textContent = !ex ? LINK_DESC : ex.linked
-    ? ex.key + ' has the same name and was added from another listing of this project, so it can’t be added again. Open it, or mark this listing as a duplicate.'
-    : ex.key + ' has the same name, so it can’t be added again. Link it to connect this project to it: its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in.';
+  document.getElementById('linkDesc').textContent = !ex ? LINK_DESC :
+    ex.key + ' has the same name, so it can’t be added again. If this listing is an addendum (new bid date or documents), ' +
+    'Add as addendum updates ' + ex.key + ': it takes this listing’s bid date and documents, moves back to Takeoff with an Addendum flag, ' +
+    'and everyone on it is told.' + (ex.linked ? ' Otherwise open it, or mark this listing as a duplicate.' : ' Otherwise link it to this project as it is.');
+  const ab = document.getElementById('linkAddendumBtn');
+  ab.hidden = !ex;
+  if (ex) ab.textContent = 'Add as addendum to ' + ex.key;
   document.getElementById('linkSearch').hidden = !!ex;
   document.getElementById('linkNewBtn').hidden = !!ex;
   document.getElementById('linkOpenBtn').hidden = !ex;
   document.getElementById('linkDupBtn').hidden = !(ex && ex.linked && ex.project_key);
   document.getElementById('linkSaveBtn').hidden = !!(ex && ex.linked);
+  document.getElementById('linkSaveBtn').className = ex ? 'btn-ghost' : 'btn-primary';
+  document.getElementById('linkOpenBtn').className = ex ? 'btn-ghost' : 'btn-primary';
 }
 
 function showAlreadyOnBoard(ex) {
@@ -3941,6 +3948,35 @@ function showAlreadyOnBoard(ex) {
 function openExistingBid() {
   if (!linkExisting) return;
   openInTab('bidboard', '/workflow/?division=' + encodeURIComponent(currentDivision) + '&bid=' + encodeURIComponent(linkExisting.id), 'wfOpenLink');
+}
+
+async function saveAddendum() {
+  const p = currentProject, ex = linkExisting;
+  if (!p || !ex) return;
+  const btn = document.getElementById('linkAddendumBtn');
+  btn.disabled = true;
+  try {
+    await api('/api/' + currentDivision + '/projects/addendum', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, bid_id: ex.id }),
+    });
+    p.board_bid_id = ex.id;
+    p.bucket = 'jira';
+    p.decision = 'jira';
+    p.decided_at = new Date().toISOString();
+    p.reopened = false;
+    p.updated = false;
+    p.new_file_count = 0;
+    closeLinkPanel();
+    renderProjectJiraBtn(p);
+    renderDecision(p);
+    renderFitSuggestion(p);
+    loadProjects();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function markExistingDuplicate() {

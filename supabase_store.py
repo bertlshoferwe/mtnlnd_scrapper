@@ -1671,6 +1671,77 @@ def division_workflow_bids(division_id):
              "due": b.get("due"), "source_project_id": b.get("source_project_id")} for b in bids]
 
 
+ADDENDUM_LABEL = "Addendum"
+
+
+def _short_day(d):
+    try:
+        return datetime.strptime(d, "%Y-%m-%d").strftime("%b %-d")
+    except Exception:
+        return d or "none"
+
+
+def add_addendum(division_id, bid_id, project_key, source_url=None, by="Bid Scout"):
+    """A project already on the board came back with an addendum (a new listing — new bid date,
+    new documents). Update that bid instead of adding a second one: it takes the new listing's
+    Bid Scout link (so its Bid Docs and Plan Holders are the current set) and bid date and time,
+    moves back to the Takeoff column (if the space has one) and gets the "Addendum" label — the
+    board's flag that it needs another look — plus a comment saying what changed. Its Follow-Up
+    copies get the comment too, so the notifier emails everyone on either. Returns
+    {"bid_id", "old_project_key"}; the old listing's key, so the caller can mark it a duplicate."""
+    sb = get_client()
+    r = sb.table("wf_bids").select("*").eq("id", bid_id).limit(1).execute().data
+    if not r or str(r[0]["division_id"]) != str(division_id):
+        raise ValueError("That bid isn't on this division's board.")
+    bid = r[0]
+    if bid.get("origin_bid_id"):
+        raise ValueError("That's a Follow-Up copy; add the addendum to the original bid.")
+    space = (sb.table("wf_spaces").select("statuses").eq("id", bid["space_id"]).limit(1).execute().data or [{}])[0]
+    statuses = space.get("statuses") or []
+    name = {st.get("id"): st.get("name") for st in statuses}
+    takeoff = next((st for st in statuses if "takeoff" in (st.get("name") or "").lower().replace(" ", "")), None)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    hist, said = list(bid.get("history") or []), []
+    patch = {"source_project_id": project_key, "source_url": source_url}
+    old_key = bid.get("source_project_id")
+    if old_key and old_key != project_key:
+        # one bid per project: free the old listing's hold first (it's this bid, so nothing else moves)
+        sb.table("wf_bids").update({"source_project_id": None}).eq("id", bid_id).execute()
+    due = load_project_bid_dates(division_id).get(project_key)
+    hm = bid_time_hm(load_project_bid_times(division_id).get(project_key))
+    if due and due != bid.get("due"):
+        hist.append({"by": by, "at": now_ms, "field": "Due date", "from": _short_day(bid.get("due")), "to": _short_day(due)})
+        said.append(f"bid date moved {_short_day(bid.get('due'))} → {_short_day(due)}")
+        patch["due"] = due
+    if hm and hm != (str(bid.get("due_time") or "")[:5] or None):
+        patch["due_time"] = hm
+    if takeoff and bid.get("status") != takeoff["id"]:
+        hist.append({"by": by, "at": now_ms, "field": "Status", "from": name.get(bid.get("status")) or "None", "to": takeoff["name"]})
+        said.append(f"moved back to {takeoff['name']} from {name.get(bid.get('status')) or 'its column'}")
+        patch["status"], patch["done_at"] = takeoff["id"], None
+    labels = list(bid.get("labels") or [])
+    if ADDENDUM_LABEL not in labels:
+        labels.append(ADDENDUM_LABEL)
+        hist.append({"by": by, "at": now_ms, "field": "Labels", "from": ", ".join(bid.get("labels") or []) or "None", "to": ", ".join(labels)})
+    patch["labels"] = labels
+    try:
+        n = len(load_project_files(division_id, project_key) or [])
+        if n:
+            said.append(f"Bid Docs now has the new listing's {n} file{'s' if n != 1 else ''}")
+    except Exception:
+        pass
+    text = "Addendum" + (": " + "; ".join(said) if said else "") + ". Needs another look."
+    comment = {"id": str(uuid.uuid4()), "by": by, "at": now_ms, "text": text}
+    hist.append({"by": by, "at": now_ms, "field": "Addendum", "from": "", "to": project_key})
+    patch.update({"history": hist, "comments": list(bid.get("comments") or []) + [comment],
+                  "updated_at": datetime.now(timezone.utc).isoformat()})
+    sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
+    for c in sb.table("wf_bids").select("id,comments").eq("origin_bid_id", bid_id).execute().data or []:
+        sb.table("wf_bids").update({"comments": list(c.get("comments") or []) + [dict(comment, id=str(uuid.uuid4()))],
+                                    "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", c["id"]).execute()
+    return {"bid_id": bid_id, "old_project_key": old_key if old_key != project_key else None}
+
+
 def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
     """Tie a bid typed in by hand on the board to a Bid Scout project and
     bring it up to date: due date and time from Bid Scout (when it has

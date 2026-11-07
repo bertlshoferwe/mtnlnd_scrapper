@@ -208,6 +208,10 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 .cdue .odc.soon{color:var(--med)}
 .cdue .odc.late{color:var(--high)}
 .cdue.over{color:var(--high)}
+.adflag{display:inline-flex;align-items:center;gap:5px;margin:2px 0 6px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;color:var(--med);background:color-mix(in srgb,var(--med) 16%,transparent);white-space:nowrap}
+.adbanner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--med) 55%,transparent);border-radius:10px;background:color-mix(in srgb,var(--med) 10%,transparent);font-size:14px;color:var(--ink)}
+.adbanner .ic{color:var(--med);flex:0 0 auto}
+.adbanner .t{flex:1 1 220px;min-width:0}
 .fuflag{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:1px 7px;border-radius:999px;font-size:12px;font-weight:600;color:var(--high);background:color-mix(in srgb,var(--high) 14%,transparent);white-space:nowrap}
 .cfoot{display:flex;align-items:center;gap:6px}
 .cfoot .sp{flex:1}
@@ -1136,6 +1140,7 @@ img.who{object-fit:cover;background:var(--chip)}
     image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    flag:'<path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/>',
     info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -1225,6 +1230,11 @@ img.who{object-fit:cover;background:var(--chip)}
     var lab=fd.name.replace(/^\s*date\s+|\s+date\s*$/i,"").trim()||fd.name;
     return '<div class="cdue">'+(v?esc(lab)+' '+fmtDay(v):'')+(fu?fuFlag():'')+'</div>';
   }
+  // The "Addendum" label: an addendum updated this bid (new bid date / documents) and it needs another
+  // look. Bid Scout's Add as addendum and Duplicates → Merge as addendum set it; Mark as reviewed clears it.
+  var ADD_LABEL="Addendum";
+  function hasAddendum(is){return (is.labels||[]).some(function(l){return String(l).toLowerCase()==="addendum"})}
+  function addFlag(is){return hasAddendum(is)?'<div><span class="adflag" title="Updated by an addendum — needs another look">'+ic("flag",12,2.4)+'Addendum</span></div>':''}
   function fuFlag(){return '<span class="fuflag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Follow up due</span>'}
   function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&dueAt(is)-Date.now()<=86400000}
   function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
@@ -2411,7 +2421,7 @@ img.who{object-fit:cover;background:var(--chip)}
         // Jira-style card: title, due date, then the Ticket # on the left and priority + assignee on the right.
         // The priority icon and the assignee circle are pickers; anywhere else opens the bid.
         h+='<article class="card" draggable="true" data-id="'+is.id+'" data-open="'+is.id+'">'+
-          '<div class="ctitle">'+esc(is.title)+'</div>'+
+          '<div class="ctitle">'+esc(is.title)+'</div>'+addFlag(is)+
           cardDateHTML(p,is)+
           (p.cardDate?'':is.due?'<div class="cdue'+(overdue(is)?' over':'')+'">'+fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):'')+(overdue(is)?' <svg class="odc late" width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="Overdue"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>':dueSoon(is)?' <svg class="odc soon" width="15" height="15" viewBox="0 0 16 16" role="img" aria-label="Due soon"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>':'')+(followUpDue(p,is)?fuFlag():'')+'</div>':(followUpDue(p,is)?'<div class="cdue">'+fuFlag()+'</div>':''))+
           echipHTML(is)+
@@ -3621,7 +3631,8 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function issueTopHTML(is){
     var kids=children(is);
-    var h='<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
+    var h=(hasAddendum(is)?'<div class="adbanner">'+ic("flag",18)+'<span class="t"><b>Updated by an addendum.</b> The bid date or documents changed — give it another look. The comments say what changed.</span>'+(canAct()?'<button class="btn small" data-adclear>Mark as reviewed</button>':'')+'</div>':'')+
+      '<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
       '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>'+
       '<div class="isec" id="i-att">'+attachHTML(is)+'</div>';
     if(is.type!=="Subtask"){
@@ -4401,7 +4412,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function dupGroupHTML(l,dis){
     var ids=dupIds(l),M=ui.dupMerge&&ui.dupMerge.ids===ids?ui.dupMerge:null;
     if(dis)return '<div class="dupgrp dis">'+(canAct()?'<div class="dgh"><button class="btn small" data-dupundo="'+esc(ids)+'">Undo “Not the same”</button></div>':'')+l.map(dupRowHTML).join("")+'</div>';
-    if(!M)return '<div class="dupgrp">'+(canAct()?'<div class="dgh"><button class="btn small" data-dupnot="'+esc(ids)+'">Not the same</button><button class="btn small" data-dupmerge="'+esc(ids)+'" data-dupkeep="'+esc(dupDefaultKeep(l))+'">Merge</button></div>':'')+l.map(dupRowHTML).join("")+'</div>';
+    if(!M)return '<div class="dupgrp">'+(canAct()?'<div class="dgh"><button class="btn small" data-dupnot="'+esc(ids)+'">Not the same</button><button class="btn small" data-dupmerge="'+esc(ids)+'" data-dupmode="add" data-dupkeep="'+esc(l.slice().sort(function(a,b){return a.is.num-b.is.num})[0].is.id)+'">Merge as addendum</button><button class="btn small" data-dupmerge="'+esc(ids)+'" data-dupkeep="'+esc(dupDefaultKeep(l))+'">Merge</button></div>':'')+l.map(dupRowHTML).join("")+'</div>';
     var keep=l.filter(function(x){return x.is.id===M.keep})[0]||l[0],kk=keep.sp.key+"-"+keep.is.num,others=l.filter(function(x){return x!==keep});
     var h='<div class="dupgrp merging"><p class="dupmsg" style="margin:4px 0 6px"><b>Pick the bid to keep</b></p>';
     l.forEach(function(x){
@@ -4411,6 +4422,15 @@ img.who{object-fit:cover;background:var(--chip)}
       h+='<label class="dupkeep"><input type="radio" name="dupkeep" data-dupkeepset="'+esc(x.is.id)+'"'+(x===keep?' checked':'')+'><span class="dk">'+esc(x.sp.key+"-"+x.is.num)+'</span><span class="dt">'+esc(x.is.title)+'</span><span class="dm">'+(x===keep?'<span class="kt">Keep</span> · ':'')+esc(bits.join(" · "))+'</span></label>';
     });
     var linked=others.filter(function(x){return x.is.sourceProjectId});
+    if(M.mode==="add"){
+      var nw=others.slice().sort(function(a,b){return b.is.num-a.is.num})[0],nk=nw.sp.key+"-"+nw.is.num;
+      var tk=keep.sp.statuses.filter(function(x){return /takeoff/i.test(String(x.name).replace(/\s/g,""))})[0];
+      h+='<p class="dupmsg"><b>'+esc(nk)+' is the addendum.</b> '+esc(kk)+' takes its bid date'+(nw.is.due?' ('+esc(shortDate(nw.is.due))+')':'')+(nw.is.sourceProjectId?' and Bid Scout listing, so its Bid Docs are the new set':'')+', '+
+        (tk?'moves back to '+esc(tk.name)+' ':'')+'with an Addendum flag, and gets a comment saying what changed — so everyone on it is told. '+
+        esc(others.map(function(x){return x.sp.key+"-"+x.is.num}).join(", "))+'’s comments, files and history move to '+esc(kk)+', then '+(others.length===1?'it’s':'they’re')+' deleted.</p>'+
+        '<div class="dupacts"><button class="btn small" data-dupcancel>Cancel</button><button class="btn small primary" data-dupgo'+(ui.dupBusy?' disabled':'')+'>'+(ui.dupBusy?'Merging…':'Merge as addendum into '+esc(kk))+'</button></div></div>';
+      return h;
+    }
     h+='<p class="dupmsg">'+esc(others.map(function(x){return x.sp.key+"-"+x.is.num}).join(", "))+' will be deleted. Their comments, files, history and subtasks move to '+esc(kk)+', and any field '+esc(kk)+' has blank is filled in from them. '+esc(kk)+'’s own column, name and fields stay as they are.'+
       (linked.length&&!keep.is.sourceProjectId?' '+esc(kk)+' takes over the Bid Scout link.':'')+
       (linked.length&&keep.is.sourceProjectId?' The Bid Scout listing tied to '+esc(linked.map(function(x){return x.sp.key+"-"+x.is.num}).join(", "))+' goes back to having no bid on the board (mark it a duplicate in Bid Scout).':'')+'</p>'+
@@ -4433,6 +4453,36 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     drops.forEach(function(d){mergeInto(keep,d,take===d)});
     save();render();
+  }
+  // Duplicates → Merge as addendum: the newest of the others (highest number) is the addendum listing.
+  // keep takes its bid date and Bid Scout link (so Bid Docs are the current set), everything else
+  // merges as usual, then keep goes back to Takeoff with the Addendum flag and a comment — on its
+  // Follow-Up copies too, so everyone on either is emailed. The old listing is marked a duplicate.
+  async function mergeAddendum(keepId,dropIds){
+    var keep=byId(keepId);if(!keep)return;
+    var drops=dropIds.map(byId).filter(Boolean);if(!drops.length)return;
+    var nw=drops.slice().sort(function(a,b){return b.num-a.num})[0],oldSrc=keep.sourceProjectId,oldDue=keep.due;
+    var linked=drops.filter(function(d){return d.sourceProjectId});
+    if(linked.length){
+      var r=await sb.from("wf_bids").update({source_project_id:null}).in("id",linked.map(function(d){return d.id}));
+      if(r.error)throw r.error;
+    }
+    drops.forEach(function(d){mergeInto(keep,d,false)});
+    var ks=spaceOf(keep),said=[];
+    if(nw.sourceProjectId){keep.sourceProjectId=nw.sourceProjectId;keep.sourceUrl=nw.sourceUrl}
+    if(nw.due&&nw.due!==oldDue){logH(keep,"Due date",oldDue?shortDate(oldDue):"None",shortDate(nw.due));said.push("bid date moved "+(oldDue?shortDate(oldDue):"none")+" → "+shortDate(nw.due));keep.due=nw.due;keep.dueTime=nw.dueTime||keep.dueTime||""}
+    var tk=ks&&ks.statuses.filter(function(x){return /takeoff/i.test(String(x.name).replace(/\s/g,""))})[0];
+    if(tk&&keep.status!==tk.id){var from=stat(ks,keep.status).name;logH(keep,"Status",from,tk.name);applyStatus(ks,keep,tk.id);applyFills(ks,keep,tk.id);said.push("moved back to "+tk.name+" from "+from)}
+    if(!hasAddendum(keep)){logH(keep,"Labels",(keep.labels||[]).join(", ")||"None",(keep.labels||[]).concat([ADD_LABEL]).join(", "));keep.labels=(keep.labels||[]).concat([ADD_LABEL])}
+    if(nw.sourceProjectId&&nw.sourceProjectId!==oldSrc)said.push("Bid Docs now follow the new listing");
+    var text="Addendum (merged from "+(spaceOf(nw)?spaceOf(nw).key:"")+"-"+nw.num+")"+(said.length?": "+said.join("; "):"")+". Needs another look.",now=Date.now();
+    keep.comments.push({id:uid("c"),by:ME,at:now,text:text});keep.updated=now;
+    D.spaces.forEach(function(sp){sp.issues.forEach(function(c){if(c.originBidId===keep.id){c.comments=(c.comments||[]).concat([{id:uid("c"),by:ME,at:now,text:text}]);c.updated=now}})});
+    save();render();
+    if(oldSrc&&nw.sourceProjectId&&oldSrc!==nw.sourceProjectId){
+      fetch("/api/"+encodeURIComponent(keep.divisionId)+"/projects/decision",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({project_key:oldSrc,decision:"duplicate",duplicate_of:nw.sourceProjectId})}).catch(function(){});
+    }
   }
   function spaceOf(is){return D.spaces.filter(function(s){return s.id===is.spaceId})[0]}
   function mergeInto(keep,d,takeLink){
@@ -4785,7 +4835,8 @@ img.who{object-fit:cover;background:var(--chip)}
       savePrefs();render();return;
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
-    if((el=t.closest("[data-dupmerge]"))){ui.dupMerge={ids:el.getAttribute("data-dupmerge"),keep:el.getAttribute("data-dupkeep")};render();return}
+    if((el=t.closest("[data-dupmerge]"))){ui.dupMerge={ids:el.getAttribute("data-dupmerge"),keep:el.getAttribute("data-dupkeep"),mode:el.getAttribute("data-dupmode")||""};render();return}
+    if(t.closest("[data-adclear]")){var ai2=byId(ui.issueId);if(ai2&&hasAddendum(ai2)){var nl=ai2.labels.filter(function(l){return String(l).toLowerCase()!=="addendum"});logH(ai2,"Labels",ai2.labels.join(", "),nl.join(", ")||"None");ai2.labels=nl;ai2.updated=Date.now();save();renderIssue();render()}return}
     if(t.closest("[data-dupcancel]")){ui.dupMerge=null;render();return}
     if((el=t.closest("[data-dupnot]"))){
       var nid=el.getAttribute("data-dupnot"),nb=byId(nid.split(",")[0]),nsp=nb&&spaceOf(nb);
@@ -4802,7 +4853,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-dupgo]")&&ui.dupMerge&&!ui.dupBusy){
       var M=ui.dupMerge,drop=M.ids.split(",").filter(function(x){return x!==M.keep});
       ui.dupBusy=true;render();
-      mergeBids(M.keep,drop).then(function(){ui.dupMerge=null;toast("Merged")}).catch(function(err){toast("Couldn’t merge: "+((err&&err.message)||"unknown error"))}).then(function(){ui.dupBusy=false;render()});
+      (M.mode==="add"?mergeAddendum:mergeBids)(M.keep,drop).then(function(){ui.dupMerge=null;toast("Merged")}).catch(function(err){toast("Couldn’t merge: "+((err&&err.message)||"unknown error"))}).then(function(){ui.dupBusy=false;render()});
       return;
     }
     if((el=t.closest("[data-dupopen]"))){var did=el.getAttribute("data-dupopen");closeOv("ov-create");closeOv("ov-settings");gotoBid(did);return}
