@@ -700,9 +700,16 @@ textarea{min-height:90px;resize:vertical}
 .ftabbar .fadd{margin-left:auto;display:inline-flex;align-items:center;gap:6px;margin-bottom:0;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
 .ftabbar .fadd:hover{border-color:var(--line2)}
 .ftabbar .fadd~.fmore{margin-left:0}
-#i-files.dropping{outline:2px dashed var(--c1);outline-offset:-2px;background:color-mix(in srgb,var(--c1) 7%,transparent)}
-.fhint{display:flex;flex-direction:column;align-items:center;gap:4px;padding:28px 12px;color:var(--muted);font-size:13px;text-align:center}
-.fhint b{color:var(--ink);font-size:14px}
+.ileft{position:relative}
+.fdrop{position:absolute;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;pointer-events:none;
+  background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);text-align:center;padding:12px}
+.fdrop.on{display:flex}
+.fdrop .fdi{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--c1) 18%,transparent);color:var(--c1)}
+.fdrop b{font-size:16px;color:var(--ink)}
+.fdrop span{font-size:13px;color:var(--muted)}
+#i-act.dropping,#i-files.dropping{outline:2px dashed var(--c1);outline-offset:-2px;background:color-mix(in srgb,var(--c1) 7%,transparent)}
+.ffhint{display:flex;flex-direction:column;align-items:center;gap:4px;padding:28px 12px;color:var(--muted);font-size:13px;text-align:center}
+.ffhint b{color:var(--ink);font-size:14px}
 .ftabbar .fmore{margin-left:auto;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:0;background:none;color:var(--muted)}
 .ftabbar .fmore:hover,.ftabbar .fmore[aria-expanded="true"]{background:var(--chip);color:var(--ink)}
 .fmenu{position:absolute;right:0;top:36px;z-index:20;min-width:180px;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:4px}
@@ -1073,7 +1080,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <div class="overlay" id="ov-issue" role="dialog" aria-modal="true" aria-label="Bid details">
   <div class="sheet issue">
     <div class="ih" id="i-head"></div>
-    <div class="ib"><div class="ileft"><div id="i-top"></div><div id="i-files" class="ipane"><div class="isec" id="i-att"></div></div><div id="i-act" class="ipane"></div></div><div id="i-side"></div></div>
+    <div class="ib"><div class="ileft"><div class="fdrop" id="fdrop" aria-hidden="true"></div><div id="i-top"></div><div id="i-files" class="ipane"><div class="isec" id="i-att"></div></div><div id="i-act" class="ipane"></div></div><div id="i-side"></div></div>
   </div>
 </div>
 
@@ -3857,7 +3864,7 @@ img.who{object-fit:cover;background:var(--chip)}
   // this is only the upload progress, plus a hint when the tab has nothing yet.
   function dropzHTML(kind,label,empty){
     if(!HAS_FILES)return '';
-    return upHTML(ui.issueId,kind)+(empty?'<div class="fhint">'+ic("clip",18)+'<b>Drop files or folders anywhere here</b><span>or use Add files'+(kind==="att"?', or paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')':'')+'</span></div>':'');
+    return upHTML(ui.issueId,kind)+(empty?'<div class="ffhint">'+ic("clip",18)+'<b>Drop files or folders anywhere here</b><span>or use Add files'+(kind==="att"?', or paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')':'')+'</span></div>':'');
   }
   // a bid copied to another space shows the Bid Scout project of the bid it was copied from
   function srcKey(is){
@@ -5676,18 +5683,38 @@ img.who{object-fit:cover;background:var(--chip)}
     var fz=function(e){var z=e.target.closest&&e.target.closest("#i-files");return z&&HAS_FILES&&(ui.fileTabOn==="att"||ui.fileTabOn==="docs")?z:null};
     var hasFiles=function(e){return e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1};
     box.addEventListener("dragover",function(e){
-      var z=e.target.closest&&e.target.closest("[data-cdrop]");
-      if(z&&hasFiles(e)){e.preventDefault();z.classList.add("over");return}
-      var f=fz(e);if(f&&hasFiles(e)){e.preventDefault();f.classList.add("dropping")}
+      if(!hasFiles(e))return;
+      var a=e.target.closest&&e.target.closest("#i-act");
+      if(a&&HAS_FILES&&ui.actTab!=="history"){
+        e.preventDefault();var r=e.target.closest("[data-cdrop^='r:']");
+        a.classList.add("dropping");dropCover(a,r?'Drop to attach to your reply':'Drop to attach to a new comment','They go to Supporting Docs too');return;
+      }
+      var f=fz(e);if(f){e.preventDefault();f.classList.add("dropping");dropCover(f,'Drop to add to '+(ui.fileTabOn==="docs"?'Bid Docs':'Supporting Docs'),'Files and folders')}
     });
     box.addEventListener("dragleave",function(e){
       var z=e.target.closest&&e.target.closest("[data-cdrop]");if(z)z.classList.remove("over");
-      var f=$("i-files");if(f&&(!e.relatedTarget||!f.contains(e.relatedTarget)))f.classList.remove("dropping");
+      ["i-files","i-act"].forEach(function(k){var f=$(k);if(f&&f.classList.contains("dropping")&&(!e.relatedTarget||!f.contains(e.relatedTarget))){f.classList.remove("dropping");dropCover(null)}});
     });
+    // the icon and words over the files half while dragging, placed over whatever part is in view
+    function dropCover(f,title,sub){
+      var c=$("fdrop");if(!c)return;
+      if(!f){c.classList.remove("on");c.removeAttribute("data-k");return}
+      var k=f.id+"|"+title;if(c.getAttribute("data-k")===k)return;
+      c.setAttribute("data-k",k);
+      c.innerHTML='<span class="fdi">'+ic(f.id==="i-act"?"clip":"arrowU",26,2.2)+'</span><b>'+esc(title)+'</b><span>'+esc(sub)+'</span>';
+      c.style.top=f.offsetTop+"px";c.style.left=f.offsetLeft+"px";c.style.width=f.offsetWidth+"px";c.style.height=f.offsetHeight+"px";
+      c.classList.add("on");
+    }
     box.addEventListener("drop",function(e){
-      var cz=e.target.closest&&e.target.closest("[data-cdrop]");
-      if(cz&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();cz.classList.remove("over");var ck2=cz.getAttribute("data-cdrop");
-        Promise.resolve(Array.prototype.map.call(e.dataTransfer.files,function(f){return {file:f,rel:f.name}})).then(function(fl){uploadFiles(fl.filter(notHidden),"att",ck2)});return}
+      var ia=$("i-act");if(ia)ia.classList.remove("dropping");dropCover(null);
+      // comments half: onto a reply box → that reply; anywhere else → the new comment
+      var ca=e.target.closest&&e.target.closest("#i-act");
+      if(ca&&ui.actTab!=="history"&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){
+        e.preventDefault();var rz=e.target.closest("[data-cdrop^='r:']"),ck2=rz?rz.getAttribute("data-cdrop"):"new";
+        uploadFiles(Array.prototype.map.call(e.dataTransfer.files,function(f){return {file:f,rel:f.name}}).filter(notHidden),"att",ck2);
+        var box2=rz||document.querySelector('#i-act [data-cdrop="new"]');if(box2)box2.scrollIntoView({block:"nearest",behavior:"smooth"});
+        return;
+      }
       var f=fz(e);$("i-files").classList.remove("dropping");
       if(f&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();var k=ui.fileTabOn==="docs"?"doc":"att";droppedFiles(e.dataTransfer).then(function(fl){uploadFiles(fl,k)})}
     });
