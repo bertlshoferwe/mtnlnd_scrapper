@@ -817,6 +817,19 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .mcard .pmail{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mcard{position:relative}
 .arcards{grid-template-columns:repeat(auto-fill,minmax(180px,200px))}
+.arcard .editbtn{right:50px}
+.arsw{position:absolute;top:12px;right:10px;display:inline-flex;margin:0;cursor:pointer}
+.arsw input{position:absolute;opacity:0;width:1px;height:1px}
+.arsw .trk{position:relative;width:34px;height:20px;border-radius:99px;background:var(--line2);transition:background .15s}
+.arsw .trk::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.arsw input:checked+.trk{background:var(--c1)}
+.arsw input:checked+.trk::after{transform:translateX(14px)}
+.arsw input:focus-visible+.trk{outline:2px solid var(--c1);outline-offset:2px}
+.arcard.off>*:not(.arsw):not(.editbtn){opacity:.45}
+.arcard .offtag{color:var(--high)}
+.tabsw{display:flex;flex-direction:column;gap:8px;margin:4px 0 0}
+.tabsw label{position:static;display:flex;align-items:center;gap:10px;margin:0;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer}
+.tabsw .arsw{position:relative;top:auto;right:auto}
 .arcard{aspect-ratio:1/1;gap:2px}
 .arcard .arl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:4px}
 .arcard .arl:first-child{margin-top:0}
@@ -1235,6 +1248,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var ADD_LABEL="Addendum";
   function hasAddendum(is){return (is.labels||[]).some(function(l){return String(l).toLowerCase()==="addendum"})}
   function addFlag(is){return hasAddendum(is)?'<div><span class="adflag" title="Updated by an addendum — needs another look">'+ic("flag",12,2.4)+'Addendum</span></div>':''}
+  function onRules(p){return (p.rules||[]).filter(function(r){return r&&!r.off})}
   function fuFlag(){return '<span class="fuflag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Follow up due</span>'}
   function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&dueAt(is)-Date.now()<=86400000}
   function nowHM(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
@@ -1256,7 +1270,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function applyFills(p,is,sid){
     var st=stat(p,sid);if(!st||is.type==="Subtask")return;
-    (p.rules||[]).forEach(function(r){
+    onRules(p).forEach(function(r){
       if(r.kind!=="fill"||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
       var v=r.value==="@ask"?String((ui.askAns||{})[r.field]||""):r.value==="@today"?today():r.value==="@me"?ME:String(r.value||"");if(!v)return;
       if(r.field.indexOf("cf:")===0){
@@ -1313,7 +1327,7 @@ img.who{object-fit:cover;background:var(--chip)}
   // rule.must means the answer can't be left blank.
   function askRules(p,is,sid){
     var st=stat(p,sid);if(!st||is.type==="Subtask"||is.status===sid)return [];
-    return (p.rules||[]).filter(function(r){
+    return onRules(p).filter(function(r){
       if(r.kind!=="fill"||r.value!=="@ask"||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return false;
       var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0];if(!tg)return false;
       return !(r.blank&&fieldVal(is,r.field));
@@ -1340,7 +1354,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var F=spaceFields(p),f=function(k){var id=String((r&&r[k])||"").replace(/^cf:/,"");return id?F.filter(function(x){return x.id===id})[0]:null};
     var a=f("amount");return {amt:a&&a.type==="money"?a:null,tkt:f("number")||null};
   }
-  function quoteRules(p){return (p.rules||[]).filter(function(r){return r.kind==="quote"&&quoteFields(p,r).amt})}
+  function quoteRules(p){return onRules(p).filter(function(r){return r.kind==="quote"&&quoteFields(p,r).amt})}
   function quoteRuleFor(p,sid){var st=stat(p,sid);return st?quoteRules(p).filter(function(r){return String(r.status).toLowerCase()===String(st.name).toLowerCase()})[0]||null:null}
   // a bid that already has its quote PDF, amount and quote number (when the rule fills one) isn't asked again
   function needsQuote(p,is,sid){
@@ -1503,7 +1517,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function remindRule(p,is){
     if(is.type==="Subtask"||isDone(is))return null;
     var nm=String(stat(p,is.status).name||"").toLowerCase();
-    return (p.rules||[]).filter(function(r){return r.kind==="remind"&&String(r.status).toLowerCase()===nm})[0]||null;
+    return onRules(p).filter(function(r){return r.kind==="remind"&&String(r.status).toLowerCase()===nm})[0]||null;
   }
   function followUpDue(p,is){
     var r=remindRule(p,is);if(!r)return false;
@@ -1518,7 +1532,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function handoffsFor(p,is,sid){
     var st=stat(p,sid),out=[];
     if(is.type==="Subtask"||!HAS_PROLE||!st||is.status===sid)return out;
-    (p.rules||[]).forEach(function(r){
+    onRules(p).forEach(function(r){
       if(r.kind==="fill"||!r.ask||!r.assign||String(r.status).toLowerCase()!==String(st.name).toLowerCase())return;
       var t=D.spaces.filter(function(x){return x.id===r.to&&x.parentId===p.id})[0];if(!t)return;
       if((t.issues||[]).some(function(x){return x.originBidId===is.id}))return;
@@ -1787,8 +1801,8 @@ img.who{object-fit:cover;background:var(--chip)}
   /* rows <-> documents */
   // The space's "Date on cards" pick is stored in wf_spaces.rules as {kind:"card",field} so it needs
   // no new column (the copy trigger skips rules without "to"); in the browser it's sp.cardDate.
-  function rowToSpace(r){var R=r.rules||[],cd=R.filter(function(x){return x&&x.kind==="card"})[0];return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:R.filter(function(x){return !x||(x.kind!=="card"&&x.kind!=="mark")}),marks:R.filter(function(x){return x&&x.kind==="mark"}),cardDate:cd?cd.field||"":"",fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
-  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:(d.rules||[]).concat(d.cardDate?[{id:"card",kind:"card",field:d.cardDate}]:[]).concat(d.marks||[])};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
+  function rowToSpace(r){var R=r.rules||[],cd=R.filter(function(x){return x&&x.kind==="card"})[0];return {divisionId:String(r.division_id),parentId:r.parent_id||"",name:r.name,key:r.key,ci:r.ci||0,next:r.next||1,statuses:r.statuses||[],rules:R.filter(function(x){return !x||(x.kind!=="card"&&x.kind!=="mark"&&x.kind!=="tabs")}).map(function(x){return x&&x.kind==="off"?Object.assign({},x.rule||{},{id:x.id,off:true}):x}),marks:R.filter(function(x){return x&&x.kind==="mark"}),hideTabs:(R.filter(function(x){return x&&x.kind==="tabs"})[0]||{}).hide||[],cardDate:cd?cd.field||"":"",fieldSet:r.field_set||"",created:(r.created_at||"").slice(0,10)}}
+  function spaceToRow(id,d){var row={id:id,division_id:d.divisionId,parent_id:d.parentId||null,name:d.name,key:d.key,ci:d.ci||0,next:d.next||1,statuses:d.statuses||[],rules:(d.rules||[]).map(function(r){if(!r||!r.off)return r;var c=Object.assign({},r);delete c.off;delete c.id;return {id:r.id,kind:"off",rule:c}}).concat((d.hideTabs||[]).length?[{id:"tabs",kind:"tabs",hide:d.hideTabs}]:[]).concat(d.cardDate?[{id:"card",kind:"card",field:d.cardDate}]:[]).concat(d.marks||[])};if(HAS_FSET)row.field_set=d.fieldSet||null;return row}
   function rowToBid(r){return {num:r.num,rank:r.rank,spaceId:r.space_id,divisionId:String(r.division_id),type:r.type,title:r.title,desc:r.descr||"",status:r.status,priority:r.priority,assignee:r.assignee||"",reporter:r.reporter||"",labels:r.labels||[],due:r.due||"",created:r.created||"",doneAt:r.done_at||"",updated:r.updated_at?Date.parse(r.updated_at):0,parent:r.parent_id||"",comments:r.comments||[],history:r.history||[],sourceProjectId:r.source_project_id||"",sourceUrl:r.source_url||"",originBidId:r.origin_bid_id||"",fields:r.fields||{},dueTime:r.due_time?String(r.due_time).slice(0,5):"",attachments:r.attachments||[]}}
   function bidToRow(id,d){return {id:id,space_id:d.spaceId,division_id:d.divisionId,num:d.num,rank:d.rank!=null?d.rank:d.num*1000,type:d.type,title:d.title,descr:d.desc||"",status:d.status,priority:d.priority,assignee:d.assignee||null,reporter:d.reporter||"",labels:d.labels||[],due:nz(d.due),created:d.created||today(),done_at:nz(d.doneAt),parent_id:d.parent||null,comments:d.comments||[],history:d.history||[],source_project_id:d.sourceProjectId||null,source_url:d.sourceUrl||null,origin_bid_id:d.originBidId||null,updated_at:new Date(d.updated||Date.now()).toISOString(),fields:HAS_FIELDS?(d.fields||{}):undefined,due_time:HAS_DUETIME?(d.dueTime||null):undefined,attachments:HAS_FILES?(d.attachments||[]):undefined}}
 
@@ -2071,9 +2085,23 @@ img.who{object-fit:cover;background:var(--chip)}
       '<p class="fine" style="margin:0 0 8px">Do something when a bid reaches a column: fill in one of its fields (or ask whoever moved it), ask for the quote PDF, remind the assignee to follow up, or add a copy of it to a sub-space. A copy is made once, and the two bids don’t stay in sync afterward.</p>';
     if(rules.length)h+='<div class="cards arcards">';
     rules.forEach(function(r){
-      if(r.kind==="fill"){h+=fillCardHTML(p,r);return}
-      if(r.kind==="remind"){h+=remindCardHTML(p,r);return}
-      if(r.kind==="quote"){h+=quoteCardHTML(p,r);return}
+      if(r.kind==="fill"){h+=arSwitch(fillCardHTML(p,r),r);return}
+      if(r.kind==="remind"){h+=arSwitch(remindCardHTML(p,r),r);return}
+      if(r.kind==="quote"){h+=arSwitch(quoteCardHTML(p,r),r);return}
+      h+=arSwitch(copyCardHTML(p,r),r);
+    });
+    h+=rules.length?'</div>':'<p class="fine">No automations yet. Use + to add one.</p>';
+    return h+'</section>';
+  }
+  // The on/off switch in a card's corner. Off keeps the automation and its settings; nothing runs
+  // until it's switched back on (see onRules, and the wrapped form in spaceToRow).
+  function arSwitch(card,r){
+    var off=!!r.off,sw='<label class="arsw" title="'+(off?'Off — switch on':'On — switch off')+'"><input type="checkbox" data-aron="'+esc(r.id)+'"'+(off?'':' checked')+' aria-label="'+(off?'Switch this automation on':'Switch this automation off')+'"><span class="trk"></span></label>';
+    card=card.replace('<div class="mcard arcard">','<div class="mcard arcard'+(off?' off':'')+'">'+sw);
+    return off?card.replace('<div class="arl">When a bid enters</div>','<div class="arl"><span class="offtag">Off</span> · When a bid enters</div>'):card;
+  }
+  function copyCardHTML(p,r){
+      var h='';
       var t=D.spaces.filter(function(x){return x.id===r.to})[0];
       var okCol=p.statuses.some(function(s){return s.name.toLowerCase()===String(r.status).toLowerCase()});
       var warn=!t?'That space no longer exists, so this does nothing.':(t.parentId!==p.id?'That space is no longer a sub-space of this one, so this does nothing.':(!okCol?'This space has no column named “'+esc(r.status)+'”, so this does nothing.':''));
@@ -2082,9 +2110,7 @@ img.who{object-fit:cover;background:var(--chip)}
         '<div class="arl">Add a copy to</div><div class="arto"><b>'+esc(t?t.name:"a deleted space")+'</b><br>'+(r.col?esc(r.col)+' column':'First column')+'</div>'+
         (r.assign?'<div class="arl">Assign it to</div><div class="arto">The team’s '+esc(r.assign)+(r.ask?'<br>Asks first':'')+'</div>':'')+
         (warn?'<div class="fine" style="color:var(--high);margin:0">'+warn+'</div>':'')+'</div>';
-    });
-    h+=rules.length?'</div>':'<p class="fine">No automations yet. Use + to add one.</p>';
-    return h+'</section>';
+      return h;
   }
   function fillValueLabel(p,r){
     var tg=fillTargets(p).filter(function(x){return x[0]===r.field})[0],ty=tg?tg[2]:"text";
@@ -3110,6 +3136,10 @@ img.who{object-fit:cover;background:var(--chip)}
         D.config.fieldSets.map(function(fs){return opt(fs.id,fs.name+(isDefaultFieldSet(fs)?" (default)":""),fieldSetFor(p).id)}).join("")+'</select>':'')+
       (HAS_FIELDS?'<label for="p-cd" style="margin-top:12px">Date on cards</label><select id="p-cd" data-spacecard style="min-width:220px">'+opt("","Due date",p.cardDate||"")+
         spaceFields(p).filter(function(fd){return fd.type==="date"}).map(function(fd){return opt(fd.id,fd.name,p.cardDate||"")}).join("")+'</select>':'')+'</section>';
+    var HT=p.hideTabs||[];
+    h+='<section class="panel"><h3>Files in bids</h3><p class="fine" style="margin:0 0 10px">The tabs above the file list inside a bid. Switch all three off to hide that area in this space. Nothing is deleted; files come back when the tab is switched on.</p><div class="tabsw">'+
+      [["att","Supporting Docs"],["docs","Bid Docs"],["ph","Plan Holders"]].map(function(x){var on=HT.indexOf(x[0])<0;
+        return '<label><span class="arsw"><input type="checkbox" data-filetab="'+x[0]+'"'+(on?' checked':'')+'><span class="trk"></span></span>'+esc(x[1])+'</label>'}).join("")+'</div></section>';
     h+=automationsHTML(p);
     if(!main)h+='<section class="panel"><h3>Delete space</h3><p class="fine" style="margin:0 0 10px">This removes the space, any sub-spaces, and all '+nBids+' of their bids.</p><button class="btn danger" data-delspace>'+(ui.armP?'Tap again to delete this space':'Delete space')+'</button></section>';
     return h;
@@ -3697,8 +3727,11 @@ img.who{object-fit:cover;background:var(--chip)}
   function attachHTML(is){
     var A=is.attachments||[],docs=A.filter(function(f){return f.kind==="doc"}),atts=A.filter(function(f){return f.kind!=="doc"});
     var b=bsState(is),d=b.state==="ok"?b.data:null,src=d?(d.files||[]):[],hold=d?d.holders:null;
-    var tab=ui.fileTab||"att";
-    var tabs=[["att","Supporting Docs",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]];
+    // the space can switch tabs off (Settings → Files in bids); all three off hides the area
+    var sp0=D.spaces.filter(function(x){return x.id===is.spaceId})[0],HT=(sp0&&sp0.hideTabs)||[];
+    var tabs=[["att","Supporting Docs",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]].filter(function(t){return HT.indexOf(t[0])<0});
+    if(!tabs.length)return bsLinkHTML(is);
+    var tab=ui.fileTab||"att";if(!tabs.some(function(t){return t[0]===tab}))tab=tabs[0][0];
     var n=tab==="docs"?src.length+docs.length:tab==="att"?atts.length:0;
     var h=bsLinkHTML(is)+'<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
@@ -5106,6 +5139,9 @@ img.who{object-fit:cover;background:var(--chip)}
       if(nm&&nm!==s2.name){unfollow(proj());s2.name=nm;save();render()}else el.value=s2.name;return;
     }
     if(el.id==="pname"&&!isDefaultSpace(proj())){var nm2=el.value.trim();if(nm2){proj().name=nm2;save();renderSide();$("ptitle").textContent=nm2}else el.value=proj().name;return}
+    if(el.hasAttribute("data-aron")){var op=proj(),orl=op&&(op.rules||[]).filter(function(x){return x.id===el.getAttribute("data-aron")})[0];
+      if(orl){if(el.checked)delete orl.off;else orl.off=true;save();render();toast(el.checked?"Automation on":"Automation off — kept, but it won’t run")}return}
+    if(el.hasAttribute("data-filetab")){var tp=proj();if(tp){var tk=el.getAttribute("data-filetab"),hd=(tp.hideTabs||[]).filter(function(x){return x!==tk});if(!el.checked)hd.push(tk);tp.hideTabs=hd;save();render()}return}
     if(el.hasAttribute("data-spacecard")){var cp=proj();if(cp){cp.cardDate=el.value;save();render();toast(el.value?"Cards show "+el.options[el.selectedIndex].text:"Cards show the due date")}return}
     if((v=el.getAttribute("data-ar"))){ui.ar[v]=el.type==="checkbox"?el.checked:el.value;
       if(v==="mode"){ui.ar.value=el.value==="ask"?"@ask":"";renderAutoModal();return}
@@ -5351,6 +5387,7 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("paste",function(e){
     if(!HAS_FILES||!ui.issueId||ui.lbx||!$("ov-issue").classList.contains("open"))return;
     var is=byId(ui.issueId),cd=e.clipboardData;if(!is||!cd)return;
+    var psp=D.spaces.filter(function(x){return x.id===is.spaceId})[0];if(psp&&(psp.hideTabs||[]).indexOf("att")>-1)return;   // Supporting Docs switched off here
     var t=e.target,inBox=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if(inBox&&(cd.getData("text/plain")||"").trim())return;
     var imgs=Array.prototype.filter.call(cd.items||[],function(it){return it.kind==="file"&&/^image\/(png|jpe?g|gif|webp|bmp)$/.test(it.type)}).map(function(it){return it.getAsFile()}).filter(Boolean);
