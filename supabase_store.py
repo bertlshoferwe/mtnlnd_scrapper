@@ -1658,6 +1658,19 @@ def unlinked_workflow_bids(division_id):
             for b in bids]
 
 
+def division_workflow_bids(division_id):
+    """Every bid on the division's board that isn't an automation's copy (the
+    Follow-Up copies share their original's name on purpose), as
+    [{"id", "key", "title", "due", "source_project_id"}] (key like "GB-14")."""
+    sb = get_client()
+    keys = {sp["id"]: sp["key"] for sp in
+            sb.table("wf_spaces").select("id,key").eq("division_id", division_id).execute().data}
+    bids = (sb.table("wf_bids").select("id,num,title,due,space_id,source_project_id")
+            .eq("division_id", division_id).is_("origin_bid_id", "null").limit(10000).execute().data)
+    return [{"id": b["id"], "key": f"{keys.get(b['space_id'], 'BID')}-{b['num']}", "title": b["title"],
+             "due": b.get("due"), "source_project_id": b.get("source_project_id")} for b in bids]
+
+
 def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
     """Tie a bid typed in by hand on the board to a Bid Scout project and
     bring it up to date: due date and time from Bid Scout (when it has

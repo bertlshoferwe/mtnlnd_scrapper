@@ -722,6 +722,18 @@ textarea{min-height:90px;resize:vertical}
 .phl .phc{font-weight:600}
 .phl .phk{box-sizing:border-box;width:36px;min-width:36px;max-width:36px;padding:7px 10px}
 .phl .phk input{width:16px;height:16px;margin:0;accent-color:var(--c1);cursor:pointer}
+.cdups{margin:8px 0 0;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.cdups.same{border-color:var(--high);background:color-mix(in srgb,var(--high) 8%,var(--bg))}
+.cdups .cdh{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ink);margin:0 0 6px}
+.cdups.same .cdh{color:var(--high)}
+.cdups .cdn{font-size:12px;color:var(--muted);margin:0 0 6px}
+.duprow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:6px 8px;margin:0 -8px;cursor:pointer}
+.duprow:hover{background:color-mix(in srgb,var(--c1) 10%,transparent)}
+.duprow .dk{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--muted)}
+.duprow .dt{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.duprow .dm{flex:0 0 auto;font-size:12px;color:var(--muted);white-space:nowrap}
+.dupgrp{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin:0 0 10px}
+@media (max-width:560px){.duprow{flex-wrap:wrap}.duprow .dt{flex-basis:calc(100% - 60px)}.duprow .dm{flex-basis:100%;white-space:normal}}
 .phbar{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13px;color:var(--muted)}
 .phbar .sp{flex:1}
 .phbar .btn{padding:6px 12px}
@@ -992,7 +1004,8 @@ img.who{object-fit:cover;background:var(--chip)}
       <div><label for="c-status">Status</label><select id="c-status"></select></div>
     </div>
     <label for="c-title">Summary</label>
-    <input id="c-title" maxlength="140">
+    <input id="c-title" maxlength="140" autocomplete="off">
+    <div id="c-dups" aria-live="polite"></div>
     <label for="c-desc">Description</label>
     <textarea id="c-desc"></textarea>
     <div class="row">
@@ -3247,11 +3260,13 @@ img.who{object-fit:cover;background:var(--chip)}
     var tabs=[];
     if(p&&d&&!isArchived(state.div))tabs.push(["space","Space · "+p.name]);
     if(d&&!isArchived(state.div))tabs.push(["division","Division · "+d.name]);
+    if(d&&!isArchived(state.div))tabs.push(["dups","Duplicates"]);
     tabs.push(["workflows","Workflows"]);
     var nt=$("setNewTpl");if(nt)nt.style.display="none";   // the + lives on the Workflow templates panel now
     var h='<div class="settabs" role="tablist">'+tabs.map(function(x){return '<button class="tab" role="tab" data-settab="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+esc(x[1])+'</button>'}).join("")+'</div>';
     if(tab==="space")return h+settingsHTML();
     if(tab==="division")return h+membersHTML(d);
+    if(tab==="dups")return h+dupsHTML(d);
     h+=tplEditorHTML();
     if(D.archived.length){
       h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
@@ -4259,7 +4274,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("c-type").innerHTML=TYPES.map(function(t){return opt(t,t,pre.type||"Task")}).join("");
     $("c-status").innerHTML=p.statuses.map(function(s){return opt(s.id,s.name,pre.status||p.statuses[0].id)}).join("");
     $("c-pri").innerHTML=PRI.map(function(x){return opt(x,x,"Medium")}).join("");
-    $("c-title").value="";$("c-title").style.borderColor="";$("c-desc").value="";$("c-who").innerHTML=teamOptions("");$("c-due").value=pre.due||"";$("c-due-time").value="";$("c-due-time").style.display=HAS_DUETIME?"":"none";$("c-labels").value="";
+    $("c-title").value="";$("c-title").style.borderColor="";$("c-dups").innerHTML="";$("c-dups").className="";$("c-save").textContent="Create";ui.cdupSame=false;$("c-desc").value="";$("c-who").innerHTML=teamOptions("");$("c-due").value=pre.due||"";$("c-due-time").value="";$("c-due-time").style.display=HAS_DUETIME?"":"none";$("c-labels").value="";
     // the space's Team field, picked right here (blank = left for Bid Scout or later)
     var tmf=spaceFields(p).filter(function(x){return x.type==="team"})[0],tms=divTeams(curDiv());
     $("c-team-wrap").style.display=tmf&&tms.length?"":"none";
@@ -4267,7 +4282,108 @@ img.who{object-fit:cover;background:var(--chip)}
     fillParent($("c-type").value,pre.parent);
     openOv("ov-create");setTimeout(function(){$("c-title").focus()},30);
   }
-  function submitCreate(){
+  /* ---------- duplicate bids ----------
+     dupSame: the same project, not just alike — the same words ignoring case, punctuation and order,
+     or nearly the same spelling (≥ 0.9) with the same numbers, so "Phase 1"/"Phase 2" or SR-109/SR-126
+     never are. Mirrors _same_project in api/index.py, which stops Bid Scout's Add to Board.
+     dupLike: 0-1, how alike (mirrors _title_score there): the closer of the whole-name similarity
+     and how many of the shorter name's words the other has, common words like "Road" not counting.
+     Automation copies (Geo Follow-Up) share their original's name on purpose, so only originals count. */
+  var DUP_FILL={};("the and for city town county project projects improvement construction phase road street ave avenue drive replacement "+
+    "rfp rfq bid bids itb new west east north south udot wydot itd cdot idot ndot job district water system upgrade").split(" ").forEach(function(w){DUP_FILL[w]=1});
+  function dupWords(t){return String(t||"").toLowerCase().replace(/&/g," and ").replace(/['’]/g,"").match(/[a-z0-9]+/g)||[]}
+  function dupRatio(a,b){   // difflib.SequenceMatcher(None,a,b).ratio(), close enough for names
+    if(!a.length&&!b.length)return 1;
+    var m=function(a0,a1,b0,b1){
+      if(a0>=a1||b0>=b1)return 0;
+      var best=0,bi=0,bj=0,prev=new Array(b1-b0+1).fill(0);
+      for(var i=a0;i<a1;i++){var cur=new Array(b1-b0+1).fill(0);
+        for(var j=b0;j<b1;j++)if(a[i]===b[j]){var v=cur[j-b0+1]=prev[j-b0]+1;if(v>best){best=v;bi=i-v+1;bj=j-v+1}}
+        prev=cur}
+      return best?best+m(a0,bi,b0,bj)+m(bi+best,a1,bj+best,b1):0;
+    };
+    return 2*m(0,a.length,0,b.length)/(a.length+b.length);
+  }
+  function dupSame(a,b){
+    var wa=dupWords(a),wb=dupWords(b);if(!wa.length||!wb.length)return false;
+    if(wa.slice().sort().join(" ")===wb.slice().sort().join(" "))return true;
+    var na=wa.filter(function(w){return /^\d+$/.test(w)}).sort().join(),nb=wb.filter(function(w){return /^\d+$/.test(w)}).sort().join();
+    if(na!==nb)return false;
+    var sa=wa.join(" "),sb=wb.join(" ");
+    if(2*Math.min(sa.length,sb.length)/(sa.length+sb.length)<0.9)return false;
+    return dupRatio(sa,sb)>=0.9;
+  }
+  function dupSig(t){var o={};dupWords(t).forEach(function(w){if(w.length>4&&/s$/.test(w))w=w.slice(0,-1);if((w.length>2||/^\d+$/.test(w))&&!DUP_FILL[w])o[w]=1});return o}
+  function dupLike(a,b){
+    var x=String(a||"").toLowerCase().trim(),y=String(b||"").toLowerCase().trim();if(!x||!y)return 0;
+    var r=2*Math.min(x.length,y.length)/(x.length+y.length)<0.5?0:dupRatio(x,y);
+    var wa=Object.keys(dupSig(x)),wb=dupSig(y),nb=Object.keys(wb).length,sh=Math.min(wa.length,nb);
+    var both=wa.filter(function(w){return wb[w]}).length;
+    return Math.max(r,sh>=2?both/sh*0.95:0);
+  }
+  function dupPool(divId){
+    var out=[];
+    D.spaces.forEach(function(sp){if(sp.divisionId!==divId)return;
+      sp.issues.forEach(function(i){if(!i.originBidId&&i.type!=="Subtask")out.push({is:i,sp:sp})})});
+    return out;
+  }
+  function dupRowHTML(x){
+    var st=stat(x.sp,x.is.status),bits=[x.sp.name+" · "+st.name];
+    if(x.is.due)bits.push("bid "+shortDate(x.is.due));
+    return '<button type="button" class="duprow" data-dupopen="'+esc(x.is.id)+'"><span class="dk">'+esc(x.sp.key+"-"+x.is.num)+'</span><span class="dt">'+esc(x.is.title)+'</span><span class="dm">'+esc(bits.join(" · "))+'</span></button>';
+  }
+  // Create bid: as the Summary is typed, bids already on the board with that name (red; Create
+  // becomes "Create anyway") or a similar one. Clicking one opens it.
+  function renderCreateDups(){
+    var box=$("c-dups"),t=$("c-title").value.trim(),d=curDiv();
+    ui.cdupSame=false;
+    if(!d||t.replace(/\s/g,"").length<4){box.innerHTML="";box.className="";$("c-save").textContent="Create";return}
+    var same=[],like=[];
+    dupPool(d.id).forEach(function(x){
+      if(dupSame(t,x.is.title))same.push(x);
+      else{var sc=dupLike(t,x.is.title);if(sc>=0.6)like.push({x:x,sc:sc})}
+    });
+    like.sort(function(a,b){return b.sc-a.sc});
+    ui.cdupSame=same.length>0;
+    $("c-save").textContent=same.length?"Create anyway":"Create";
+    if(!same.length&&!like.length){box.innerHTML="";box.className="";return}
+    box.className="cdups"+(same.length?" same":"");
+    box.innerHTML=same.length?
+      '<div class="cdh">'+ic("info",15)+'Already on the board</div><p class="cdn">'+(same.length===1?'A bid with this name exists':same.length+' bids with this name exist')+'. Open it instead of adding a second one.</p>'+same.slice(0,5).map(dupRowHTML).join(""):
+      '<div class="cdh">'+ic("info",15)+'Similar bids on the board</div><p class="cdn">Is it one of these? Click one to open it.</p>'+like.slice(0,5).map(function(y){return dupRowHTML(y.x)}).join("");
+  }
+  // Settings → Duplicates: bids in the division with the same name (dupSame), and pairs where one
+  // name's words are all in the other with the same numbers ("maybe"), to open and clean up.
+  function dupGroups(divId){
+    var pool=dupPool(divId),n=pool.length,par=pool.map(function(_,i){return i}),find=function(i){while(par[i]!==i)i=par[i]=par[par[i]];return i};
+    var by={};pool.forEach(function(x,i){var w=dupWords(x.is.title);x.nums=w.filter(function(v){return /^\d+$/.test(v)}).sort().join();x.len=w.join(" ").length;x.sig=dupSig(x.is.title);x.ws={};w.forEach(function(v){x.ws[v]=1});x.wn=Object.keys(x.ws).length;(by[x.nums]=by[x.nums]||[]).push(i)});
+    var maybe=[];
+    Object.keys(by).forEach(function(k){
+      var ix=by[k];
+      for(var a=0;a<ix.length;a++)for(var b=a+1;b<ix.length;b++){
+        var A=pool[ix[a]],B=pool[ix[b]];
+        var shared=0;for(var wk in A.ws)if(B.ws[wk])shared++;
+        if(2*Math.min(A.len,B.len)/(A.len+B.len)>=0.9&&shared*2>=Math.max(A.wn,B.wn)&&dupSame(A.is.title,B.is.title)){par[find(ix[a])]=find(ix[b]);continue}
+        var wa=Object.keys(A.sig),wb=Object.keys(B.sig),sh=wa.length<=wb.length?wa:wb,lg=sh===wa?B.sig:A.sig;
+        if(sh.length>=3&&sh.every(function(w){return lg[w]}))maybe.push([ix[a],ix[b]]);
+      }
+    });
+    var g={};pool.forEach(function(x,i){var r=find(i);(g[r]=g[r]||[]).push(x)});
+    var same=Object.keys(g).map(function(r){return g[r]}).filter(function(l){return l.length>1});
+    maybe=maybe.filter(function(p){return find(p[0])!==find(p[1])}).map(function(p){return [pool[p[0]],pool[p[1]]]});
+    var byTitle=function(l){return l.sort(function(a,b){return (a.is.num-b.is.num)})};
+    return {same:same.map(byTitle).sort(function(a,b){return a[0].is.title.localeCompare(b[0].is.title)}),maybe:maybe.map(byTitle)};
+  }
+  function dupsHTML(d){
+    var G=dupGroups(d.id),h='<section class="panel"><h3>Duplicate bids</h3><p class="fine" style="margin:4px 0 12px">Bids in '+esc(d.name)+' that look like the same project. Open one to compare, then delete the extra from its ⋯ menu. Follow-Up copies made by automations aren’t counted.</p>';
+    if(!G.same.length&&!G.maybe.length)return h+'<p class="fine">No duplicates found.</p></section>';
+    if(G.same.length){h+='<h4 style="margin:6px 0 8px">Same name · '+G.same.length+'</h4>';G.same.forEach(function(l){h+='<div class="dupgrp">'+l.map(dupRowHTML).join("")+'</div>'})}
+    if(G.maybe.length){h+='<h4 style="margin:14px 0 4px">Maybe the same · '+G.maybe.length+'</h4><p class="fine" style="margin:0 0 8px">One name has every important word of the other.</p>';G.maybe.slice(0,100).forEach(function(l){h+='<div class="dupgrp">'+l.map(dupRowHTML).join("")+'</div>'})}
+    return h+'</section>';
+  }
+  function submitCreate(e){
+    // Enter in Summary doesn't make a bid that's already on the board; clicking Create anyway does
+    if(ui.cdupSame&&!(e&&e.type==="click")){var bx=$("c-dups");if(bx){bx.scrollIntoView({block:"nearest"});bx.animate&&bx.animate([{transform:"translateX(0)"},{transform:"translateX(-4px)"},{transform:"translateX(4px)"},{transform:"translateX(0)"}],{duration:220})}return}
     var title=$("c-title").value.trim();
     if(!title){$("c-title").focus();$("c-title").style.borderColor="var(--high)";return}
     var tmf=spaceFields(proj()).filter(function(x){return x.type==="team"})[0],fields={};
@@ -4577,6 +4693,7 @@ img.who{object-fit:cover;background:var(--chip)}
       savePrefs();render();return;
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
+    if((el=t.closest("[data-dupopen]"))){var did=el.getAttribute("data-dupopen");closeOv("ov-create");closeOv("ov-settings");gotoBid(did);return}
     if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
     if(t.closest(".cpick"))return;
     if((el=t.closest("[data-open]"))){
@@ -4876,6 +4993,7 @@ img.who{object-fit:cover;background:var(--chip)}
   });
   document.addEventListener("input",function(e){
     var el=e.target;
+    if(el.id==="c-title"){clearTimeout(ui.cdupT);ui.cdupT=setTimeout(renderCreateDups,120);return}
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askf")){
       var af=el.getAttribute("data-askf"),wasOther=/^other\b/i.test(ui.ask.ans[af]||"");ui.ask.ans[af]=el.value;if(String(el.value).trim())askOk("r:"+af);
       if(el.type==="radio"||wasOther!==/^other\b/i.test(el.value)){var nt=$("ask-note");if(nt)ui.ask.note=nt.value;renderAsk()}

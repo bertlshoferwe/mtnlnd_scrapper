@@ -1019,6 +1019,19 @@ def api_add_project_to_jira(division_id):
     if not key or not summary:
         return jsonify({"error": "project_key and summary are required"}), 400
     due_date = (data.get("due_date") or "").strip()
+    # a bid with the same name already on the board (typed in by hand, or added from another
+    # listing of the same project) stops it: the board gets no second copy
+    try:
+        same = next((b for b in supabase_store.division_workflow_bids(division_id)
+                     if b["source_project_id"] != key and _same_project(summary, b["title"])), None)
+    except Exception as e:
+        print(f"  ! couldn't check the bid board for {summary!r} ({e})")
+        same = None
+    if same:
+        return jsonify({"error": f"This is already on the bid board as {same['key']} “{same['title']}”.",
+                        "exists": {"id": same["id"], "key": same["key"], "title": same["title"], "due": same["due"],
+                                   "linked": bool(same["source_project_id"]),
+                                   "project_key": same["source_project_id"]}}), 409
     try:
         back = request.host_url.rstrip("/") + "/?" + urlencode({"division": division_id, "project": key})
         bid_id = supabase_store.create_workflow_bid(
@@ -1115,6 +1128,22 @@ def _title_score(a, b):
     short = min(wa, wb, key=len)
     words = len(wa & wb) / len(short) * 0.95 if len(short) >= 2 else 0.0
     return max(ratio, words)
+
+
+def _same_project(a, b):
+    """True when two bid names are the same project, not just alike: the same words
+    ignoring case, punctuation and order, or nearly the same spelling (≥ 0.9) with
+    the same numbers — so "Phase 1" and "Phase 2", or SR-109 and SR-126, never are.
+    The bid board's Create bid uses the same rule (dupSame in workflow/index.html)."""
+    wa = re.findall(r"[a-z0-9]+", (a or "").lower().replace("&", " and ").replace("'", "").replace("’", ""))
+    wb = re.findall(r"[a-z0-9]+", (b or "").lower().replace("&", " and ").replace("'", "").replace("’", ""))
+    if not wa or not wb:
+        return False
+    if sorted(wa) == sorted(wb):
+        return True
+    if sorted(w for w in wa if w.isdigit()) != sorted(w for w in wb if w.isdigit()):
+        return False
+    return difflib.SequenceMatcher(None, " ".join(wa), " ".join(wb)).ratio() >= 0.9
 
 
 @app.route("/api/<division_id>/bids/<bid_id>/project-candidates", methods=["GET"])

@@ -280,7 +280,7 @@
   }
   .nf-actions { display: flex; gap: 8px; margin-top: 10px; }
   #projectLinkBtn { margin-left: auto; font-weight: 500; }
-  #projectLinkBtn[hidden], #linkPanel[hidden] { display: none; }
+  #projectLinkBtn[hidden], #linkPanel[hidden], #linkPanel [hidden] { display: none; }
   .dup-list { display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow: auto; }
   .dup-list .desc { margin: 4px 0; }
   .dup-opt {
@@ -1327,13 +1327,15 @@
         </div>
       </div>
       <div class="not-fit-panel" id="linkPanel" hidden>
-        <div class="nf-title">Is this already on the bid board?</div>
-        <p class="desc" style="margin:-4px 0 10px;font-size:13px">Pick the bid someone typed in by hand to connect it to this project. Its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in. Nothing is filed in Jira.</p>
+        <div class="nf-title" id="linkTitle">Is this already on the bid board?</div>
+        <p class="desc" id="linkDesc" style="margin:-4px 0 10px;font-size:13px">Pick the bid someone typed in by hand to connect it to this project. Its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in. Nothing is filed in Jira.</p>
         <input type="search" id="linkSearch" placeholder="Search bids on the board" autocomplete="off" oninput="renderLinkCandidates()">
         <div class="dup-list" id="linkList" role="listbox" aria-label="Bids on the board"></div>
         <div class="nf-actions">
           <button type="button" class="btn-primary" id="linkSaveBtn" onclick="saveBoardLink()" disabled>Link to this bid</button>
           <button type="button" class="btn-ghost" id="linkNewBtn" onclick="addProjectToJira(true)">No, add as a new bid</button>
+          <button type="button" class="btn-primary" id="linkOpenBtn" onclick="openExistingBid()" hidden>Open it on the board</button>
+          <button type="button" class="btn-ghost" id="linkDupBtn" onclick="markExistingDuplicate()" hidden>Mark this one as a duplicate</button>
           <button type="button" class="btn-ghost" onclick="closeLinkPanel()">Cancel</button>
         </div>
       </div>
@@ -1477,7 +1479,10 @@ async function api(path, opts) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || ('Request failed (' + res.status + ')'));
+    const err = new Error(body.error || ('Request failed (' + res.status + ')'));
+    err.status = res.status;
+    err.body = body;
+    throw err;
   }
   return res.json();
 }
@@ -3882,6 +3887,7 @@ function openLinkPanel(cands) {
   if (!panel.hidden && !cands) { closeLinkPanel(); return; }
   closeNotFitPanel();
   closeDupPanel();
+  setLinkMode(null);
   linkPick = null;
   linkCands = cands || null;
   document.getElementById('linkSearch').value = '';
@@ -3900,6 +3906,56 @@ function openLinkPanel(cands) {
 
 function closeLinkPanel() {
   document.getElementById('linkPanel').hidden = true;
+  setLinkMode(null);
+}
+
+// The panel's two modes: "Is this already on the board?" (pick a bid or add a new one), and
+// "already there" (ex = the bid the server found with the same name; Add to Board refuses a
+// second one). A bid typed in by hand can be linked; one added from another listing of the same
+// project can't, so this project is marked a duplicate of that one instead.
+let linkExisting = null;
+const LINK_DESC = 'Pick the bid someone typed in by hand to connect it to this project. Its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in. Nothing is filed in Jira.';
+function setLinkMode(ex) {
+  linkExisting = ex;
+  document.getElementById('linkTitle').textContent = ex ? 'This is already on the bid board' : 'Is this already on the bid board?';
+  document.getElementById('linkDesc').textContent = !ex ? LINK_DESC : ex.linked
+    ? ex.key + ' has the same name and was added from another listing of this project, so it can’t be added again. Open it, or mark this listing as a duplicate.'
+    : ex.key + ' has the same name, so it can’t be added again. Link it to connect this project to it: its due date and time update from Bid Scout, and its Bid Docs and Plan Holders tabs fill in.';
+  document.getElementById('linkSearch').hidden = !!ex;
+  document.getElementById('linkNewBtn').hidden = !!ex;
+  document.getElementById('linkOpenBtn').hidden = !ex;
+  document.getElementById('linkDupBtn').hidden = !(ex && ex.linked && ex.project_key);
+  document.getElementById('linkSaveBtn').hidden = !!(ex && ex.linked);
+}
+
+function showAlreadyOnBoard(ex) {
+  openLinkPanel([ex]);
+  setLinkMode(ex);
+  if (!ex.linked) {
+    linkPick = ex.id;
+    document.getElementById('linkSaveBtn').disabled = false;
+    renderLinkCandidates();
+  }
+}
+
+function openExistingBid() {
+  if (!linkExisting) return;
+  openInTab('bidboard', '/workflow/?division=' + encodeURIComponent(currentDivision) + '&bid=' + encodeURIComponent(linkExisting.id), 'wfOpenLink');
+}
+
+async function markExistingDuplicate() {
+  const p = currentProject, ex = linkExisting;
+  if (!p || !ex || !ex.project_key) return;
+  const btn = document.getElementById('linkDupBtn');
+  btn.disabled = true;
+  try {
+    await sendDecision(p, 'duplicate', null, null, ex.project_key);
+    closeLinkPanel();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderLinkCandidates() {
@@ -3922,6 +3978,7 @@ function renderLinkCandidates() {
     const sub = [b.key, b.due ? 'due ' + new Date(b.due + 'T00:00').toLocaleDateString([], { month: 'short', day: 'numeric' }) : '']
       .filter(Boolean).join('  ·  ');
     o.innerHTML = '<span class="dup-name">' + escapeHtml(b.title) + '</span><span class="dup-sub">' + escapeHtml(sub) + '</span>';
+    if (linkExisting && linkExisting.linked) { o.disabled = true; list.appendChild(o); return; }
     o.onclick = function() {
       list.querySelectorAll('.dup-opt').forEach(function(x) { x.classList.remove('selected'); });
       o.classList.add('selected');
@@ -3981,6 +4038,7 @@ async function addProjectToJira(skipLinkCheck) {
   closeLinkPanel();
   const btn = document.getElementById('projectJiraBtn');
   btn.disabled = true;
+  let exists = null;
   try {
     const res = await api('/api/' + currentDivision + '/projects/jira', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -3999,10 +4057,12 @@ async function addProjectToJira(skipLinkCheck) {
     renderFitSuggestion(p);
     loadProjects();  // moves to the Bid Board tab
   } catch (e) {
-    alert(e.message);
+    if (e.status === 409 && e.body && e.body.exists) exists = e.body.exists;
+    else alert(e.message);
   } finally {
     btn.disabled = false;
   }
+  if (exists && currentProject === p) showAlreadyOnBoard(exists);
 }
 
 document.getElementById('resultsSearch').addEventListener('input', function() {
