@@ -1252,7 +1252,19 @@ img.who{object-fit:cover;background:var(--chip)}
   // look. Bid Scout's Add as addendum and Duplicates → Merge as addendum set it; Mark as reviewed clears it.
   var ADD_LABEL="Addendum";
   function hasAddendum(is){return (is.labels||[]).some(function(l){return String(l).toLowerCase()==="addendum"})}
-  function addFlag(is){return hasAddendum(is)?'<div><span class="adflag" title="Updated by an addendum — needs another look">'+ic("flag",12,2.4)+'Addendum</span></div>':''}
+  // A Follow-Up copy shows its original's flag too (the copy's own label counts as well); clearing it
+  // from either bid clears both.
+  function addendumOn(is){
+    for(var n=0,b=is;b&&n<6;n++){if(hasAddendum(b))return true;var o=b.originBidId?findBid(b.originBidId):null;b=o?o.is:null}
+    return false;
+  }
+  function clearAddendum(is){
+    for(var n=0,b=is;b&&n<6;n++){
+      if(hasAddendum(b)){var nl=b.labels.filter(function(l){return String(l).toLowerCase()!=="addendum"});logH(b,"Labels",b.labels.join(", "),nl.join(", ")||"None");b.labels=nl;b.updated=Date.now()}
+      var o=b.originBidId?findBid(b.originBidId):null;b=o?o.is:null;
+    }
+  }
+  function addFlag(is){return addendumOn(is)?'<div><span class="adflag" title="Updated by an addendum — needs another look">'+ic("flag",12,2.4)+'Addendum</span></div>':''}
   function onRules(p){return (p.rules||[]).filter(function(r){return r&&!r.off})}
   function fuFlag(){return '<span class="fuflag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Follow up due</span>'}
   function dueSoon(is){return !!is.due&&!isDone(is)&&!overdue(is)&&dueAt(is)-Date.now()<=86400000}
@@ -3748,7 +3760,7 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function issueTopHTML(is){
     var kids=children(is);
-    var h=(hasAddendum(is)?'<div class="adbanner">'+ic("flag",18)+'<span class="t"><b>Updated by an addendum.</b> The bid date or documents changed — give it another look. The comments say what changed.</span>'+(canAct()?'<button class="btn small" data-adclear>Mark as reviewed</button>':'')+'</div>':'')+
+    var h=(addendumOn(is)?'<div class="adbanner">'+ic("flag",18)+'<span class="t"><b>Updated by an addendum.</b> The bid date or documents changed — give it another look. The comments say what changed.</span>'+(canAct()?'<button class="btn small" data-adclear>Mark as reviewed</button>':'')+'</div>':'')+
       '<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
       '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>'+
       '<div class="isec" id="i-att">'+attachHTML(is)+'</div>';
@@ -4956,7 +4968,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-view]"))){state.view=el.getAttribute("data-view");ui.armP=false;ui.armS=null;ui.armT=null;ui.armD=false;closeDrawer();save();render();return}
     if((el=t.closest("[data-dupmerge]"))){ui.dupMerge={ids:el.getAttribute("data-dupmerge"),keep:el.getAttribute("data-dupkeep"),mode:el.getAttribute("data-dupmode")||""};render();return}
-    if(t.closest("[data-adclear]")){var ai2=byId(ui.issueId);if(ai2&&hasAddendum(ai2)){var nl=ai2.labels.filter(function(l){return String(l).toLowerCase()!=="addendum"});logH(ai2,"Labels",ai2.labels.join(", "),nl.join(", ")||"None");ai2.labels=nl;ai2.updated=Date.now();save();renderIssue();render()}return}
+    if(t.closest("[data-adclear]")){var ai2=byId(ui.issueId);if(ai2&&addendumOn(ai2)){clearAddendum(ai2);save();renderIssue();render()}return}
     if(t.closest("[data-reloadpage]")){location.reload();return}
     if(t.closest("[data-dupcancel]")){ui.dupMerge=null;render();return}
     if((el=t.closest("[data-dupnot]"))){
