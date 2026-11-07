@@ -697,6 +697,12 @@ textarea{min-height:90px;resize:vertical}
 .ftabs{margin:0}
 .ftabbar{display:flex;align-items:center;gap:8px;margin:0 0 10px;position:relative}
 .ftabbar .ftabs{margin:0}
+.ftabbar .fadd{margin-left:auto;display:inline-flex;align-items:center;gap:6px;margin-bottom:0;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
+.ftabbar .fadd:hover{border-color:var(--line2)}
+.ftabbar .fadd~.fmore{margin-left:0}
+#i-files.dropping{outline:2px dashed var(--c1);outline-offset:-2px;background:color-mix(in srgb,var(--c1) 7%,transparent)}
+.fhint{display:flex;flex-direction:column;align-items:center;gap:4px;padding:28px 12px;color:var(--muted);font-size:13px;text-align:center}
+.fhint b{color:var(--ink);font-size:14px}
 .ftabbar .fmore{margin-left:auto;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:0;background:none;color:var(--muted)}
 .ftabbar .fmore:hover,.ftabbar .fmore[aria-expanded="true"]{background:var(--chip);color:var(--ink)}
 .fmenu{position:absolute;right:0;top:36px;z-index:20;min-width:180px;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:4px}
@@ -3847,13 +3853,11 @@ img.who{object-fit:cover;background:var(--chip)}
     t.files.forEach(function(x){h+=attRow(x.f)});
     return h;
   }
-  function dropzHTML(kind,label){
+  // The whole files half takes drops for the tab that's showing (see the ov-issue drop handler);
+  // this is only the upload progress, plus a hint when the tab has nothing yet.
+  function dropzHTML(kind,label,empty){
     if(!HAS_FILES)return '';
-    return upHTML(ui.issueId,kind)+'<label class="dropz big" data-dropz="'+kind+'">'+
-      '<span class="dzi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg></span>'+
-      '<b>Drop files or folders here</b><span class="dzs">or <u>'+label+'</u></span>'+
-      (kind==="att"?'<span class="dzf dzp">You can also paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')</span>':'')+
-      '<input type="file" multiple data-attinput="'+kind+'" hidden></label>';
+    return upHTML(ui.issueId,kind)+(empty?'<div class="fhint">'+ic("clip",18)+'<b>Drop files or folders anywhere here</b><span>or use Add files'+(kind==="att"?', or paste a screenshot ('+(/Mac|iPhone|iPad/.test(navigator.platform)?'⌘V':'Ctrl+V')+')':'')+'</span></div>':'');
   }
   // a bid copied to another space shows the Bid Scout project of the bid it was copied from
   function srcKey(is){
@@ -3871,12 +3875,14 @@ img.who{object-fit:cover;background:var(--chip)}
     // the space can switch tabs off (Settings → Files in bids); all three off hides the area
     var sp0=D.spaces.filter(function(x){return x.id===is.spaceId})[0],HT=(sp0&&sp0.hideTabs)||[];
     var tabs=[["att","Supporting Docs",atts.length],["docs","Bid Docs",src.length+docs.length],["ph","Plan Holders",hold?hold.length:0]].filter(function(t){return HT.indexOf(t[0])<0});
-    if(!tabs.length)return bsLinkHTML(is);
+    if(!tabs.length){ui.fileTabOn="";return bsLinkHTML(is)}
     var tab=ui.fileTab||"att";if(!tabs.some(function(t){return t[0]===tab}))tab=tabs[0][0];
+    ui.fileTabOn=tab;
     var n=tab==="docs"?src.length+docs.length:tab==="att"?atts.length:0;
     var h=bsLinkHTML(is)+'<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
     }).join("")+'</div>'+
+      (HAS_FILES&&(tab==="att"||tab==="docs")?'<label class="fadd" title="Add files to '+(tab==="att"?'Supporting Docs':'Bid Docs')+'">'+ic("plus",14)+'Add files<input type="file" multiple data-attinput="'+(tab==="att"?"att":"doc")+'" hidden></label>':'')+
       (n?'<button class="fmore" data-fmore aria-haspopup="menu" aria-expanded="'+!!ui.fmenu+'" aria-label="More" title="More">'+ic("more",18)+'</button>'+
         (ui.fmenu?'<div class="fmenu" role="menu"><a role="menuitem" data-dlall href="/api/'+encodeURIComponent(is.divisionId)+'/bids/'+encodeURIComponent(is.id)+'/zip?tab='+tab+'" download>'+DL_IC+'Download all</a></div>':''):'')+'</div>';
     if(tab==="docs"){
@@ -3888,12 +3894,12 @@ img.who{object-fit:cover;background:var(--chip)}
         else if(!docs.length)h+='<p class="fnote">Bid Scout has no documents for this project.</p>';
       }
       h+=attListHTML(docs,"doc",is);
-      h+=dropzHTML("doc","add a document");
+      h+=dropzHTML("doc","add a document",!src.length&&!docs.length&&!(b.none||b.state==="loading"||b.state==="err"));
     }else if(tab==="att"){
       h+=attListHTML(atts,"att",is);
       if(!atts.length&&!HAS_FILES)h+='<p class="fnote">No supporting docs.</p>';
       if(canRequote(proj(),is))h+='<p style="margin:0 0 8px"><button class="btn small" data-newquote>Upload a new quote</button></p>';
-      h+=dropzHTML("att","add a supporting doc");
+      h+=dropzHTML("att","add a supporting doc",!atts.length);
     }else{
       if(b.none)h+='<p class="fnote">Plan holders come from Bid Scout, so they show once this bid is linked to its Bid Scout project.'+bsLinkBtn(is)+'</p>';
       else if(b.state==="loading")h+='<p class="fnote">Loading plan holders from Bid Scout…</p>';
@@ -5666,17 +5672,24 @@ img.who{object-fit:cover;background:var(--chip)}
   })();
   (function(){
     var box=$("ov-issue");
+    // files half: drops go to the tab that's showing (Plan Holders takes none)
+    var fz=function(e){var z=e.target.closest&&e.target.closest("#i-files");return z&&HAS_FILES&&(ui.fileTabOn==="att"||ui.fileTabOn==="docs")?z:null};
+    var hasFiles=function(e){return e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1};
     box.addEventListener("dragover",function(e){
-      var z=e.target.closest&&e.target.closest("[data-dropz],[data-cdrop]");
-      if(z&&e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1){e.preventDefault();z.classList.add("over")}
+      var z=e.target.closest&&e.target.closest("[data-cdrop]");
+      if(z&&hasFiles(e)){e.preventDefault();z.classList.add("over");return}
+      var f=fz(e);if(f&&hasFiles(e)){e.preventDefault();f.classList.add("dropping")}
     });
-    box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz],[data-cdrop]");if(z)z.classList.remove("over")});
+    box.addEventListener("dragleave",function(e){
+      var z=e.target.closest&&e.target.closest("[data-cdrop]");if(z)z.classList.remove("over");
+      var f=$("i-files");if(f&&(!e.relatedTarget||!f.contains(e.relatedTarget)))f.classList.remove("dropping");
+    });
     box.addEventListener("drop",function(e){
       var cz=e.target.closest&&e.target.closest("[data-cdrop]");
       if(cz&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();cz.classList.remove("over");var ck2=cz.getAttribute("data-cdrop");
         Promise.resolve(Array.prototype.map.call(e.dataTransfer.files,function(f){return {file:f,rel:f.name}})).then(function(fl){uploadFiles(fl.filter(notHidden),"att",ck2)});return}
-      var z=e.target.closest&&e.target.closest("[data-dropz]");
-      if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");var k=z.getAttribute("data-dropz");droppedFiles(e.dataTransfer).then(function(fl){uploadFiles(fl,k)})}
+      var f=fz(e);$("i-files").classList.remove("dropping");
+      if(f&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();var k=ui.fileTabOn==="docs"?"doc":"att";droppedFiles(e.dataTransfer).then(function(fl){uploadFiles(fl,k)})}
     });
   })();
   (function(){
