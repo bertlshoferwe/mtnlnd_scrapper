@@ -97,7 +97,7 @@ def _bid_events(bid, through, person_fields):
                 ev.append((at, "role", dict(h, toId=pid)))
     for cm in bid.get("comments") or []:
         at = int(cm.get("at") or 0)
-        if at > through and (cm.get("text") or "").strip():
+        if at > through and ((cm.get("text") or "").strip() or cm.get("files")):
             ev.append((at, "comment", cm))
     ev.sort(key=lambda e: e[0])
     return ev
@@ -150,8 +150,11 @@ def _lines_for(bid, events, people, person_fields):
         else:
             mentions = set(e.get("mentions") or [])
             for pid in involved | commenters | mentions:
-                verb = "mentioned you in a comment" if pid in mentions else "commented"
-                add(pid, {"text": f"{who(by)} {verb}:", "quote": e.get("text") or ""}, by)
+                verb = ("mentioned you in a comment" if pid in mentions
+                        else "replied" if e.get("parent") else "commented")
+                nf = len(e.get("files") or [])
+                quote = e.get("text") or (f"(attached {nf} file{'s' if nf != 1 else ''})" if nf else "")
+                add(pid, {"text": f"{who(by)} {verb}:", "quote": quote}, by)
     return out
 
 

@@ -889,6 +889,27 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .seg button{background:none;border:0;border-radius:6px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .comp textarea{min-height:64px}
+.replies{margin:2px 0 0 6px;padding-left:12px;border-left:2px solid var(--line)}
+.replies .ev{padding-top:10px}
+.replies .who{width:22px;height:22px;font-size:10px}
+.ev.rcomp{padding-top:10px}
+.ev.rcomp textarea{min-height:52px}
+.cbar{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.cbar .sp{flex:1}
+.cattach{display:inline-flex;align-items:center;gap:6px;margin:0;padding:5px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;background:var(--bg)}
+.cattach:hover{color:var(--ink);border-color:var(--line2)}
+.comp.over textarea{border-color:var(--c1);background:color-mix(in srgb,var(--c1) 6%,var(--bg))}
+.cfiles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.cfile{display:inline-flex;align-items:center;gap:6px;max-width:240px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:13px;color:var(--ink);cursor:pointer;text-align:left}
+.cfile:hover{border-color:var(--line2)}
+.cfile .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfile.img{padding:0;overflow:hidden;width:96px;height:72px;justify-content:center;background:var(--chip)}
+.cfile.img img{width:100%;height:100%;object-fit:cover;display:block}
+.cfile.gone{cursor:default;color:var(--muted);font-style:italic}
+.cfile .pc{font-size:12px;color:var(--muted)}
+.cfile.bad{border-color:var(--high);color:var(--high)}
+.cfx{display:inline-grid;place-items:center;width:18px;height:18px;margin-left:2px;border:0;border-radius:50%;background:none;color:var(--muted);cursor:pointer}
+.cfx:hover{background:var(--chip);color:var(--ink)}
 .comp .actions{margin-top:8px}
 .ev{display:flex;gap:10px;padding:12px 0 0}
 .ev .body{flex:1;min-width:0;font-size:14px}
@@ -1158,6 +1179,7 @@ img.who{object-fit:cover;background:var(--chip)}
     image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    clip:'<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
     flag:'<path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/>',
     info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
@@ -1207,7 +1229,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var ROLES=["Manager","Estimator","Inside Sales","Outside Sales"];
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",teams:[],month:"",range:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att"};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[],month:"",range:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att",cdraft:{},replyTo:null,replyDraft:""};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -3738,7 +3760,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- issue modal ---------- */
   function openIssue(id){
-    ui.issueId=id;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
+    ui.issueId=id;ui.draft="";ui.replyTo=null;ui.replyDraft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
     ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
     renderIssue();openOv("ov-issue");saveHere();
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
@@ -4064,13 +4086,16 @@ img.who{object-fit:cover;background:var(--chip)}
   // Uploads per bid: {items:[{file,rel,kind,size,loaded,state:"wait"|"up"|"ok"|"err",err}],active}.
   // Three at a time; the panel above the drop zone shows each file and the total.
   var UP_AT_ONCE=3,ups={};
-  function uploadFiles(files,kind){
+  function uploadFiles(files,kind,cfor){
     var is=byId(ui.issueId);if(!is||!sb||!files||!files.length)return;
     var U=ups[is.id]=ups[is.id]||{items:[],active:0};
     if(!U.active&&!U.items.some(function(x){return x.state==="wait"}))U.items=U.items.filter(function(x){return x.state==="err"});
     clearTimeout(U.clear);
-    Array.prototype.forEach.call(files,function(x){U.items.push({file:x.file,rel:x.rel,kind:kind,size:x.file.size||0,loaded:0,state:"wait"})});
-    renderAttach();upPump(is.id);
+    Array.prototype.forEach.call(files,function(x){
+      var it={file:x.file,rel:x.rel,kind:kind,size:x.file.size||0,loaded:0,state:"wait"};U.items.push(it);
+      if(cfor){var dk=is.id+"|"+cfor;(ui.cdraft[dk]=ui.cdraft[dk]||[]).push(it)}
+    });
+    renderAttach();upPump(is.id);if(cfor)paintCDraft();
   }
   function upPump(bid){
     var U=ups[bid];if(!U)return;
@@ -4089,11 +4114,13 @@ img.who{object-fit:cover;background:var(--chip)}
       var cur=byId(bid);
       if(cur){
         var rec={id:id,name:it.rel,path:path,size:f.size,type:f.type||"",at:Date.now(),by:ME};if(it.kind==="doc")rec.kind="doc";
+        it.recId=id;it.path=path;it.type=rec.type;
         cur.attachments=(cur.attachments||[]).concat([rec]);
         logH(cur,it.kind==="doc"?"Bid doc":"Supporting doc","",it.rel);cur.updated=Date.now();save();
       }
     }catch(err){it.state="err";it.loaded=0;it.err=(err&&err.message)||"unknown error"}
     if(ui.issueId===bid){renderAttach();renderIssueAct()}
+    paintCDraft();
   }
   // Straight to storage with byte progress; if that route fails, the plain upload (no progress).
   function putFile(path,f,onp){
@@ -4162,7 +4189,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function upPaint(){
     if(upRaf)return;
     upRaf=requestAnimationFrame(function(){
-      upRaf=0;var el=document.getElementById("upst");if(!el)return;
+      upRaf=0;paintCDraft();var el=document.getElementById("upst");if(!el)return;
       var h=upHTML(ui.issueId,el.getAttribute("data-kind"));if(!h){renderAttach();return}
       var l=el.querySelector(".upl"),top=l?l.scrollTop:0;
       el.outerHTML=h;
@@ -4185,6 +4212,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(r.error||!r.data)return;
       r.data.forEach(function(x){if(x.signedUrl&&x.path)TH[x.path]={url:x.signedUrl,at:Date.now()}});
       if(ui.issueId===is.id)renderAttach();
+      Array.prototype.forEach.call(document.querySelectorAll("img[data-thpath]"),function(im){var t=TH[im.getAttribute("data-thpath")];if(t&&!im.getAttribute("src"))im.src=t.url});
       if(ui.lbx)renderLbx();
     },function(){need.forEach(function(p){delete thBusy[p]})});
   }
@@ -4377,29 +4405,77 @@ img.who{object-fit:cover;background:var(--chip)}
     ta.value=ta.value.slice(0,mq.start)+ins+ta.value.slice(end);
     var pos=mq.start+ins.length;ta.focus();ta.setSelectionRange(pos,pos);
     if(ta.id==="c-new")ui.draft=ta.value;
+    if(ta.id==="c-reply")ui.replyDraft=ta.value;
     closeMention();
+  }
+  /* Comments: a reply has parent (the comment it answers; replies to a reply join the same thread)
+     and shows under it, oldest first. A comment's files (files: [attachment id]) are uploaded to
+     Supporting Docs like any other and shown on the comment; paste a screenshot into the box, drop
+     files on it or use Attach. ui.cdraft["<bid>|new" or "<bid>|r:<comment id>"] holds the uploads
+     for a comment not saved yet. */
+  function cFilesHTML(is,ids){
+    if(!ids||!ids.length)return '';
+    return '<div class="cfiles">'+ids.map(function(aid){
+      var f=attById(is,aid);
+      if(!f)return '<span class="cfile gone">File removed</span>';
+      if(isImg(f))return '<button class="cfile img" data-attopen="'+esc(f.id)+'" title="'+esc(f.name)+'"><img data-thpath="'+esc(f.path)+'" alt="'+esc(f.name)+'"'+(thumbUrl(f)?' src="'+esc(thumbUrl(f))+'"':'')+'></button>';
+      return '<button class="cfile" data-attopen="'+esc(f.id)+'" title="Open '+esc(f.name)+'">'+FILE_IC+'<span class="n">'+esc(f.name)+'</span></button>';
+    }).join("")+'</div>';
+  }
+  function cDraftHTML(key){
+    var L=ui.cdraft[key]||[];if(!L.length)return '';
+    return L.map(function(it,i){
+      var x='<button type="button" class="cfx" data-cdraftx="'+esc(key)+'|'+i+'" aria-label="Remove '+esc(it.rel)+'" title="Remove">'+ic("x",12)+'</button>';
+      if(it.state==="err")return '<span class="cfile bad" title="'+esc(it.err||"")+'"><span class="n">'+esc(it.rel)+'</span> couldn’t upload'+x+'</span>';
+      if(it.state!=="ok")return '<span class="cfile"><span class="n">'+esc(it.rel)+'</span><span class="pc">'+(it.size?Math.round(100*it.loaded/it.size):0)+'%</span>'+x+'</span>';
+      return '<span class="cfile">'+FILE_IC+'<span class="n">'+esc(it.rel)+'</span>'+x+'</span>';
+    }).join("");
+  }
+  function paintCDraft(){
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cdraft]"),function(el){el.innerHTML=cDraftHTML(el.getAttribute("data-cdraft"))});
+  }
+  function compBar(key,saveHTML){
+    return '<div class="cfiles" data-cdraft="'+esc(key)+'">'+cDraftHTML(key)+'</div>'+
+      '<div class="cbar"><label class="cattach" title="Attach files (they go to Supporting Docs too)">'+ic("clip",15)+'Attach<input type="file" multiple hidden data-cfileinput="'+esc(key)+'"></label>'+
+      '<span class="fine" style="margin:0">or paste a screenshot</span><span class="sp"></span>'+saveHTML+'</div>';
+  }
+  function commentHTML(c,is,reply){
+    var h='<div class="ev">'+avHTML(c.by)+'<div class="body"><b>'+esc(nameOf(c.by))+'</b><span class="when">'+ago(c.at)+'</span>';
+    if(ui.editC===c.id){
+      h+='<textarea id="c-edit" style="margin-top:6px">'+esc(c.text)+'</textarea><div class="actions" style="margin-top:8px"><button class="btn primary small" data-sc="'+c.id+'">Save</button><button class="btn small" data-cc>Cancel</button></div>';
+    }else{
+      var nr=reply?0:(is.comments||[]).filter(function(x){return x.parent===c.id}).length;
+      h+=(c.text?'<div class="txt">'+mentionHTML(c,is)+'</div>':'')+cFilesHTML(is,c.files)+
+        '<div class="tools2"><button data-rc="'+esc(reply?c.parent:c.id)+'" data-rcto="'+esc(c.by)+'">Reply</button><button data-ec="'+c.id+'">Edit</button><button data-dc="'+c.id+'">'+(ui.armC===c.id?(nr?'Tap to delete with '+nr+' repl'+(nr===1?'y':'ies'):'Tap to confirm'):'Delete')+'</button></div>';
+    }
+    return h+'</div></div>';
   }
   function renderIssueAct(){
     var is=byId(ui.issueId);if(!is)return;
-    var tab=ui.actTab,ev=[];
-    if(tab!=="history")is.comments.forEach(function(c){ev.push({k:"c",at:c.at,c:c})});
+    // keep the cursor in whichever comment box it was in through the redraw
+    var ae=document.activeElement,keepId=ae&&/^(c-new|c-reply|c-edit)$/.test(ae.id)?ae.id:"",ks=keepId?ae.selectionStart:0,ke=keepId?ae.selectionEnd:0;
+    var tab=ui.actTab,ev=[],byIdC={},kids={};
+    (is.comments||[]).forEach(function(c){byIdC[c.id]=c});
+    (is.comments||[]).forEach(function(c){if(c.parent&&byIdC[c.parent])(kids[c.parent]=kids[c.parent]||[]).push(c)});
+    if(tab!=="history")is.comments.forEach(function(c){if(!(c.parent&&byIdC[c.parent]))ev.push({k:"c",at:c.at,c:c})});
     if(tab!=="comments")is.history.forEach(function(x){ev.push({k:"h",at:x.at,h:x})});
     ev.sort(function(a,b){return b.at-a.at});
     var h='<div class="acth"><b>Activity</b><div class="seg" role="group" aria-label="Show">'+
       [["all","All"],["comments","Comments"],["history","History"]].map(function(t){return '<button data-acttab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+'</button>'}).join("")+'</div></div>';
     if(tab!=="history"){
-      h+='<div class="ev comp">'+avHTML(ME)+'<div class="body"><textarea id="c-new" placeholder="Add a comment…" aria-label="Add a comment">'+esc(ui.draft)+'</textarea><div class="actions"><button class="btn primary small" data-act="comment">Save comment</button></div></div></div>';
+      h+='<div class="ev comp" data-cdrop="new">'+avHTML(ME)+'<div class="body"><textarea id="c-new" placeholder="Add a comment…" aria-label="Add a comment">'+esc(ui.draft)+'</textarea>'+
+        compBar(is.id+"|new",'<button class="btn primary small" data-act="comment">Save comment</button>')+'</div></div>';
     }
     ev.forEach(function(e){
       if(e.k==="c"){
-        var c=e.c;
-        h+='<div class="ev">'+avHTML(c.by)+'<div class="body"><b>'+esc(nameOf(c.by))+'</b><span class="when">'+ago(c.at)+'</span>';
-        if(ui.editC===c.id){
-          h+='<textarea id="c-edit" style="margin-top:6px">'+esc(c.text)+'</textarea><div class="actions" style="margin-top:8px"><button class="btn primary small" data-sc="'+c.id+'">Save</button><button class="btn small" data-cc>Cancel</button></div>';
-        }else{
-          h+='<div class="txt">'+mentionHTML(c,is)+'</div><div class="tools2"><button data-ec="'+c.id+'">Edit</button><button data-dc="'+c.id+'">'+(ui.armC===c.id?'Tap to confirm':'Delete')+'</button></div>';
+        var c=e.c,rs=(kids[c.id]||[]).slice().sort(function(a,b){return a.at-b.at});
+        h+=commentHTML(c,is,false);
+        if(rs.length||ui.replyTo===c.id){
+          h+='<div class="replies">'+rs.map(function(r){return commentHTML(r,is,true)}).join("");
+          if(ui.replyTo===c.id)h+='<div class="ev comp rcomp" data-cdrop="r:'+esc(c.id)+'">'+avHTML(ME)+'<div class="body"><textarea id="c-reply" placeholder="Reply…" aria-label="Reply">'+esc(ui.replyDraft||"")+'</textarea>'+
+            compBar(is.id+"|r:"+c.id,'<button class="btn small" data-rcancel>Cancel</button><button class="btn primary small" data-rsave="'+esc(c.id)+'">Reply</button>')+'</div></div>';
+          h+='</div>';
         }
-        h+='</div></div>';
       }else{
         var x=e.h,what;
         if(x.field==="created")what='created this bid';
@@ -4412,6 +4488,20 @@ img.who{object-fit:cover;background:var(--chip)}
     });
     if(!ev.length)h+='<div class="empty">Nothing here yet.</div>';
     $("i-act").innerHTML=h;
+    if(keepId){var kn=$(keepId);if(kn){kn.focus({preventScroll:true});try{kn.setSelectionRange(ks,ke)}catch(x){}}}
+    if((is.comments||[]).some(function(c){return c.files&&c.files.length}))loadThumbs(is);
+  }
+  // save a comment or reply from its box; text or files (or both)
+  function postComment(key,text,parent){
+    var is=byId(ui.issueId);if(!is)return false;
+    var dk=is.id+"|"+key,L=ui.cdraft[dk]||[];
+    if(L.some(function(it){return it.state==="wait"||it.state==="up"})){toast("One moment — a file is still uploading.");return false}
+    var files=L.filter(function(it){return it.state==="ok"&&it.recId}).map(function(it){return it.recId});
+    if(!text&&!files.length)return false;
+    var nc={id:uid("c"),by:ME,at:Date.now(),text:text},mi=mentionIds(is,text);if(mi.length)nc.mentions=mi;
+    if(files.length)nc.files=files;if(parent)nc.parent=parent;
+    is.comments.push(nc);is.updated=Date.now();closeMention();delete ui.cdraft[dk];
+    save();return true;
   }
 
   /* ---------- create issue ---------- */
@@ -5108,26 +5198,43 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-ec]"))){ui.editC=el.getAttribute("data-ec");renderIssueAct();return}
     if(t.closest("[data-cc]")){ui.editC=null;renderIssueAct();return}
+    if((el=t.closest("[data-rc]"))){
+      var rto=el.getAttribute("data-rcto");
+      if(ui.replyTo!==el.getAttribute("data-rc"))ui.replyDraft=rto&&rto!==ME&&nameOf(rto)!=="Someone"?"@"+nameOf(rto)+" ":"";
+      ui.replyTo=el.getAttribute("data-rc");renderIssueAct();
+      var rb=$("c-reply");if(rb){rb.focus();rb.setSelectionRange(rb.value.length,rb.value.length)}
+      return;
+    }
+    if(t.closest("[data-rcancel]")){ui.replyTo=null;ui.replyDraft="";renderIssueAct();return}
+    if((el=t.closest("[data-rsave]"))){
+      var rpid=el.getAttribute("data-rsave"),rta=$("c-reply"),rtx=rta?rta.value.trim():"";
+      if(postComment("r:"+rpid,rtx,rpid)){ui.replyTo=null;ui.replyDraft="";renderIssueAct()}else if(rta&&!rtx)rta.focus();
+      return;
+    }
+    if((el=t.closest("[data-cdraftx]"))){
+      // take a file off the comment being written; it was uploaded just for it, so it leaves Supporting Docs too
+      var cx=el.getAttribute("data-cdraftx"),ci=+cx.slice(cx.lastIndexOf("|")+1),ck=cx.slice(0,cx.lastIndexOf("|")),cl=ui.cdraft[ck]||[],cit=cl[ci];
+      if(cit){cl.splice(ci,1);if(cit.recId){var cbi=byId(ui.issueId);if(cbi&&attById(cbi,cit.recId)){removeAttachment(cbi,cit.recId);renderAttach()}}paintCDraft()}
+      return;
+    }
     if((el=t.closest("[data-sc]"))){
       var is2=byId(ui.issueId),cid=el.getAttribute("data-sc"),txt=$("c-edit").value.trim();
       var cmt=is2.comments.filter(function(c){return c.id===cid})[0];
-      if(cmt&&txt){cmt.text=txt;var em=mentionIds(is2,txt);if(em.length)cmt.mentions=em;else delete cmt.mentions;save()}
+      if(cmt&&(txt||(cmt.files&&cmt.files.length))){cmt.text=txt;var em=mentionIds(is2,txt);if(em.length)cmt.mentions=em;else delete cmt.mentions;save()}
       ui.editC=null;renderIssueAct();return;
     }
     if((el=t.closest("[data-dc]"))){
       var dcid=el.getAttribute("data-dc");
       if(ui.armC!==dcid){ui.armC=dcid;renderIssueAct();return}
-      var is3=byId(ui.issueId);is3.comments=is3.comments.filter(function(c){return c.id!==dcid});ui.armC=null;save();renderIssueAct();return;
+      var is3=byId(ui.issueId);is3.comments=is3.comments.filter(function(c){return c.id!==dcid&&c.parent!==dcid});ui.armC=null;if(ui.replyTo===dcid)ui.replyTo=null;save();renderIssueAct();return;
     }
     if((el=t.closest("[data-act]"))){
       var a=el.getAttribute("data-act");
       if(a==="clearSel"){ui.rsel=null;render()}
       if(a==="copy")copyText(summaryText());
       if(a==="comment"){
-        var ta=$("c-new"),text=ta.value.trim();if(!text){ta.focus();return}
-        var is4=byId(ui.issueId),nc={id:uid("c"),by:ME,at:Date.now(),text:text},mi=mentionIds(is4,text);if(mi.length)nc.mentions=mi;
-        is4.comments.push(nc);is4.updated=Date.now();closeMention();
-        ui.draft="";save();renderIssueAct();
+        var ta=$("c-new"),text=ta.value.trim();
+        if(postComment("new",text,"")){ui.draft="";renderIssueAct()}else if(!text)ta.focus();
       }
       if(a==="newReport"){ui.repEdit=null;ui.armRep=null;ui.repPrev=clone(state.rcfg);state.rcfg={groupBy:"status",chart:"bar",scope:"all",type:"",pri:"",who:"",label:"",name:""};ui.repBuild="new";ui.rsel=null;render()}
       if(a==="editReport"){ui.repPrev=clone(state.rcfg);ui.repBuild="edit";ui.rsel=null;render()}
@@ -5309,7 +5416,7 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if(el.id==="rname"){state.rcfg.name=el.value;el.style.borderColor="";save();return}
-    if(el.id==="c-new"||el.id==="c-edit"){if(el.id==="c-new")ui.draft=el.value;updateMention(el);return}
+    if(el.id==="c-new"||el.id==="c-edit"||el.id==="c-reply"){if(el.id==="c-new")ui.draft=el.value;if(el.id==="c-reply")ui.replyDraft=el.value;updateMention(el);return}
     if(el.id==="p-name"&&!ui.keyTouched){$("p-key").value=autoKey(el.value);return}
     if(el.id==="p-key"){ui.keyTouched=true;el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"")}
   });
@@ -5487,8 +5594,9 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("paste",function(e){
     if(!HAS_FILES||!ui.issueId||ui.lbx||!$("ov-issue").classList.contains("open"))return;
     var is=byId(ui.issueId),cd=e.clipboardData;if(!is||!cd)return;
-    var psp=D.spaces.filter(function(x){return x.id===is.spaceId})[0];if(psp&&(psp.hideTabs||[]).indexOf("att")>-1)return;   // Supporting Docs switched off here
-    var t=e.target,inBox=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    var t=e.target,cfor=t&&t.id==="c-new"?"new":t&&t.id==="c-reply"&&ui.replyTo?"r:"+ui.replyTo:"";
+    var psp=D.spaces.filter(function(x){return x.id===is.spaceId})[0];if(!cfor&&psp&&(psp.hideTabs||[]).indexOf("att")>-1)return;   // Supporting Docs switched off here
+    var inBox=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if(inBox&&(cd.getData("text/plain")||"").trim())return;
     var imgs=Array.prototype.filter.call(cd.items||[],function(it){return it.kind==="file"&&/^image\/(png|jpe?g|gif|webp|bmp)$/.test(it.type)}).map(function(it){return it.getAsFile()}).filter(Boolean);
     if(!imgs.length)return;
@@ -5498,8 +5606,8 @@ img.who{object-fit:cover;background:var(--chip)}
       var nm=!f.name||/^image\.\w+$/i.test(f.name)?shotName(is,f.type,taken):f.name;taken.push(nm);
       return {file:new File([f],nm,{type:f.type}),rel:nm};
     });
-    if(ui.fileTab&&ui.fileTab!=="att"){ui.fileTab="att";renderAttach()}
-    uploadFiles(fl,"att");
+    if(!cfor&&ui.fileTab&&ui.fileTab!=="att"){ui.fileTab="att";renderAttach()}
+    uploadFiles(fl,"att",cfor);
     toast(fl.length>1?fl.length+" screenshots added to Supporting Docs":"Screenshot added to Supporting Docs");
   });
   document.addEventListener("change",function(e){
@@ -5514,6 +5622,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
   });
   document.addEventListener("change",function(e){
+    if(e.target.hasAttribute&&e.target.hasAttribute("data-cfileinput")){var cfk=e.target.getAttribute("data-cfileinput");cfk=cfk.slice(cfk.indexOf("|")+1);
+      var cfl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.name}}).filter(notHidden);uploadFiles(cfl,"att",cfk);e.target.value="";return}
     if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
   });
   (function(){
@@ -5531,11 +5641,14 @@ img.who{object-fit:cover;background:var(--chip)}
   (function(){
     var box=$("ov-issue");
     box.addEventListener("dragover",function(e){
-      var z=e.target.closest&&e.target.closest("[data-dropz]");
+      var z=e.target.closest&&e.target.closest("[data-dropz],[data-cdrop]");
       if(z&&e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>-1){e.preventDefault();z.classList.add("over")}
     });
-    box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz]");if(z)z.classList.remove("over")});
+    box.addEventListener("dragleave",function(e){var z=e.target.closest&&e.target.closest("[data-dropz],[data-cdrop]");if(z)z.classList.remove("over")});
     box.addEventListener("drop",function(e){
+      var cz=e.target.closest&&e.target.closest("[data-cdrop]");
+      if(cz&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();cz.classList.remove("over");var ck2=cz.getAttribute("data-cdrop");
+        Promise.resolve(Array.prototype.map.call(e.dataTransfer.files,function(f){return {file:f,rel:f.name}})).then(function(fl){uploadFiles(fl.filter(notHidden),"att",ck2)});return}
       var z=e.target.closest&&e.target.closest("[data-dropz]");
       if(z&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){e.preventDefault();z.classList.remove("over");var k=z.getAttribute("data-dropz");droppedFiles(e.dataTransfer).then(function(fl){uploadFiles(fl,k)})}
     });
