@@ -1887,6 +1887,7 @@ img.who{object-fit:cover;background:var(--chip)}
       }while(again);
     }finally{
       flushing=false;pendingLocal=false;
+      setTimeout(applyHeld,250);
       if(rebuildPending)setTimeout(function(){if(!pendingLocal&&!flushing&&rebuildPending){rebuildPending=false;rebuild()}},250);
     }
   }
@@ -1904,6 +1905,10 @@ img.who{object-fit:cover;background:var(--chip)}
       sb.from("wf_templates").select("kind").limit(1),sb.from("wf_spaces").select("field_set").limit(1),
       sb.from("wf_people").select("role").limit(1)]);
     for(var i=0;i<5;i++)if(rs[i].error)throw rs[i].error;
+    // the safety-net reload finds nothing new most of the time: then there's nothing to redo
+    var sig=JSON.stringify(rs.map(function(r){return r.data}));
+    if(sig===lastLoadSig&&READY)return;
+    lastLoadSig=sig;
     raw.divs={};rs[0].data.forEach(function(r){raw.divs[String(r[idc])]={name:String(r[nc]!=null?r[nc]:r[idc])}});
     HAS_PDETAILS=!rs[11].error;   // first/last name + email need workflow/sql/007_people_details.sql
     HAS_PROLE=!rs[14].error;   // role needs workflow/sql/013_role.sql
@@ -1925,15 +1930,73 @@ img.who{object-fit:cover;background:var(--chip)}
     dataChanged();
     snapshotNames();
   }
-  function scheduleReload(){clearTimeout(reloadTimer);reloadTimer=setTimeout(function(){loadAll().catch(function(e){console.error(e)})},300)}
+  var lastLoadSig="",bidQ={},bidT=null,heldBids={},lastFull=Date.now();
+  // Copy b's fields onto the bid object already on screen, so it stays the same object.
+  function refill(o,b){Object.keys(o).forEach(function(k){if(!(k in b))delete o[k]});return Object.assign(o,b)}
+  // A bid changed in the database (realtime): fetch just that row (a little later, batching a burst)
+  // and patch it in place, instead of reloading every bid. While this browser has unsaved changes the
+  // patch waits for the save to finish, so a remote echo can't undo what was just typed.
+  function bidChanged(pl){
+    var id=(pl&&((pl.new&&pl.new.id)||(pl.old&&pl.old.id)))||"";
+    if(!id){scheduleReload();return}
+    bidQ[id]=1;clearTimeout(bidT);bidT=setTimeout(fetchBids,150);
+  }
+  async function fetchBids(){
+    var ids=Object.keys(bidQ);bidQ={};if(!ids.length||!sb)return;
+    var r=await sb.from("wf_bids").select("*").in("id",ids);
+    if(r.error){console.error(r.error);scheduleReload();return}
+    var got={};(r.data||[]).forEach(function(row){got[row.id]=row});
+    ids.forEach(function(id){heldBids[id]=got[id]||null});
+    applyHeld();
+  }
+  function applyHeld(){
+    if(!READY)return;
+    if(flushing||pendingLocal)return;   // runFlush calls this again when the save is done
+    var ids=Object.keys(heldBids);if(!ids.length)return;
+    var H=heldBids,need=false,touched=false;heldBids={};
+    ids.forEach(function(id){
+      var row=H[id],cur=null,curSp=null;
+      D.spaces.forEach(function(sp){sp.issues.forEach(function(i){if(i.id===id){cur=i;curSp=sp}})});
+      if(!row){   // deleted
+        delete raw.bids[id];delete base["bids/"+id];
+        if(curSp){curSp.issues=curSp.issues.filter(function(i){return i.id!==id});touched=true}
+        if(ui.issueId===id&&$("ov-issue").classList.contains("open"))closeOv("ov-issue");
+        return;
+      }
+      var nb=rowToBid(row),sp=D.spaces.filter(function(x){return x.id===nb.spaceId})[0];
+      if(!sp){need=true;return}   // a space this browser hasn't loaded yet: do a full load
+      raw.bids[id]=nb;
+      var b=clone(nb);b.id=id;b.comments=b.comments||[];b.history=b.history||[];b.labels=b.labels||[];
+      if(cur){
+        if(canon(strip(cur))===canon(strip(b)))return;   // our own save coming back
+        refill(cur,b);
+        if(curSp!==sp){curSp.issues=curSp.issues.filter(function(i){return i!==cur});sp.issues.push(cur)}
+      }else{cur=b;sp.issues.push(b)}
+      sp.issues.sort(function(a,c){return rk(a)-rk(c)});
+      base["bids/"+id]=canon(strip(cur));touched=true;
+    });
+    if(need)scheduleReload();
+    if(!touched)return;
+    render();
+    // the open bid changed elsewhere: show it, unless someone's typing in it
+    if(ui.issueId&&ids.indexOf(ui.issueId)>-1&&$("ov-issue").classList.contains("open")){
+      var ae=document.activeElement,typing=ae&&$("ov-issue").contains(ae)&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+      if(!typing){var sh=$("ov-issue").querySelector(".sheet"),st=sh?sh.scrollTop:0;renderIssue();if(sh)sh.scrollTop=st}
+    }
+  }
+  function scheduleReload(){clearTimeout(reloadTimer);reloadTimer=setTimeout(function(){lastFull=Date.now();loadAll().catch(function(e){console.error(e)})},300)}
   function listen(){
     try{
-      var ch=sb.channel("wf-changes");
-      ["wf_spaces","wf_bids","wf_people","wf_templates","wf_teams"].forEach(function(t){ch.on("postgres_changes",{event:"*",schema:"public",table:t},scheduleReload)});
-      ch.subscribe();
+      var ch=sb.channel("wf-changes"),wasDown=false;
+      ch.on("postgres_changes",{event:"*",schema:"public",table:"wf_bids"},bidChanged);
+      ["wf_spaces","wf_people","wf_templates","wf_teams"].forEach(function(t){ch.on("postgres_changes",{event:"*",schema:"public",table:t},scheduleReload)});
+      // back after a dropped connection: changes may have been missed, so check everything once
+      ch.subscribe(function(st){if(st==="SUBSCRIBED"){if(wasDown)scheduleReload();wasDown=false}else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED")wasDown=true});
     }catch(e){console.warn("realtime unavailable, polling instead",e)}
-    setInterval(function(){if(!document.hidden&&!flushing&&!pendingLocal)scheduleReload()},30000);
-    document.addEventListener("visibilitychange",function(){if(!document.hidden)scheduleReload()});
+    // safety net for anything realtime missed: a full check every 5 minutes, and when the tab comes back
+    // after a minute or more away. It only redraws if something actually changed.
+    setInterval(function(){if(!document.hidden&&!flushing&&!pendingLocal&&Date.now()-lastFull>=5*60000)scheduleReload()},30000);
+    document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-lastFull>=60000)scheduleReload()});
   }
   function ensureScope(){}
   /* remember each live division's name so it can be shown by name if it is later deleted in Bid Scout */
@@ -1967,13 +2030,14 @@ img.who{object-fit:cover;background:var(--chip)}
       var n=raw.names[id]||{};
       return {id:id,name:n.name||"Archived division",archivedAt:n.archivedAt||"",archived:true,members:[],admins:[]};
     }).sort(byName);
-    var map={};
+    var map={},prev={};
+    (D.spaces||[]).forEach(function(s){(s.issues||[]).forEach(function(i){prev[i.id]=i})});
     D.spaces=Object.keys(raw.spaces).map(function(id){var s=clone(raw.spaces[id]);s.id=id;s.issues=[];s.statuses=s.statuses||[];map[id]=s;return s}).sort(byName);
     Object.keys(raw.bids).forEach(function(id){
       var b=clone(raw.bids[id]),s=map[b.spaceId];b.id=id;
       if(!s)return;
       b.comments=b.comments||[];b.history=b.history||[];b.labels=b.labels||[];
-      s.issues.push(b);
+      s.issues.push(prev[id]?refill(prev[id],b):b);
     });
     D.spaces.forEach(function(s){s.issues.sort(function(a,b){return rk(a)-rk(b)})});
     base={};
