@@ -11,6 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Which commit this image was built from (docker-publish.yml passes it in). Last, so a new
+# commit doesn't invalidate the cached layers above.
+ARG APP_VERSION=dev
+ARG APP_BUILT=
+ENV APP_VERSION=$APP_VERSION APP_BUILT=$APP_BUILT
+
 EXPOSE 8080
 # --timeout 200: api_proxy_pdf's ConstructConnect live-refetch path calls
 # through to the scanner and waits for it — can legitimately take minutes,

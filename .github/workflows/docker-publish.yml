@@ -39,6 +39,10 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
+          # which commit this is, shown at the bottom of the board's Settings (and the scanner's /health)
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            APP_BUILT=${{ github.event.head_commit.timestamp }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.name }}:latest
             ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.name }}:${{ github.sha }}

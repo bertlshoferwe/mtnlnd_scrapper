@@ -184,8 +184,34 @@ def workflow_index():
     return resp
 
 
+def _app_version():
+    """The commit this container was built from (see the Dockerfile's APP_VERSION), and when."""
+    return {"version": os.environ.get("APP_VERSION") or "dev", "built": os.environ.get("APP_BUILT") or ""}
+
+
+@app.route("/workflow/version")
+def workflow_version():
+    """What's running right now, for the bottom of the board's Settings: this app's build and the
+    scan worker's (null if it can't be reached). The page compares the app's with the build it was
+    loaded from, to tell someone holding an old copy to reload."""
+    scanner = None
+    url = (os.environ.get("SCANNER_URL") or "").rstrip("/")
+    if url:
+        try:
+            r = requests.get(url + "/health", timeout=3)
+            if r.ok:
+                h = r.json()
+                scanner = {"version": h.get("version") or "unknown", "built": h.get("built") or ""}
+        except Exception:
+            pass
+    resp = jsonify({"app": _app_version(), "scanner": scanner})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 def _workflow_config_js():
     cfg = {
+        "VERSION": _app_version(),
         "SUPABASE_URL": WORKFLOW_SUPABASE_URL,
         "SUPABASE_ANON_KEY": WORKFLOW_SUPABASE_ANON_KEY,
         # A view over `divisions` (id, name only) — see workflow/sql/002_bidscout.sql.

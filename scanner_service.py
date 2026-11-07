@@ -94,7 +94,8 @@ def _start(division_id):
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"ok": True, "running": _is_running()})
+    return jsonify({"ok": True, "running": _is_running(),
+                    "version": os.environ.get("APP_VERSION") or "dev", "built": os.environ.get("APP_BUILT") or ""})
 
 
 @app.route("/run-now", methods=["POST"])

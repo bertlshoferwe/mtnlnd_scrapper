@@ -23,6 +23,12 @@ RUN pip install --no-cache-dir -r requirements-scan.txt \
 
 COPY . .
 
+# Which commit this image was built from (docker-publish.yml passes it in). Last, so a new
+# commit doesn't invalidate the cached layers above.
+ARG APP_VERSION=dev
+ARG APP_BUILT=
+ENV APP_VERSION=$APP_VERSION APP_BUILT=$APP_BUILT
+
 EXPOSE 9100
 # -w 1: the subprocess lock/handle in scanner_service.py lives in process
 # memory — multiple gunicorn workers would each think no scan is running.
