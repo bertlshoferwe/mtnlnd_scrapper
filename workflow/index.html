@@ -611,7 +611,7 @@ textarea{min-height:90px;resize:vertical}
 .ih .sp{flex:1}
 .ih .crumb-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:0;color:var(--muted);font-size:13px;font-weight:600}
 .ih .x{background:var(--chip);border:0;border-radius:8px;width:34px;height:34px;font-size:20px;line-height:1;color:var(--muted)}
-/* Bid window: on the left the title, then comments (top half) and files (bottom half), each scrolling
+/* Bid window: on the left the title, then files (top half) and comments (bottom half), each scrolling
    on its own; fields on the right. On a phone they stack and the window scrolls. */
 .ib{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"left" "side";gap:16px}
 .ileft{grid-area:left;display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -1067,7 +1067,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <div class="overlay" id="ov-issue" role="dialog" aria-modal="true" aria-label="Bid details">
   <div class="sheet issue">
     <div class="ih" id="i-head"></div>
-    <div class="ib"><div class="ileft"><div id="i-top"></div><div id="i-act" class="ipane"></div><div id="i-files" class="ipane"><div class="isec" id="i-att"></div></div></div><div id="i-side"></div></div>
+    <div class="ib"><div class="ileft"><div id="i-top"></div><div id="i-files" class="ipane"><div class="isec" id="i-att"></div></div><div id="i-act" class="ipane"></div></div><div id="i-side"></div></div>
   </div>
 </div>
 
