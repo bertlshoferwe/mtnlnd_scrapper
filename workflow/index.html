@@ -611,8 +611,29 @@ textarea{min-height:90px;resize:vertical}
 .ih .sp{flex:1}
 .ih .crumb-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:0;color:var(--muted);font-size:13px;font-weight:600}
 .ih .x{background:var(--chip);border:0;border-radius:8px;width:34px;height:34px;font-size:20px;line-height:1;color:var(--muted)}
-.ib{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "side" "act";gap:16px}
-@media (min-width:760px){.ib{grid-template-columns:minmax(0,1fr) 400px;grid-template-areas:"top side" "act side";align-items:start;column-gap:32px}}
+/* Bid window: on the left the title, then comments (top half) and files (bottom half), each scrolling
+   on its own; fields on the right. On a phone they stack and the window scrolls. */
+.ib{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"left" "side";gap:16px}
+.ileft{grid-area:left;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ipane{border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+#i-act.ipane{max-height:70vh;overflow:auto}
+#i-files #i-att{margin-top:0}
+@media (min-width:760px){
+  .sheet.issue{display:flex;flex-direction:column;overflow:hidden}
+  .ib{flex:1 1 auto;min-height:0;grid-template-columns:minmax(0,1fr) 400px;grid-template-areas:"left side";column-gap:32px}
+  .ileft{min-height:0}
+  #i-top{flex:0 0 auto}
+  .ipane{flex:1 1 0;min-height:0;overflow:auto}
+  #i-act.ipane{max-height:none}
+  #i-side{min-height:0;overflow:auto;padding-right:4px}
+  #i-act .acth{position:sticky;top:-12px;z-index:2;margin:-12px -14px 10px;padding:12px 14px 8px;background:var(--surface)}
+}
+.dpin{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0 4px;background:var(--bg)}
+.dpin .dph{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.dpin .dph .sp{flex:1}
+.dpin .dph button{background:none;border:0;padding:0;font-size:12px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
+.dpin .dpt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin-top:4px}
+.dpin textarea{margin-top:6px;min-height:80px}
 /* bid window (Jira-style) */
 .isec{margin-top:18px}
 .isec h4{font:700 15px var(--head);margin:0 0 6px;display:flex;align-items:center;gap:8px}
@@ -876,9 +897,9 @@ select.lzb.cat-done{background:var(--lowbg)!important;color:var(--low);border-co
 .wphead label{margin:0;flex:1}
 #tpl-name{width:min(320px,100%)}
 .tplsub{font-weight:700;font-size:13px;margin:14px 0 2px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-#i-top{grid-area:top;min-width:0}
+#i-top{min-width:0}
 #i-side{grid-area:side;min-width:0}
-#i-act{grid-area:act;min-width:0}
+#i-act{min-width:0}
 .detail{border:1px solid var(--line);border-radius:12px;padding:4px 12px 14px}
 .detail .ro{font-size:14px;padding:6px 0}
 .detail .meta2{font-size:12px;color:var(--muted);margin-top:12px}
@@ -1046,7 +1067,7 @@ img.who{object-fit:cover;background:var(--chip)}
 <div class="overlay" id="ov-issue" role="dialog" aria-modal="true" aria-label="Bid details">
   <div class="sheet issue">
     <div class="ih" id="i-head"></div>
-    <div class="ib"><div id="i-top"></div><div id="i-side"></div><div id="i-act"></div></div>
+    <div class="ib"><div class="ileft"><div id="i-top"></div><div id="i-act" class="ipane"></div><div id="i-files" class="ipane"><div class="isec" id="i-att"></div></div></div><div id="i-side"></div></div>
   </div>
 </div>
 
@@ -3762,14 +3783,15 @@ img.who{object-fit:cover;background:var(--chip)}
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.replyTo=null;ui.replyDraft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
     ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
-    renderIssue();openOv("ov-issue");saveHere();
-    var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;
+    ui.descEdit=null;renderIssue();openOv("ov-issue");saveHere();
+    var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});
   }
   function renderIssue(){
     var is=byId(ui.issueId);if(!is){closeOv("ov-issue");return}
     renderIssueHead(is);
     $("i-top").innerHTML=issueTopHTML(is);
     $("i-side").innerHTML=issueSideHTML(is);
+    renderAttach();
     renderIssueAct();
     bsLoad(is);
     bscLoad(is);
@@ -3783,9 +3805,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function issueTopHTML(is){
     var kids=children(is);
     var h=(addendumOn(is)?'<div class="adbanner">'+ic("flag",18)+'<span class="t"><b>Updated by an addendum.</b> The bid date or documents changed — give it another look. The comments say what changed.</span>'+(canAct()?'<button class="btn small" data-adclear>Mark as reviewed</button>':'')+'</div>':'')+
-      '<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">'+
-      '<div class="isec"><h4>Description</h4><textarea id="i-desc" class="bare" data-f="desc" placeholder="Add a description…" aria-label="Description">'+esc(is.desc)+'</textarea></div>'+
-      '<div class="isec" id="i-att">'+attachHTML(is)+'</div>';
+      '<input id="i-title" class="h-title" data-f="title" maxlength="140" value="'+esc(is.title)+'" aria-label="Summary">';
     if(is.type!=="Subtask"){
       var done=kids.filter(isDone).length;
       if(kids.length||ui.addSub)h+='<div class="isec"><h4>Subtasks'+(kids.length?' <span class="pt">'+done+' of '+kids.length+' done</span>':'')+'</h4>'+
@@ -4463,6 +4483,10 @@ img.who{object-fit:cover;background:var(--chip)}
     var h='<div class="acth"><b>Activity</b><div class="seg" role="group" aria-label="Show">'+
       [["all","All"],["comments","Comments"],["history","History"]].map(function(t){return '<button data-acttab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+'</button>'}).join("")+'</div></div>';
     if(tab!=="history"){
+      // the description box is gone; a bid that has one keeps it here, pinned and editable
+      if(is.desc||ui.descEdit===is.id)h+='<div class="dpin"><div class="dph">'+ic("pin",13)+'Description<span class="sp"></span>'+
+        (ui.descEdit===is.id?'':'<button data-descedit>Edit</button>')+'</div>'+
+        (ui.descEdit===is.id?'<textarea id="i-desc" data-f="desc" aria-label="Description">'+esc(is.desc)+'</textarea><div class="actions" style="margin-top:8px"><button class="btn small primary" data-descdone>Done</button></div>':'<div class="dpt">'+esc(is.desc)+'</div>')+'</div>';
       h+='<div class="ev comp" data-cdrop="new">'+avHTML(ME)+'<div class="body"><textarea id="c-new" placeholder="Add a comment…" aria-label="Add a comment">'+esc(ui.draft)+'</textarea>'+
         compBar(is.id+"|new",'<button class="btn primary small" data-act="comment">Save comment</button>')+'</div></div>';
     }
@@ -5080,7 +5104,7 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if((el=t.closest("[data-dupopen]"))){var did=el.getAttribute("data-dupopen");closeOv("ov-create");closeOv("ov-settings");gotoBid(did);return}
-    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;return}
+    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.descEdit=null;renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});return}
     if(t.closest(".cpick"))return;
     if((el=t.closest("[data-open]"))){
       var id=el.getAttribute("data-open");
@@ -5198,6 +5222,8 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     if((el=t.closest("[data-ec]"))){ui.editC=el.getAttribute("data-ec");renderIssueAct();return}
     if(t.closest("[data-cc]")){ui.editC=null;renderIssueAct();return}
+    if(t.closest("[data-descedit]")){ui.descEdit=ui.issueId;renderIssueAct();var dta=$("i-desc");if(dta)dta.focus();return}
+    if(t.closest("[data-descdone]")){var dbi=byId(ui.issueId),dta2=$("i-desc");if(dbi&&dta2)setField(dbi,"desc",dta2.value);ui.descEdit=null;renderIssueAct();return}
     if((el=t.closest("[data-rc]"))){
       var rto=el.getAttribute("data-rcto");
       if(ui.replyTo!==el.getAttribute("data-rc"))ui.replyDraft=rto&&rto!==ME&&nameOf(rto)!=="Someone"?"@"+nameOf(rto)+" ":"";
