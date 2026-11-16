@@ -1757,8 +1757,23 @@ class ConstructConnectAdapter(SiteAdapter):
         return out
 
 
+class LearnedSiteAdapter(SiteAdapter):
+    """Not a portal: the site is read by a recipe the AI learned (see
+    site_agent.py). Listed here so it shows in the dashboard's dropdown;
+    scraper.scan_site() hands these sites to site_agent before it ever looks
+    for an adapter."""
+
+    key = "learned"
+    label = "Learned by AI (no adapter)"
+    help = ("AI explores the site once and learns where the bids, dates, documents and plan "
+            "holders are. You review what it found before it goes live.")
+
+    def find_documents(self, site):
+        raise NotImplementedError("learned sites are scanned by site_agent.scan_learned_site")
+
+
 _ADAPTER_CLASSES = [UDOTMasterworksAdapter, ITDAdvertisedAdapter, WYDOTExevisionAdapter,
-                     ConstructConnectAdapter]
+                     ConstructConnectAdapter, LearnedSiteAdapter]
 ADAPTERS = {cls.key: cls for cls in _ADAPTER_CLASSES}
 
 

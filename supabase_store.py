@@ -365,6 +365,27 @@ def update_site(division_id, site_id, name, url, listing=None, adapter=None, log
     return res.data[0]
 
 
+def get_site(division_id, site_id):
+    res = (
+        get_client().table("sites").select("*")
+        .eq("division_id", division_id).eq("id", site_id).limit(1).execute()
+    )
+    return res.data[0] if res.data else None
+
+
+def save_site_learned(division_id, site_id, learned):
+    """Replace a learned site's state (see site_agent.py). Raises ValueError
+    with a migration hint if the column is missing."""
+    try:
+        get_client().table("sites").update({"learned": learned}) \
+            .eq("division_id", division_id).eq("id", site_id).execute()
+    except Exception as e:
+        raise ValueError(
+            "couldn't save — run the migration in schema.sql: "
+            "alter table sites add column if not exists learned jsonb"
+        ) from e
+
+
 def delete_site(division_id, site_id):
     res = (
         get_client().table("sites").delete()
@@ -2180,6 +2201,21 @@ def save_project_locations(division_id, mapping):
         get_client().table("project_flags").upsert(rows).execute()
     except Exception as e:
         print(f"  ! couldn't save project locations ({e})")
+
+
+def save_project_extra_fields(division_id, mapping):
+    """Upsert {project_key: {field: value}} from a learned site — the
+    division's extra fields, kept but not shown yet. No-ops if the column is
+    missing."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [{"division_id": division_id, "project_key": k, "extra_fields": v, "updated_at": now}
+            for k, v in mapping.items() if v]
+    if not rows:
+        return
+    try:
+        get_client().table("project_flags").upsert(rows).execute()
+    except Exception as e:
+        print(f"  ! couldn't save extra project fields ({e})")
 
 
 def load_project_plan_holders(division_id, project_key, with_duplicates=True):

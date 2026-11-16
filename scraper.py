@@ -161,6 +161,7 @@ import adapters
 import browser_crawl
 import credentials
 import fit_predictor
+import site_agent
 
 
 def load_config(division_id):
@@ -579,6 +580,8 @@ def scan_site(site, ai_client):
         caller records this so the dashboard can show whether the site's
         saved credentials are working.
     """
+    if (site.get("adapter") or "").strip() == "learned":
+        return site_agent.scan_learned_site(site, ai_client)
     adapter = adapters.adapter_for_site(site)
     if adapter is not None:
         if adapter.needs_browser:

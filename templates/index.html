@@ -357,6 +357,51 @@
   .tag.tag-ok { background: var(--success-soft); color: var(--success); }
   .tag.tag-danger { background: var(--danger-soft); color: var(--danger); }
   .adapter-mark { color: var(--accent); margin-left: 3px; cursor: default; }
+  .tag.tag-btn { border: none; cursor: pointer; font-family: inherit; }
+  .tag.tag-btn:hover { filter: brightness(.95); text-decoration: underline; }
+
+  /* Learned sites: the fields list in Sites, and the review window */
+  .learn-fields-box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 0 0 16px; }
+  .learn-fields-box .chips { margin: 8px 0; }
+  .learn-fields-box .chip.fixed { background: var(--surface-2); color: var(--muted); padding-right: 12px; }
+  .learn-modal { max-width: 820px; }
+  .learn-modal .desc { font-size: 13px; }
+  .learn-status { border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 13.5px; background: var(--surface-2); }
+  .learn-status.bad { background: var(--danger-soft); color: var(--danger); }
+  .learn-status.good { background: var(--success-soft); color: var(--success); }
+  .learn-progress { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .learn-progress li:last-child { color: var(--text); font-weight: 550; }
+  .learn-list { margin: 4px 0 12px; padding-left: 18px; font-size: 13px; }
+  .learn-list.bad { color: var(--danger); }
+  .learn-list.warn { color: var(--warning); }
+  .learn-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .learn-card-head { display: flex; align-items: flex-start; gap: 8px; }
+  .learn-card-head .name { flex: 1; min-width: 0; font-weight: 600; }
+  .learn-card-head a { font-size: 12px; font-weight: 400; color: var(--muted); word-break: break-all; display: block; }
+  .learn-row { display: grid; grid-template-columns: 112px 1fr auto; grid-template-areas: "k v b" ". f ."; gap: 2px 10px; padding: 4px 0;
+    border-top: 1px dashed var(--border); font-size: 13px; align-items: baseline; }
+  .learn-row .k { grid-area: k; color: var(--muted); }
+  .learn-row .v { grid-area: v; min-width: 0; word-break: break-word; }
+  .learn-row > .icon-btn { grid-area: b; }
+  .learn-row .v.missing { color: var(--muted); font-style: italic; }
+  .learn-row .from { grid-area: f; color: var(--muted); font-size: 11.5px; word-break: break-word; }
+  .learn-row .icon-btn { padding: 3px; }
+  .learn-row .icon-btn svg { width: 13px; height: 13px; }
+  .learn-hidden { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 5px; margin-left: 4px; }
+  .learn-form { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px; }
+  .learn-form input { flex: 1 1 180px; padding: 6px 8px !important; font-size: 13px !important; }
+  .learn-form button { padding: 6px 10px; font-size: 13px; }
+  .learn-rule { border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13.5px; }
+  .learn-rule .row { margin-top: 8px; gap: 6px; }
+  .learn-section-title { font-size: 13px; font-weight: 650; margin: 16px 0 6px; }
+  .learn-edits li { display: flex; align-items: baseline; gap: 6px; }
+  .learn-edits li span { flex: 1; }
+  .learn-modal textarea { width: 100%; box-sizing: border-box; min-height: 64px; font: inherit; font-size: 13.5px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px 10px;
+    background: var(--surface); color: var(--text); resize: vertical; }
+  .learn-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px;
+    position: sticky; bottom: -22px; background: var(--card); padding: 10px 0; }
+  @media (max-width: 560px) { .learn-row { grid-template-columns: 1fr auto; grid-template-areas: "k b" "v v" "f f"; } }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .chip {
@@ -1139,7 +1184,19 @@
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()" style="margin-bottom:14px;">+ Add a site</button>
+      <div class="row" style="gap:8px; margin-bottom:14px;">
+        <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()">+ Add a site</button>
+        <button class="btn-ghost" onclick="toggleLearnFields()">Fields to collect</button>
+      </div>
+      <div class="learn-fields-box" id="learnFieldsBox" style="display:none;">
+        <b style="font-size:14px;">What sites learned by AI collect</b>
+        <p class="desc" style="margin:4px 0 0;">Always: the ones shown in results. Add any others you want — they're saved with each project but not shown anywhere yet.</p>
+        <div class="chips" id="learnFieldChips"></div>
+        <div class="row" style="gap:6px;">
+          <input type="text" id="learnFieldInput" placeholder="e.g. Owner, Engineer's estimate" style="flex:1;" onkeydown="if(event.key==='Enter') addLearnField()">
+          <button class="btn-ghost" onclick="addLearnField()">Add</button>
+        </div>
+      </div>
 
       <div id="addSiteForm" style="display:none; margin:0 0 18px; border:1px solid var(--border); border-radius:8px; padding:16px;">
         <h3 id="siteFormTitle" style="margin:0 0 12px; font-size:15px;">Add a site</h3>
@@ -1200,6 +1257,20 @@
       <ul class="list" id="sitesList"></ul>
       <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
     </div>
+  </div>
+</div>
+
+<!-- Review a site learned by AI: what it found, corrections, approve. Opens over Sites. -->
+<div class="modal-overlay" id="learnModal" style="z-index:110;" onclick="if(event.target===this) closeLearn()">
+  <div class="modal learn-modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="learnTitle">Learn site</h2>
+        <p class="desc" id="learnDesc"></p>
+      </div>
+      <button class="modal-close" onclick="closeLearn()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="learnBody"></div>
   </div>
 </div>
 
@@ -1498,6 +1569,7 @@ function openModal(name) {
 }
 function closeModal() {
   document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+  if (learnSiteId != null) closeLearn();
   teardownPdf();
 }
 function closePdfModal() {
@@ -1656,6 +1728,7 @@ document.addEventListener('keydown', function(e) {
   const seaM = document.getElementById('searchMenu');
   if (seaM && seaM.classList.contains('open')) { closeSearchMenu(); return; }
   if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
+  if (document.getElementById('learnModal').classList.contains('open')) { closeLearn(); return; }
   closeModal();
 });
 
@@ -1919,6 +1992,7 @@ async function loadSites() {
     if (site.listing != null) tags += '<span class="tag">listing</span>';
     if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
     if (site.has_login) tags += loginStatusTag(site);
+    if (site.adapter === 'learned') tags += learnStatusTag(site);
     const linkable = /^https?:\/\//i.test(site.url || '');
     const urlHtml = site.url
       ? (linkable
@@ -1957,6 +2031,378 @@ async function loadSites() {
   if (editingSiteId != null) {
     if (sites.some(function(s) { return s.id === editingSiteId; })) mountEditForm(editingSiteId);
     else hideAddSite();
+  }
+}
+
+// ---- Sites learned by AI (adapter "learned", see site_agent.py) ----
+
+const LEARN_FIELDS_SHOWN = ['Project name', 'Bid date', 'Bid time', 'Location'];
+let learnExtraFields = [];
+let learnSiteId = null;
+let learnPollTimer = null;
+let learnFixOpen = null;      // "projectIndex|fieldName" with its correction form open
+let learnRemoving = null;     // project index asking "why remove?"
+let learnRule = null;         // {rule, name} suggested after a removal
+let learnError = '';
+
+function learnStatusTag(site) {
+  const st = site.learned || {};
+  const map = {
+    learning: st.stale ? ['learning stopped', 'tag-danger'] : ['learning…', 'tag-tabs'],
+    review: ['ready to review', ''],
+    live: ['learned', 'tag-ok'],
+    failed: ["couldn't learn", 'tag-danger'],
+    attention: ['needs a look', 'tag-danger'],
+  };
+  const t = map[st.status] || ['not learned yet', 'tag-tabs'];
+  return '<button type="button" class="tag tag-btn ' + t[1] + '" title="Learned by AI — open to review" onclick="openLearn(' + site.id + ')">' + t[0] + '</button>';
+}
+
+async function loadLearnFields() {
+  try {
+    const res = await api('/api/' + currentDivision + '/learn-fields');
+    learnExtraFields = res.fields || [];
+  } catch (e) { learnExtraFields = []; }
+}
+
+function renderLearnFields() {
+  const chips = LEARN_FIELDS_SHOWN.concat(['Plan holders', 'Documents']).map(function(f) {
+    return '<span class="chip fixed">' + escapeHtml(f) + '</span>';
+  }).concat(learnExtraFields.map(function(f, i) {
+    return '<span class="chip">' + escapeHtml(f) + '<button title="Remove" onclick="removeLearnField(' + i + ')">&times;</button></span>';
+  }));
+  document.getElementById('learnFieldChips').innerHTML = chips.join('');
+}
+
+async function toggleLearnFields() {
+  const box = document.getElementById('learnFieldsBox');
+  const opening = box.style.display === 'none';
+  box.style.display = opening ? '' : 'none';
+  if (opening) { await loadLearnFields(); renderLearnFields(); }
+}
+
+async function saveLearnFields(fields) {
+  try {
+    const res = await api('/api/' + currentDivision + '/learn-fields', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ fields: fields }),
+    });
+    learnExtraFields = res.fields || [];
+  } catch (e) { alert(e.message); }
+  renderLearnFields();
+}
+
+function addLearnField() {
+  const input = document.getElementById('learnFieldInput');
+  const v = input.value.trim();
+  if (!v) return;
+  input.value = '';
+  saveLearnFields(learnExtraFields.concat([v]));
+}
+
+function removeLearnField(i) {
+  saveLearnFields(learnExtraFields.filter(function(_, j) { return j !== i; }));
+}
+
+function learnSite() {
+  return sitesCache.find(function(s) { return s.id === learnSiteId; });
+}
+
+async function openLearn(siteId) {
+  learnSiteId = siteId;
+  learnFixOpen = learnRemoving = learnRule = null;
+  learnError = '';
+  document.getElementById('learnModal').classList.add('open');
+  renderLearn();
+  await loadLearnFields();
+  renderLearn();
+  scheduleLearnPoll();
+}
+
+function closeLearn() {
+  document.getElementById('learnModal').classList.remove('open');
+  learnSiteId = null;
+  clearTimeout(learnPollTimer);
+}
+
+// While learning, the learner writes its progress to the site — re-read it every few seconds.
+function scheduleLearnPoll() {
+  clearTimeout(learnPollTimer);
+  const site = learnSite();
+  const st = (site && site.learned) || {};
+  if (!site || st.status !== 'learning' || st.stale) return;
+  learnPollTimer = setTimeout(async function() {
+    try { await loadSites(); } catch (e) { /* try again next tick */ }
+    if (learnSiteId != null) { renderLearn(); scheduleLearnPoll(); }
+  }, 3000);
+}
+
+function setLearned(learned) {
+  const site = learnSite();
+  if (site) site.learned = learned;
+  renderLearn();
+  loadSites();
+}
+
+async function learnPost(path, body) {
+  return api('/api/' + currentDivision + '/sites/' + learnSiteId + '/learn' + path, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {}),
+  });
+}
+
+async function startLearn(siteId) {
+  if (siteId != null && learnSiteId !== siteId) await openLearn(siteId);
+  const site = learnSite();
+  if (!site) return;
+  learnError = '';
+  const hintsEl = document.getElementById('learnHints');
+  const body = hintsEl ? { hints: hintsEl.value } : {};
+  try {
+    await learnPost('', body);
+  } catch (e) {
+    learnError = e.message;
+    renderLearn();
+    return;
+  }
+  site.learned = Object.assign({}, site.learned || {}, body, {
+    status: 'learning', stale: false, message: null, progress: ['Starting…'], progress_at: new Date().toISOString(),
+  });
+  learnFixOpen = learnRemoving = learnRule = null;
+  renderLearn();
+  loadSites();
+  scheduleLearnPoll();
+}
+
+async function stopLearn() {
+  try { await learnPost('/cancel'); } catch (e) { learnError = e.message; }
+  await loadSites();
+  renderLearn();
+}
+
+async function approveLearn() {
+  try { setLearned((await learnPost('/approve')).learned); } catch (e) { alert(e.message); }
+}
+
+async function saveLearnHints(el) {
+  try { const res = await learnPost('/edit', { hints: el.value }); const site = learnSite(); if (site) site.learned = res.learned; }
+  catch (e) { alert(e.message); }
+}
+
+function learnFieldNames() {
+  return LEARN_FIELDS_SHOWN.concat(learnExtraFields);
+}
+
+// Every row on a project card, by index (onclick handlers pass the index, not the name).
+function learnRowNames() {
+  return learnFieldNames().concat(['Plan holders', 'Documents']);
+}
+
+function openLearnFix(i, j) {
+  learnFixOpen = i + '|' + j;
+  learnRemoving = null;
+  renderLearn();
+  const el = document.getElementById('learnFixValue');
+  if (el) el.focus();
+}
+
+async function saveLearnFix(i, j) {
+  const field = learnRowNames()[j];
+  const p = ((learnSite().learned || {}).preview || {}).projects[i];
+  const expected = document.getElementById('learnFixValue').value.trim();
+  const note = document.getElementById('learnFixNote').value.trim();
+  if (!expected && !note) { alert('Type the right value, or say where to find it.'); return; }
+  try {
+    const res = await learnPost('/edit', { fix: { project: p.url, project_name: p.name, field: field, expected: expected, note: note } });
+    learnFixOpen = null;
+    setLearned(res.learned);
+  } catch (e) { alert(e.message); }
+}
+
+async function removeLearnProject(i) {
+  const p = ((learnSite().learned || {}).preview || {}).projects[i];
+  const reason = document.getElementById('learnRemoveReason').value.trim();
+  const btn = document.getElementById('learnRemoveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+  try {
+    const res = await learnPost('/remove', { project: p.url, project_name: p.name, reason: reason });
+    learnRemoving = null;
+    learnRule = res.rule ? { rule: res.rule, name: p.name } : null;
+    setLearned(res.learned);
+  } catch (e) { alert(e.message); btn.disabled = false; btn.textContent = 'Remove'; }
+}
+
+async function acceptLearnRule() {
+  try { const res = await learnPost('/rule', { rule: learnRule.rule }); learnRule = null; setLearned(res.learned); }
+  catch (e) { alert(e.message); }
+}
+
+async function dropLearnEdit(kind, i) {
+  const body = {};
+  body[kind] = i;
+  try { setLearned((await learnPost('/edit', body)).learned); } catch (e) { alert(e.message); }
+}
+
+function learnFieldRow(i, label, value, from, extra) {
+  const j = learnRowNames().indexOf(label);
+  const key = i + '|' + j;
+  const open = learnFixOpen === key;
+  return '<div class="learn-row">' +
+    '<span class="k">' + escapeHtml(label) + (extra || '') + '</span>' +
+    '<span class="v' + (value ? '' : ' missing') + '">' + (value ? escapeHtml(value) : 'not found') + '</span>' +
+    '<button class="icon-btn" title="This is wrong" aria-label="Correct ' + escapeHtml(label) + '" onclick="openLearnFix(' + i + ', ' + j + ')">' + ICON_PENCIL + '</button>' +
+    (from ? '<span class="from">from ' + escapeHtml(from) + '</span>' : '') +
+    (open
+      ? '<div class="learn-form">' +
+          '<input type="text" id="learnFixValue" placeholder="The right value (if you know it)">' +
+          '<input type="text" id="learnFixNote" placeholder="Or where to find it — e.g. under Bid Opening on the Details tab">' +
+          '<button class="btn-primary" onclick="saveLearnFix(' + i + ', ' + j + ')">Save</button>' +
+          '<button class="btn-ghost" onclick="learnFixOpen=null; renderLearn()">Cancel</button>' +
+        '</div>'
+      : '') +
+  '</div>';
+}
+
+function learnProjectCard(p, i, checks) {
+  const fixes = {};
+  checks.forEach(function(c) { if (c.kind === 'value' && c.project === p.url) fixes[c.field] = c; });
+  const fixNote = function(f) {
+    const c = fixes[f];
+    if (!c) return '';
+    return ' <span class="tag" title="Your correction — used the next time it learns">' +
+      escapeHtml(c.expected ? 'should be: ' + c.expected : 'note: ' + c.note) + '</span>';
+  };
+  let rows = learnFieldNames().map(function(f) {
+    const v = (p.fields || {})[f] || {};
+    const extra = (LEARN_FIELDS_SHOWN.indexOf(f) < 0 ? '<span class="learn-hidden" title="Saved, not shown in results yet">hidden</span>' : '') + fixNote(f);
+    return learnFieldRow(i, f, v.value, v.from, extra);
+  }).join('');
+  const holders = p.plan_holders;
+  rows += learnFieldRow(i, 'Plan holders',
+    holders == null ? '' : holders.length + (holders.length === 1 ? ' company' : ' companies') +
+      (holders.length ? ' — ' + holders.slice(0, 4).map(function(h) { return h.company; }).join(', ') + (holders.length > 4 ? ', …' : '') : ''),
+    p.holders_from, fixNote('Plan holders'));
+  const docs = p.documents || [];
+  rows += learnFieldRow(i, 'Documents',
+    (p.document_count || 0) ? p.document_count + ' file' + (p.document_count === 1 ? '' : 's') + ' — ' +
+      docs.slice(0, 4).map(function(d) { return d.name; }).join(', ') + (p.document_count > 4 ? ', …' : '') : '',
+    (p.docs_from || []).join(' + '), fixNote('Documents'));
+  const removing = learnRemoving === i;
+  return '<div class="learn-card">' +
+    '<div class="learn-card-head">' +
+      '<div class="name">' + escapeHtml(p.name) +
+        '<a href="' + escapeHtml(p.url) + '" target="_blank" rel="noopener">' + escapeHtml(p.url) + '</a></div>' +
+      '<button class="icon-btn danger" title="Not a bid we want" aria-label="Remove this bid" onclick="learnRemoving=' + i + '; learnFixOpen=null; renderLearn(); document.getElementById(\'learnRemoveReason\').focus()">' + ICON_NOT_FIT + '</button>' +
+    '</div>' +
+    (removing
+      ? '<div class="learn-form"><input type="text" id="learnRemoveReason" placeholder="Why isn\'t this one wanted? (optional — e.g. already awarded)" onkeydown="if(event.key===\'Enter\') removeLearnProject(' + i + ')">' +
+          '<button class="btn-primary" id="learnRemoveBtn" onclick="removeLearnProject(' + i + ')">Remove</button>' +
+          '<button class="btn-ghost" onclick="learnRemoving=null; renderLearn()">Cancel</button></div>'
+      : '') +
+    rows +
+    ((p.errors || []).length ? '<ul class="learn-list warn">' + p.errors.map(function(e) { return '<li>' + escapeHtml(e) + '</li>'; }).join('') + '</ul>' : '') +
+  '</div>';
+}
+
+function renderLearn() {
+  const site = learnSite();
+  const body = document.getElementById('learnBody');
+  if (!site) { body.innerHTML = '<div class="empty">This site is gone.</div>'; return; }
+  const st = site.learned || {};
+  const hintsEl = document.getElementById('learnHints');
+  const typedHints = hintsEl && document.activeElement === hintsEl ? hintsEl.value : null;
+  document.getElementById('learnTitle').textContent = 'Learn: ' + site.name;
+  document.getElementById('learnDesc').textContent = site.url || '';
+  const learning = st.status === 'learning' && !st.stale;
+  const when = function(iso) {
+    return iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  };
+
+  let html = '';
+  if (learnError) html += '<div class="learn-status bad">' + escapeHtml(learnError) + '</div>';
+  if (learning || st.stale) {
+    html += '<div class="learn-status' + (st.stale ? ' bad' : '') + '">' +
+      (st.stale ? 'Learning seems to have stopped — nothing new for 15 minutes.' : '<span class="status-dot running"></span>Learning this site… this can take several minutes.') +
+      '<ol class="learn-progress">' + (st.progress || []).map(function(l) { return '<li>' + escapeHtml(l) + '</li>'; }).join('') + '</ol></div>';
+  } else if (st.status === 'review') {
+    html += '<div class="learn-status">Ready for review. Check what it found below, correct anything wrong, then approve it.' +
+      (st.draft && st.draft.summary ? '<br><b>How it reads the site:</b> ' + escapeHtml(st.draft.summary) : '') + '</div>';
+  } else if (st.status === 'live') {
+    const lr = st.last_run;
+    html += '<div class="learn-status good">Live — read every day by the scan.' +
+      (st.summary ? '<br><b>How it reads the site:</b> ' + escapeHtml(st.summary) : '') +
+      (lr ? '<br>Last scan: ' + lr.projects + ' project' + (lr.projects === 1 ? '' : 's') + ', ' + lr.documents + ' file' + (lr.documents === 1 ? '' : 's') + ' (' + when(lr.at) + ')' : '') +
+      (st.message ? '<br>' + escapeHtml(st.message) : '') + '</div>';
+  } else if (st.status === 'failed' || st.status === 'attention') {
+    html += '<div class="learn-status bad">' + (st.status === 'failed' ? "Couldn't learn this site" : 'Needs a look') +
+      (st.message ? ': ' + escapeHtml(st.message) : '') + '</div>';
+  } else {
+    html += '<div class="learn-status">Not learned yet. Add any notes that would help below, then start learning.</div>';
+  }
+
+  if (!learning) {
+    const pv = st.preview;
+    const checks = st.checks || [];
+    const rules = st.rules || [];
+    if (learnRule) {
+      html += '<div class="learn-rule">Removed "' + escapeHtml(learnRule.name) + '". Leave out others like it too?<br><b>' + escapeHtml(learnRule.rule.text) + '</b>' +
+        '<div class="row"><button class="btn-primary" onclick="acceptLearnRule()">Yes</button>' +
+        '<button class="btn-ghost" onclick="learnRule=null; renderLearn()">Just this one</button></div></div>';
+    }
+    if (pv) {
+      const shown = (pv.projects || []).length;
+      html += '<div class="learn-section-title">What it found' + (st.status === 'live' && !st.draft ? ' when it learned the site' : '') + (st.learned_at ? ' (' + when(st.learned_at) + ')' : '') + '</div>';
+      html += '<p class="desc" style="margin:0 0 8px;">' + pv.listed + ' bid' + (pv.listed === 1 ? '' : 's') + ' listed on the site' +
+        (shown ? ' — here are ' + (shown < pv.listed ? 'the first ' : '') + shown + '.' : '.') +
+        ' Click <span style="display:inline-flex; vertical-align:-2px; width:13px;">' + ICON_PENCIL + '</span> on anything wrong, or <span style="display:inline-flex; vertical-align:-2px; width:13px;">' + ICON_NOT_FIT + '</span> on a bid that shouldn\'t be here.</p>';
+      if (pv.compare) {
+        const c = pv.compare;
+        html += '<p class="desc" style="margin:0 0 8px;">For comparison, the built-in ' + escapeHtml(c.label) + ' adapter ' +
+          (c.error ? 'failed: ' + escapeHtml(c.error) : 'finds ' + c.projects + ' project' + (c.projects === 1 ? '' : 's') + ' and ' + c.documents + ' file' + (c.documents === 1 ? '' : 's') + '.') + '</p>';
+      }
+      if ((pv.check_failures || []).length) {
+        html += '<ul class="learn-list bad">' + pv.check_failures.map(function(f) { return '<li>Still wrong: ' + escapeHtml(f) + '</li>'; }).join('') + '</ul>';
+      }
+      const warns = (pv.warnings || []).concat(pv.errors || []);
+      if (warns.length) html += '<ul class="learn-list warn">' + warns.map(function(w) { return '<li>' + escapeHtml(w) + '</li>'; }).join('') + '</ul>';
+      html += (pv.projects || []).map(function(p, i) { return learnProjectCard(p, i, checks); }).join('');
+    }
+
+    if (checks.length || rules.length) {
+      const pending = checks.some(function(c) { return !st.learned_at || (c.at && c.at > st.learned_at && c.kind === 'value'); });
+      html += '<div class="learn-section-title">Your corrections</div>' +
+        '<p class="desc" style="margin:0 0 4px;">Removed bids and skip rules apply right away. Value corrections are used ' +
+        (pending ? '<b>the next time it learns — click Re-learn</b>' : 'every time it learns') + ', and it has to get them right.</p>' +
+        '<ul class="learn-list learn-edits">' +
+        checks.map(function(c, i) {
+          const what = c.kind === 'exclude'
+            ? 'Leave out "' + (c.project_name || c.project) + '"' + (c.note ? ' — ' + c.note : '')
+            : c.field + ' on "' + (c.project_name || c.project) + '"' + (c.expected ? ' should be "' + c.expected + '"' : '') + (c.note ? (c.expected ? ' — ' : ': ') + c.note : '');
+          return '<li><span>' + escapeHtml(what) + '</span><button class="btn-danger" onclick="dropLearnEdit(\'drop_check\', ' + i + ')">Undo</button></li>';
+        }).join('') +
+        rules.map(function(r, i) {
+          return '<li><span>Skip rule: ' + escapeHtml(r.text || r.skip.matches) + '</span><button class="btn-danger" onclick="dropLearnEdit(\'drop_rule\', ' + i + ')">Undo</button></li>';
+        }).join('') + '</ul>';
+    }
+
+    html += '<div class="learn-section-title">Notes about this site</div>' +
+      '<textarea id="learnHints" placeholder="Anything that helps it find its way — e.g. Only look under Current Solicitations. Addenda are on a separate page." onchange="saveLearnHints(this)">' + escapeHtml(st.hints || '') + '</textarea>';
+  }
+
+  html += '<div class="learn-actions">';
+  if (learning) {
+    html += '<button class="btn-ghost" onclick="stopLearn()">Stop learning</button>';
+  } else {
+    const draft = st.draft && st.draft.recipe;
+    if (draft && (st.status === 'review' || st.status === 'attention')) html += '<button class="btn-primary" onclick="approveLearn()">Approve — go live</button>';
+    html += '<button class="' + (draft ? 'btn-ghost' : 'btn-primary') + '" onclick="startLearn()">' + (st.status ? 'Re-learn' : 'Start learning') + '</button>';
+    if (st.status === 'review') html += '<span class="desc">Until you approve, ' + (st.recipe ? 'the scan keeps using the version that\'s live now.' : 'the daily scan skips this site.') + '</span>';
+  }
+  html += '<button class="btn-ghost" style="margin-left:auto;" onclick="closeLearn()">Close</button></div>';
+
+  body.innerHTML = html;
+  if (typedHints != null) {
+    const el = document.getElementById('learnHints');
+    if (el) { el.value = typedHints; el.focus(); }
   }
 }
 
@@ -2077,7 +2523,8 @@ function adapterKeyForUrl(url) {
 function onAdapterChange() {
   const key = document.getElementById('siteAdapter').value;
   const a = adapterList.find(function(x) { return x.key === key; });
-  const usingAdapter = !!key;
+  // A learned site still needs its URL — that's where the AI starts exploring.
+  const usingAdapter = !!key && key !== 'learned';
   document.getElementById('adapterHelp').textContent = a ? a.help : '';
   // A portal adapter knows where to look — URL and the listing/AI options don't apply.
   document.getElementById('siteUrl').disabled = usingAdapter;
@@ -2203,9 +2650,11 @@ async function saveSite() {
     alert('Enter a password for the login (or clear the username if this site doesn\'t need one).');
     return;
   }
+  if (adapter === 'learned' && !url) { alert('A site learned by AI needs its URL — that\'s where it starts looking.'); return; }
   const path = '/api/' + currentDivision + '/sites' + (editing ? '/' + editingSiteId : '');
+  let saved;
   try {
-    await api(path, {
+    saved = await api(path, {
       method: editing ? 'PATCH' : 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body),
@@ -2215,7 +2664,10 @@ async function saveSite() {
     return;
   }
   hideAddSite();
-  loadSites();
+  await loadSites();
+  // A site just set to be learned by AI starts learning straight away.
+  const site = saved && saved.site;
+  if (site && site.adapter === 'learned' && !(site.learned && site.learned.status)) startLearn(site.id);
 }
 
 async function deleteSite(siteId) {

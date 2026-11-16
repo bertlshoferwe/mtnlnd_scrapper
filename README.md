@@ -78,6 +78,34 @@ Zone** (`udot_masterworks`), which pulls every advertised project's PDFs from
 Adding a portal: subclass `SiteAdapter` in `adapters.py`, implement
 `find_documents()`, add it to the `_ADAPTER_CLASSES` list.
 
+## Sites learned by AI (no adapter)
+
+Pick **Learned by AI (no adapter)** in a site's Portal adapter dropdown (keep
+its URL). On save, the scan worker starts `site_agent.py`: an AI explores the
+site — opening pages, clicking tabs, watching the JSON the pages load — and
+writes a *recipe* (plain JSON) that reads the bid list and each project's name,
+bid date/time, location, documents and plan holders. The site's **review**
+tag in Sites opens what it found, with where each value came from:
+
+- ✎ on a wrong value: type the right one, or say where to find it. Saved as a
+  correction that every later re-learn must get right.
+- ⊘ on a bid that shouldn't be there: it's left out from then on, and the AI
+  suggests a rule for others like it ("Skip projects whose Status is Awarded").
+- Notes about the site, then **Re-learn**, and **Approve** when it looks right.
+
+Daily scans replay the approved recipe with no AI. If it stops working (finds
+nothing, or breaks a correction) the AI re-learns it on its own; if that
+doesn't pass, the site is tagged **needs a look**. One site learns at a time,
+paced for the Gemini free tier (`LEARN_AI_INTERVAL_S`, default 5s between
+calls; `LEARN_MAX_STEPS`, default 40). **Fields to collect** in Sites adds
+more fields per division (e.g. Owner) — saved in `project_flags.extra_fields`,
+not shown anywhere yet. Needs these columns:
+
+```sql
+alter table sites add column if not exists learned jsonb;
+alter table project_flags add column if not exists extra_fields jsonb;
+```
+
 **Re-scan skipping.** Because an adapter re-lists every advertised project on
 every run, the scan worker skips any document URL it has already processed to
 a non-failure status (`already_scanned_urls` in `supabase_store.py`) — so a

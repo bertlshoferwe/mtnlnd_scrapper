@@ -20,6 +20,12 @@ Routes:
   POST /api/<division_id>/sites/<site_id>/active   toggle whether the site is scanned
   POST /api/<division_id>/sites/reorder      persist a drag-to-reorder (also the scan order)
   DEL  /api/<division_id>/sites/<site_id>     remove a site
+  GET/PUT /api/<division_id>/learn-fields     extra fields learned sites collect (saved, not shown yet)
+  POST /api/<division_id>/sites/<site_id>/learn          start an AI learning the site (…/learn/cancel stops it)
+  POST /api/<division_id>/sites/<site_id>/learn/edit     review edits: site notes, a corrected value, undo
+  POST /api/<division_id>/sites/<site_id>/learn/remove   leave a bid out; replies with a suggested skip rule
+  POST /api/<division_id>/sites/<site_id>/learn/rule     confirm that rule
+  POST /api/<division_id>/sites/<site_id>/learn/approve  put the reviewed recipe live
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
@@ -294,6 +300,14 @@ def _public_site(site):
     site = dict(site)
     site.pop("login_password_enc", None)
     site["has_login"] = bool(site.get("login_username"))
+    learned = site.get("learned")
+    if learned and learned.get("status") == "learning":
+        # The learner writes progress every step; silence this long means it died.
+        try:
+            at = datetime.fromisoformat(learned.get("progress_at"))
+            site["learned"] = dict(learned, stale=(datetime.now(timezone.utc) - at).total_seconds() > LEARN_STALE_S)
+        except (TypeError, ValueError):
+            pass
     return site
 
 
@@ -314,7 +328,7 @@ def _parse_site_payload(data):
         raise ValueError(f"unknown adapter '{adapter}'")
     if not name:
         raise ValueError("name is required")
-    if not url and not adapter:
+    if not url and (not adapter or adapter == "learned"):
         raise ValueError("url is required (unless a portal adapter is selected)")
 
     # A URL that matches a known portal's host gets that adapter attached
@@ -470,6 +484,210 @@ def api_delete_site(division_id, site_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Learned sites (adapter "learned" — see site_agent.py). Learning and rule
+# suggestions need the AI and a browser, so they go through the scan worker;
+# the user's edits are plain writes to sites.learned.
+# ---------------------------------------------------------------------------
+
+LEARN_STALE_S = 15 * 60
+LEARN_BUILT_IN_FIELDS = ["Project name", "Bid date", "Bid time", "Location", "Plan holders", "Documents"]
+
+
+@app.route("/api/<division_id>/learn-fields", methods=["GET", "PUT"])
+def api_learn_fields(division_id):
+    """The division's extra fields for learned sites to collect (saved per
+    project, not shown yet). PUT body: {"fields": ["Owner", ...]}."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    if request.method == "PUT":
+        raw = (request.get_json(force=True, silent=True) or {}).get("fields") or []
+        fields = []
+        for f in raw:
+            f = re.sub(r"\s+", " ", str(f or "")).strip()[:60]
+            if f and f.lower() not in (x.lower() for x in fields + LEARN_BUILT_IN_FIELDS):
+                fields.append(f)
+        supabase_store.save_division_extra(division_id, {"learn_fields": fields[:30]})
+    return jsonify({"fields": supabase_store.get_division_extra(division_id, "learn_fields") or [],
+                    "built_in": LEARN_BUILT_IN_FIELDS})
+
+
+def _learned_site(division_id, site_id):
+    """(site, learned state, error response)."""
+    _, err = _require_division(division_id)
+    if err:
+        return None, None, err
+    site = supabase_store.get_site(division_id, site_id)
+    if site is None:
+        return None, None, (jsonify({"error": "site not found"}), 404)
+    if site.get("adapter") != "learned":
+        return None, None, (jsonify({"error": "this site isn't set to be learned by AI"}), 400)
+    return site, dict(site.get("learned") or {}), None
+
+
+def _save_learned(division_id, site_id, learned):
+    try:
+        supabase_store.save_site_learned(division_id, site_id, learned)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "learned": learned})
+
+
+def _scanner_post(path, body, timeout=10):
+    """POST to the scan worker; (json, error response)."""
+    base, cfg_err = _scanner_url()
+    if cfg_err:
+        return None, cfg_err
+    try:
+        resp = requests.post(f"{base}{path}", json=body, timeout=timeout)
+    except requests.RequestException as e:
+        return None, (jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424)
+    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+    if resp.status_code >= 300:
+        return None, (jsonify({"error": data.get("error") or f"Scan worker error {resp.status_code}"}),
+                      409 if resp.status_code == 409 else 424)
+    return data, None
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn", methods=["POST"])
+def api_learn_site(division_id, site_id):
+    """Start (or restart) learning. Body: optional {"hints": "..."} saved first."""
+    site, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    if "hints" in data:
+        learned["hints"] = str(data.get("hints") or "")[:4000]
+        try:
+            supabase_store.save_site_learned(division_id, site_id, learned)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    _, err = _scanner_post("/learn-site", {"division_id": division_id, "site_id": site_id})
+    if err:
+        return err
+    return jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/cancel", methods=["POST"])
+def api_learn_cancel(division_id, site_id):
+    _, _, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    _, err = _scanner_post("/learn-cancel", {"division_id": division_id, "site_id": site_id}, timeout=20)
+    return err or jsonify({"ok": True})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/edit", methods=["POST"])
+def api_learn_edit(division_id, site_id):
+    """The review screen's edits. Body, any of:
+      {"hints": "..."}                                   site notes
+      {"fix": {project, project_name, field, expected, note}}   a wrong value
+      {"drop_check": i}                                  undo a correction
+      {"drop_rule": i}                                   undo a skip rule
+    Fixes take effect on the next re-learn, which has to pass them."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    checks = list(learned.get("checks") or [])
+    rules = list(learned.get("rules") or [])
+    if "hints" in data:
+        learned["hints"] = str(data.get("hints") or "")[:4000]
+    fix = data.get("fix")
+    if isinstance(fix, dict):
+        if not fix.get("project") or not fix.get("field"):
+            return jsonify({"error": "project and field are required"}), 400
+        expected = str(fix.get("expected") or "").strip()[:300]
+        note = str(fix.get("note") or "").strip()[:500]
+        if not expected and not note:
+            return jsonify({"error": "type the right value, or say where to find it"}), 400
+        checks = [c for c in checks if not (c.get("kind") == "value" and c.get("project") == fix["project"]
+                                            and c.get("field") == fix["field"])]
+        checks.append({"kind": "value", "project": fix["project"],
+                       "project_name": str(fix.get("project_name") or "")[:200],
+                       "field": str(fix["field"])[:60], "expected": expected or None, "note": note or None,
+                       "at": datetime.now(timezone.utc).isoformat()})
+    for key, items in (("drop_check", checks), ("drop_rule", rules)):
+        if key in data:
+            try:
+                items.pop(int(data[key]))
+            except (TypeError, ValueError, IndexError):
+                return jsonify({"error": "nothing to undo there"}), 400
+    learned["checks"], learned["rules"] = checks, rules
+    return _save_learned(division_id, site_id, learned)
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/remove", methods=["POST"])
+def api_learn_remove(division_id, site_id):
+    """Remove a bid from a learned site. Body: {project, project_name,
+    reason}. It's left out from now on either way; the reply carries a
+    suggested rule for others like it (or null) to confirm with /learn/rule."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    project = data.get("project")
+    if not project:
+        return jsonify({"error": "project is required"}), 400
+    reason = str(data.get("reason") or "").strip()[:300]
+    # Ask before dropping it from the preview — the suggestion compares it with the rest.
+    suggestion, _ = _scanner_post("/propose-rule", {"division_id": division_id, "site_id": site_id,
+                                                    "project": project, "reason": reason}, timeout=120)
+    checks = [c for c in learned.get("checks") or [] if c.get("project") != project]
+    checks.append({"kind": "exclude", "project": project, "project_name": str(data.get("project_name") or "")[:200],
+                   "note": reason or None, "at": datetime.now(timezone.utc).isoformat()})
+    learned["checks"] = checks
+    preview = dict(learned.get("preview") or {})
+    preview["projects"] = [p for p in preview.get("projects") or [] if p.get("url") != project]
+    learned["preview"] = preview
+    try:
+        supabase_store.save_site_learned(division_id, site_id, learned)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "learned": learned, "rule": (suggestion or {}).get("rule")})
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/rule", methods=["POST"])
+def api_learn_rule(division_id, site_id):
+    """Confirm a suggested skip rule. Body: {"rule": {text, skip: {field, matches}}}.
+    Applies right away — no re-learn needed — and drops matching bids from the preview."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    rule = (request.get_json(force=True, silent=True) or {}).get("rule") or {}
+    skip = rule.get("skip") or {}
+    try:
+        pattern = re.compile(str(skip.get("matches") or ""), re.I)
+    except re.error:
+        return jsonify({"error": "that rule doesn't work as a pattern"}), 400
+    if not skip.get("matches"):
+        return jsonify({"error": "rule is required"}), 400
+    field = str(skip.get("field") or "_row")[:60]
+    learned["rules"] = list(learned.get("rules") or []) + [
+        {"text": str(rule.get("text") or "")[:200], "skip": {"field": field, "matches": skip["matches"]}}]
+    preview = dict(learned.get("preview") or {})
+    preview["projects"] = [
+        p for p in preview.get("projects") or []
+        if not pattern.search(str(((p.get("fields") or {}).get(field) or {}).get("value") or ""))]
+    learned["preview"] = preview
+    return _save_learned(division_id, site_id, learned)
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/approve", methods=["POST"])
+def api_learn_approve(division_id, site_id):
+    """Put the reviewed draft live — the daily scan replays it from now on."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    draft = learned.get("draft") or {}
+    if not draft.get("recipe"):
+        return jsonify({"error": "there's nothing waiting for approval"}), 400
+    learned.update(recipe=draft["recipe"], summary=draft.get("summary") or "", draft=None,
+                   status="live", message=None, approved_at=datetime.now(timezone.utc).isoformat())
+    return _save_learned(division_id, site_id, learned)
 
 
 # ---------------------------------------------------------------------------

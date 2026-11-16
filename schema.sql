@@ -38,6 +38,9 @@ create table if not exists sites (
   login_last_ok boolean,
   login_last_checked_at timestamptz,
   login_last_error text,
+  -- A site with adapter 'learned' — the AI-learned recipe, its review
+  -- preview, the user's corrections and status. See site_agent.py.
+  learned jsonb,
   created_at timestamptz default now()
 );
 -- Migration for existing databases:
@@ -51,6 +54,7 @@ create table if not exists sites (
 --   alter table sites add column if not exists login_last_error text;
 --   alter table sites add column if not exists sort_order bigint;
 --   update sites set sort_order = id where sort_order is null;
+--   alter table sites add column if not exists learned jsonb;
 
 create table if not exists keywords (
   id bigint generated always as identity primary key,
@@ -182,6 +186,9 @@ create table if not exists project_flags (
   fit_explanation text,
   fit_predicted_at timestamptz,
   fit_basis_count int,
+  -- Learned sites: the division's extra "fields to collect" for this
+  -- project ({field name: value}). Saved, not shown anywhere yet.
+  extra_fields jsonb,
   updated_at timestamptz default now(),
   primary key (division_id, project_key)
 );
@@ -206,6 +213,7 @@ create table if not exists project_flags (
 --   alter table project_flags add column if not exists fit_explanation text;
 --   alter table project_flags add column if not exists fit_predicted_at timestamptz;
 --   alter table project_flags add column if not exists fit_basis_count int;
+--   alter table project_flags add column if not exists extra_fields jsonb;
 --   alter table project_decisions add column if not exists embedding jsonb;
 --   -- one-time: carry the old Done / Jira flags over to the new tabs
 --   update project_flags set decision = 'jira', decided_at = updated_at

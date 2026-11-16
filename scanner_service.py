@@ -31,6 +31,11 @@ Routes:
                               bytes directly (currently just ConstructConnect)
   POST /cluster-keywords      body: {"division_id"} — returns suggested
                               merge groups, see cluster_keywords() below
+  POST /learn-site            body: {"division_id", "site_id"} — start an
+                              AI learning a site (see site_agent.py)
+  POST /learn-cancel          body: {"division_id", "site_id"}
+  POST /propose-rule          body: {"division_id", "site_id", "project",
+                              "reason"} — a skip rule for a removed bid
 
 Environment variables: same SUPABASE_URL / SUPABASE_SERVICE_KEY /
 AI_PROVIDER / ANTHROPIC_API_KEY / GEMINI_API_KEY / FIRECRAWL_API_KEY /
@@ -56,6 +61,7 @@ import adapters
 import ai_provider
 import credentials
 import scraper
+import site_agent
 import supabase_store
 
 app = Flask(__name__)
@@ -304,6 +310,83 @@ def cluster_keywords():
 
     groups = _ai_confirm_clusters(ai_provider.get_provider(), clusters)
     return jsonify({"ok": True, "groups": groups})
+
+
+# One site learns at a time — learning is dozens of AI calls, and the
+# Gemini free tier's per-minute limit is shared by all of them.
+_learn = {"proc": None, "site_id": None}
+
+
+def _learning():
+    proc = _learn["proc"]
+    return proc is not None and proc.poll() is None
+
+
+@app.route("/learn-site", methods=["POST"])
+def learn_site():
+    """Start `site_agent.py learn` for a learned site. Body: {division_id,
+    site_id}. The learner reports progress into sites.learned itself."""
+    body = request.get_json(silent=True) or {}
+    division_id = (body.get("division_id") or "").strip()
+    site_id = body.get("site_id")
+    if not division_id or not site_id:
+        return jsonify({"ok": False, "error": "division_id and site_id required"}), 400
+    with _lock:
+        if _learning():
+            same = _learn["site_id"] == int(site_id)
+            return jsonify({"ok": False, "error": "this site is already learning" if same
+                            else "another site is learning right now — try again when it's done"}), 409
+        _learn["proc"] = subprocess.Popen(
+            [sys.executable, "site_agent.py", "learn", division_id, str(int(site_id))],
+            cwd=os.path.dirname(os.path.abspath(__file__)))
+        _learn["site_id"] = int(site_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/learn-cancel", methods=["POST"])
+def learn_cancel():
+    """Stop a site's learning. Body: {division_id, site_id}."""
+    body = request.get_json(silent=True) or {}
+    division_id = (body.get("division_id") or "").strip()
+    site_id = int(body.get("site_id") or 0)
+    with _lock:
+        proc = _learn["proc"] if _learn["site_id"] == site_id else None
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+    if proc is not None:
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    site = supabase_store.get_site(division_id, site_id)
+    if site and (site.get("learned") or {}).get("status") == "learning":
+        learned = dict(site["learned"])
+        learned.update(status="live" if learned.get("recipe") else "failed", message="Learning was stopped.")
+        supabase_store.save_site_learned(division_id, site_id, learned)
+    return jsonify({"ok": True})
+
+
+@app.route("/propose-rule", methods=["POST"])
+def propose_rule():
+    """The user removed a project from a learned site's preview: suggest a
+    skip rule for others like it. Body: {division_id, site_id, project,
+    reason}. Returns {"rule": {text, skip} or null}."""
+    body = request.get_json(silent=True) or {}
+    site = supabase_store.get_site((body.get("division_id") or "").strip(), int(body.get("site_id") or 0))
+    if site is None:
+        return jsonify({"ok": False, "error": "site not found"}), 404
+    ai = ai_provider.get_provider()
+    if ai is None:
+        return jsonify({"ok": True, "rule": None})
+    projects = ((site.get("learned") or {}).get("preview") or {}).get("projects") or []
+
+    def brief(p):
+        return {"name": p.get("name"), "fields": {k: v.get("value") for k, v in (p.get("fields") or {}).items()}}
+    removed = next((p for p in projects if p.get("url") == body.get("project")), None)
+    if removed is None:
+        return jsonify({"ok": True, "rule": None})
+    others = [brief(p) for p in projects if p is not removed]
+    return jsonify({"ok": True, "rule": site_agent.propose_rule(ai, brief(removed), body.get("reason"), others)})
 
 
 def _run_daily_scan():
