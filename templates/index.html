@@ -1205,6 +1205,9 @@
           <input type="url" id="siteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
         </div>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text); margin-top:10px;">
+          <input type="checkbox" id="learnSiteBox" style="width:auto;" onchange="onLearnBoxChanged()"> Learn this site with AI — shows what it finds for you to check before it goes live
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text); margin-top:10px;">
           <input type="checkbox" id="useAiListing" style="width:auto;" checked> Let AI find the plan links automatically
         </label>
         <span class="adv-toggle" id="advToggle" onclick="toggleAdv()">+ Advanced</span>
@@ -2531,9 +2534,23 @@ function onAdapterChange() {
   document.getElementById('siteUrl').placeholder = usingAdapter
     ? 'not needed — the adapter knows where to look'
     : 'https://example.com/bids';
-  document.getElementById('listingFields').style.display = usingAdapter ? 'none' : '';
-  document.getElementById('useAiListing').closest('label').style.display = usingAdapter ? 'none' : '';
+  // The listing/AI-link options are for the plain crawl — a learned site doesn't use them.
+  const plainCrawl = !key;
+  document.getElementById('listingFields').style.display = plainCrawl ? '' : 'none';
+  document.getElementById('useAiListing').closest('label').style.display = plainCrawl ? '' : 'none';
+  // The learn box stands for the "learned" choice in the dropdown; a portal adapter hides it.
+  document.getElementById('learnSiteBox').checked = key === 'learned';
+  document.getElementById('learnSiteBox').closest('label').style.display = usingAdapter ? 'none' : '';
 }
+function onLearnBoxChanged() {
+  const sel = document.getElementById('siteAdapter');
+  sel.value = document.getElementById('learnSiteBox').checked ? 'learned' : '';
+  sel.dataset.manual = '1';
+  onAdapterChange();
+}
+// What the adapter falls back to when the URL matches no portal adapter: new
+// sites are learned by AI; an existing site keeps the plain crawl it has.
+let siteFormDefaultAdapter = 'learned';
 function selectAdvTab(tab) {
   document.getElementById('discoveryTabBtn').classList.toggle('active', tab === 'discovery');
   document.getElementById('loginTabBtn').classList.toggle('active', tab === 'login');
@@ -2553,7 +2570,7 @@ function onAdapterManuallyChanged() {
 document.getElementById('siteUrl').addEventListener('input', function() {
   const sel = document.getElementById('siteAdapter');
   if (sel.dataset.manual === '1') return;
-  const match = adapterKeyForUrl(this.value.trim());
+  const match = adapterKeyForUrl(this.value.trim()) || siteFormDefaultAdapter;
   if (sel.value !== match) {
     sel.value = match;
     onAdapterChange();
@@ -2563,6 +2580,9 @@ document.getElementById('siteUrl').addEventListener('input', function() {
 function showAddSite() {
   editingSiteId = null;
   parkFormHome();
+  siteFormDefaultAdapter = 'learned';
+  document.getElementById('siteAdapter').value = 'learned';
+  onAdapterChange();
   document.getElementById('siteFormTitle').textContent = 'Add a site';
   document.getElementById('siteSaveBtn').textContent = 'Add site';
   document.getElementById('addSiteForm').style.display = 'block';
@@ -2573,6 +2593,7 @@ function editSite(siteId) {
   const site = sitesCache.find(function(s) { return s.id === siteId; });
   if (!site) return;
   editingSiteId = siteId;
+  siteFormDefaultAdapter = site.adapter === 'learned' ? 'learned' : '';
 
   document.getElementById('siteName').value = site.name || '';
   document.getElementById('siteUrl').value = site.url || '';
@@ -2600,8 +2621,10 @@ function editSite(siteId) {
     : site.login_last_ok === false ? 'var(--danger)' : 'var(--muted)';
   selectAdvTab(site.has_login ? 'login' : 'discovery');
 
-  // Show Advanced whenever this site isn't on the plain "let AI find it" default.
-  document.getElementById('advFields').classList.toggle('open', !!(site.adapter || sel || pat || site.has_login));
+  // Show Advanced whenever this site isn't on the plain "let AI find it" default
+  // (learning is chosen with its own box, so it doesn't need Advanced open).
+  const portal = site.adapter && site.adapter !== 'learned';
+  document.getElementById('advFields').classList.toggle('open', !!(portal || sel || pat || site.has_login));
   onAdapterChange();
 
   document.getElementById('siteFormTitle').textContent = 'Edit ' + site.name;
