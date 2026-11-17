@@ -67,7 +67,15 @@ import supabase_store
 app = Flask(__name__)
 
 _lock = threading.Lock()
-_state = {"proc": None, "division_id": None}  # division_id None = "all divisions"
+_state = {"proc": None, "division_id": None, "started": 0.0}  # division_id None = "all divisions"
+
+# scraper.py's own budgets (SCAN_DIVISION_BUDGET_S, ConstructConnect's
+# RUN_BUDGET_S) are only checked between sites/projects, so a call that hangs
+# (a crashed browser tab, 2026-11-17) keeps the scan "running" until
+# api/index.py's STALE_RUN_AFTER gives up 10 hours in. Past this, the worker
+# kills the subprocess itself and marks the run. Keep it above
+# SCAN_DIVISION_BUDGET_S and below STALE_RUN_AFTER.
+SCAN_HARD_LIMIT_S = int(os.environ.get("SCAN_HARD_LIMIT_S") or str(int(9.5 * 3600)))
 
 
 def _schedule_hm(text):
@@ -95,7 +103,36 @@ def _start(division_id):
         args = [sys.executable, "scraper.py", division_id or ""]
         _state["proc"] = subprocess.Popen(args, cwd=os.path.dirname(os.path.abspath(__file__)))
         _state["division_id"] = division_id
+        _state["started"] = time.monotonic()
         return True
+
+
+def _stop(proc):
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def _watchdog_loop():
+    while True:
+        time.sleep(60)
+        with _lock:
+            proc = _state["proc"]
+            overdue = (_is_running()
+                       and time.monotonic() - _state["started"] > SCAN_HARD_LIMIT_S)
+        if not overdue:
+            continue
+        print(f"[watchdog] scan still running after {SCAN_HARD_LIMIT_S}s — stopping it", flush=True)
+        try:
+            _stop(proc)
+            supabase_store.fail_running_runs("error: stuck — stopped by the scan worker")
+        except Exception as e:
+            print(f"[watchdog] couldn't stop the scan cleanly: {e}", file=sys.stderr, flush=True)
+
+
+threading.Thread(target=_watchdog_loop, daemon=True).start()
 
 
 @app.route("/health", methods=["GET"])
@@ -119,11 +156,7 @@ def cancel():
         proc = _state["proc"]
         if proc is None or proc.poll() is not None:
             return jsonify({"ok": True, "was_running": False})
-        proc.terminate()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    _stop(proc)
     return jsonify({"ok": True, "was_running": True})
 
 

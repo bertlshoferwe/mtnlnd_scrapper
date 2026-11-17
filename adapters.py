@@ -646,9 +646,21 @@ class ConstructConnectAdapter(SiteAdapter):
             # Not filtering by Saved Search yet (SAVED_SEARCHES above is
             # parked for that) — but the location, category and bid date
             # filters scope the default nationwide view down to what matters.
-            self._apply_location_filter(page)
-            self._apply_category_filter(page)
-            self._apply_bid_date_filter(page)
+            # All three are required — without them the grid is the whole
+            # nationwide list (thousands of projects), which can't finish in
+            # RUN_BUDGET_S. That happened every night 2026-11-14 to 11-17:
+            # ConstructConnect's new cookie banner and nav bar blocked the
+            # filter clicks, and each run ended in a 10-hour timeout. Better
+            # to skip ConstructConnect for one night, loudly.
+            self._open_filter_panel(page)
+            filtered = [self._apply_location_filter(page),
+                        self._apply_category_filter(page),
+                        self._apply_bid_date_filter(page)]
+            if not all(filtered):
+                print("  ! ConstructConnect: couldn't set the search filters (see the "
+                      "*_filter_failed screenshots in debug/) — skipping it this run "
+                      "rather than crawling the unfiltered nationwide list")
+                return [], login_result, {}
             out, current_updated = self._scan_results_page(page, deadline, known_updated or {})
             if not out:
                 self._save_debug_screenshot(page, "no_docs_found")
@@ -762,20 +774,78 @@ class ConstructConnectAdapter(SiteAdapter):
             if pw:
                 pw.stop()
 
+    # The banner is OneTrust's. Its buttons changed by 2026-11-14 (a "Reject
+    # All" button, no "Necessary Only"), and the stale selector let it sit
+    # on top of the filter sidebar, so its stable id comes first.
+    COOKIE_BUTTONS = ("#onetrust-reject-all-handler",
+                      "button:has-text('Reject All')",
+                      "button:has-text('Necessary Only')")
+
     def _dismiss_cookie_banner(self, page):
         """The cookie consent banner sits fixed at the bottom of the
         viewport. It was still showing in a debug screenshot taken well
         into a run (after several page.go_back() calls), so a one-time
         dismissal right after landing isn't enough — this is also called
         before each project, and is a cheap no-op once the banner is
-        actually gone (query_selector just finds nothing)."""
+        actually gone (query_selector just finds nothing). If none of the
+        known buttons is there, the banner's container is removed outright
+        so a future wording change can't block clicks again."""
         try:
-            btn = page.query_selector("button:has-text('Necessary Only')")
-            if btn and btn.is_visible():
-                btn.click(timeout=4000)
-                page.wait_for_timeout(300)
+            for sel in self.COOKIE_BUTTONS:
+                btn = page.query_selector(sel)
+                if btn and btn.is_visible():
+                    btn.click(timeout=4000)
+                    page.wait_for_timeout(300)
+                    return
+            page.evaluate("document.getElementById('onetrust-consent-sdk')?.remove()")
         except Exception as e:
             print(f"  ! ConstructConnect: couldn't dismiss the cookie banner ({e})")
+
+    def _click(self, locator, timeout=8000):
+        """A normal click, falling back to the element's own click() when
+        something else covers it — ConstructConnect's nav bar started
+        sitting over the filter sidebar's headers (2026-11-14), so
+        Playwright's pointer click hit the nav instead and timed out."""
+        try:
+            locator.click(timeout=timeout)
+        except Exception:
+            locator.evaluate("el => el.click()", timeout=timeout)
+
+    # Any section of the filter panel — used to tell whether it's open.
+    FILTER_PANEL_PROBE = '[data-section-key="bidDate"]'
+
+    def _in_reach(self, locator):
+        """True when the element is on screen and nothing sits on top of it.
+        is_visible() isn't enough: the closed filter panel is still
+        "visible", just tucked behind the left nav bar."""
+        try:
+            locator.scroll_into_view_if_needed(timeout=3000)
+            return locator.evaluate("""el => {
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+                return !!hit && el.contains(hit);
+            }""")
+        except Exception:
+            return False
+
+    def _open_filter_panel(self, page):
+        """The Search page used to land with the filter panel open; by
+        2026-11-14 it lands closed, behind a "Filters (N)" button in the
+        search bar (N = filters already set), with the panel's contents
+        otherwise unchanged. Clicked only when the panel isn't already in
+        reach, since the button toggles it shut too."""
+        self._dismiss_cookie_banner(page)
+        probe = page.locator(self.FILTER_PANEL_PROBE).first
+        if self._in_reach(probe):
+            return
+        try:
+            self._click(page.get_by_role("button", name=re.compile(r"^\s*Filters\b")).first, timeout=5000)
+            page.wait_for_timeout(1000)
+        except Exception as e:
+            print(f"  ! ConstructConnect: couldn't click the Filters button ({e})")
+        if not self._in_reach(probe):
+            print("  ! ConstructConnect: the filter panel didn't open")
+            self._save_debug_screenshot(page, "filter_panel_closed")
 
     def _apply_location_filter(self, page):
         """Scopes the results grid to LOCATION_FILTER_STATES instead of
@@ -785,22 +855,21 @@ class ConstructConnectAdapter(SiteAdapter):
         screenshot 2026-10-04), starting from "Clear All" so the result is
         deterministic regardless of whatever the dialog defaults to.
 
-        Best-effort: this is a lot of UI surface for ConstructConnect to
-        change out from under us again, so any failure here just leaves
-        the run unfiltered (logged + screenshotted) rather than aborting
-        the whole scan — a wider net is a much smaller problem than a
-        crashed run."""
+        Returns True once applied. This is a lot of UI surface for
+        ConstructConnect to change out from under us again, so a failure is
+        caught (logged + screenshotted) and returns False — the caller then
+        skips ConstructConnect for the run instead of crawling it unfiltered
+        (see find_documents_with_browser)."""
         self._dismiss_cookie_banner(page)
         try:
-            try:
-                page.click("button:has-text('Filters')", timeout=5000)
-            except Exception:
-                pass  # the filter sidebar may already be open
-            page.click("text=Project Location", timeout=8000)
+            # The section starts expanded now (2026-11-17) — clicking its
+            # header blindly would collapse it, so only when #location is hidden.
+            if not page.locator("#location").is_visible():
+                self._click(page.locator("text=Project Location").first)
             # Stable ids confirmed via devtools 2026-10-04 (not just text —
             # this control is a custom combobox, not a real <select>).
-            page.click("#location", timeout=8000)
-            page.click("#location-listbox-option-county", timeout=8000)
+            self._click(page.locator("#location"))
+            self._click(page.locator("#location-listbox-option-county"))
 
             dialog = page.get_by_role("dialog")
             # Confirmed via a debug screenshot 2026-10-04: the cookie
@@ -830,17 +899,17 @@ class ConstructConnectAdapter(SiteAdapter):
                 title = dialog.get_by_text(state, exact=True)
                 wrapper = title.locator(
                     "xpath=ancestor::*[contains(@class, 'CountrySelect_stateItemWrapper')]")
-                wrapper.locator("label").click(timeout=5000)
+                self._click(wrapper.locator("label"), timeout=5000)
             self._dismiss_cookie_banner(page)  # belt-and-suspenders, see above
-            dialog.get_by_role("button", name="Apply").click(timeout=8000)
+            self._click(dialog.get_by_role("button", name="Apply"))
             page.wait_for_timeout(1500)
 
             print(f"  ConstructConnect: scoped results to "
                   f"{', '.join(self.LOCATION_FILTER_STATES)}")
             self._save_debug_screenshot(page, "location_filter_applied")
+            return True
         except Exception as e:
-            print(f"  ! ConstructConnect: couldn't apply the location filter, "
-                  f"scanning unfiltered instead ({e})")
+            print(f"  ! ConstructConnect: couldn't apply the location filter ({e})")
             self._save_debug_screenshot(page, "location_filter_failed")
             # A failure partway through can leave the dialog (or its
             # backdrop) open on screen, which then blocks every click for
@@ -856,6 +925,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 page.mouse.click(5, 5)
             except Exception:
                 pass
+            return False
 
     CATEGORY = "Civil"
 
@@ -867,7 +937,7 @@ class ConstructConnectAdapter(SiteAdapter):
         section = page.locator(f'[data-section-key="{key}"]').first
         content = section.locator(content_selector).first
         if not (content.count() and content.is_visible()):
-            section.locator('[class*="CollapsibleSection_header"][role="button"]').first.click(timeout=8000)
+            self._click(section.locator('[class*="CollapsibleSection_header"][role="button"]').first)
             page.wait_for_timeout(500)
         return section
 
@@ -881,21 +951,22 @@ class ConstructConnectAdapter(SiteAdapter):
         data-section-key="category", <div id="projectCategoryFilter">,
         <input id="projectCategoryFilter-Civil" type="checkbox"> wrapped in
         <label for="projectCategoryFilter-Civil">. Left alone if it's already
-        checked so a click can't turn it off. Best-effort like the other
-        filters."""
+        checked so a click can't turn it off. Returns True/False like the
+        location filter."""
         self._dismiss_cookie_banner(page)
         box_id = f"projectCategoryFilter-{self.CATEGORY}"
         try:
             self._expand_filter_section(page, "category", "#projectCategoryFilter")
             if not page.locator(f"#{box_id}").is_checked():
-                page.click(f"label[for='{box_id}']", timeout=8000)
+                self._click(page.locator(f"label[for='{box_id}']"))
             page.wait_for_timeout(1500)
             print(f"  ConstructConnect: scoped results to {self.CATEGORY} projects")
             self._save_debug_screenshot(page, "category_filter_applied")
+            return True
         except Exception as e:
-            print(f"  ! ConstructConnect: couldn't apply the category filter, "
-                  f"scanning without it instead ({e})")
+            print(f"  ! ConstructConnect: couldn't apply the category filter ({e})")
             self._save_debug_screenshot(page, "category_filter_failed")
+            return False
 
     # Options are #bidDate-listbox-option-{7,14,30,60,90,CUSTOM}, labelled
     # "Next N Days" (confirmed via devtools 2026-10-27).
@@ -915,8 +986,7 @@ class ConstructConnectAdapter(SiteAdapter):
         <button id="bidDate" role="combobox"> showing the current value (or
         a "Select Bid Date" placeholder), options in <div id="bidDate-listbox"
         role="listbox">. Skipped if it already shows BID_DATE_WINDOW.
-        Best-effort like the other filters — a failure just leaves the run
-        wider, logged + screenshotted."""
+        Returns True/False like the location filter."""
         self._dismiss_cookie_banner(page)
         try:
             self._expand_filter_section(page, "bidDate", "#bidDate")
@@ -925,21 +995,22 @@ class ConstructConnectAdapter(SiteAdapter):
             # shows a "Select Bid Date" placeholder instead (2026-10-27 run).
             current = page.locator("#bidDate").inner_text(timeout=5000).strip()
             if current != self.BID_DATE_WINDOW:
-                page.click("#bidDate", timeout=8000)
-                page.click(f"#bidDate-listbox-option-{self.BID_DATE_DAYS}", timeout=8000)
+                self._click(page.locator("#bidDate"))
+                self._click(page.locator(f"#bidDate-listbox-option-{self.BID_DATE_DAYS}"))
             page.wait_for_timeout(1500)
             count = re.search(r"Projects\s*([\d,]+)", page.evaluate("document.body.innerText") or "")
             print(f"  ConstructConnect: scoped results to bid dates in the {self.BID_DATE_WINDOW.lower()}"
                   + (f" ({count.group(1)} projects)" if count else ""))
             self._save_debug_screenshot(page, "bid_date_filter_applied")
+            return True
         except Exception as e:
-            print(f"  ! ConstructConnect: couldn't apply the bid date filter, "
-                  f"scanning without it instead ({e})")
+            print(f"  ! ConstructConnect: couldn't apply the bid date filter ({e})")
             self._save_debug_screenshot(page, "bid_date_filter_failed")
             try:
                 page.keyboard.press("Escape")
             except Exception:
                 pass
+            return False
 
     def _wait_left_login_host(self, page):
         """_attempt_login's "password field is gone" heuristic is also

@@ -647,6 +647,16 @@ def finish_run(run_id, status):
     }).eq("id", run_id).execute()
 
 
+def fail_running_runs(status):
+    """Marks every scan_runs row still showing 'running' as finished with
+    `status` — for the scan worker after it has killed a stuck scraper.py,
+    whose own finish_run() never got to run."""
+    get_client().table("scan_runs").update({
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+    }).eq("status", "running").execute()
+
+
 def update_run_progress(run_id, done=None, total=None, label=None,
                         site_i=None, site_n=None, overall=None):
     """Lightweight progress ping for the dashboard's live status. `done`/
