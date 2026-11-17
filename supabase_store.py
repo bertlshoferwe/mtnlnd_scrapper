@@ -2281,7 +2281,7 @@ def load_project_locations(division_id):
     if the column isn't there."""
     try:
         rows = _all_pages(lambda: get_client().table("project_flags").select("project_key,location")
-                          .eq("division_id", division_id).not_.is_("location", "null"))
+                          .eq("division_id", division_id).not_.is_("location", "null")).data
     except Exception:
         return {}
     return {r["project_key"]: r["location"] for r in rows if r.get("location")}
