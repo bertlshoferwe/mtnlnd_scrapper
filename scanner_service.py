@@ -345,6 +345,28 @@ def learn_site():
     return jsonify({"ok": True})
 
 
+_imports = {}   # import id -> Popen, for links being read right now
+
+
+@app.route("/import-listing", methods=["POST"])
+def import_listing():
+    """Read a link pasted on a bid (`listing_import.py <import_id>`). Body:
+    {import_id}. Progress and the result go into listing_imports; several
+    can run at once, but not the same one twice."""
+    import_id = str((request.get_json(silent=True) or {}).get("import_id") or "").strip()
+    if not re.fullmatch(r"[0-9a-f-]{36}", import_id):
+        return jsonify({"ok": False, "error": "import_id required"}), 400
+    with _lock:
+        for k in [k for k, p in _imports.items() if p.poll() is not None]:
+            del _imports[k]
+        if import_id in _imports:
+            return jsonify({"ok": False, "error": "it's already reading this link"}), 409
+        _imports[import_id] = subprocess.Popen(
+            [sys.executable, "listing_import.py", import_id],
+            cwd=os.path.dirname(os.path.abspath(__file__)))
+    return jsonify({"ok": True})
+
+
 @app.route("/learn-cancel", methods=["POST"])
 def learn_cancel():
     """Stop a site's learning. Body: {division_id, site_id}."""

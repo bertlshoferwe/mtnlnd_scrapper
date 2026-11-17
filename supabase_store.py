@@ -1850,12 +1850,16 @@ def add_addendum(division_id, bid_id, project_key, source_url=None, by="Bid Scou
     return {"bid_id": bid_id, "old_project_key": old_key if old_key != project_key else None}
 
 
-def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
+def link_workflow_bid(division_id, bid_id, project_key, source_url=None, fill_blank=False):
     """Tie a bid typed in by hand on the board to a Bid Scout project and
     bring it up to date: due date and time from Bid Scout (when it has
     them), a blank Original RFQ / Team filled in, and from then on its Bid
     Docs and Plan Holders tabs follow the project. Logged in the bid's
-    history as Bid Scout. Raises ValueError if either side is already linked."""
+    history as Bid Scout. Raises ValueError if either side is already linked.
+
+    `fill_blank` (a listing link pasted on the bid) only fills a due date or
+    time the bid doesn't have yet; returns {"due", "due_time"} the project
+    has that differ from the bid's, for the board to offer, or None."""
     sb = get_client()
     rows = (sb.table("wf_bids").select("id,division_id,space_id,source_project_id,due,due_time,history")
             .eq("id", bid_id).limit(1).execute().data)
@@ -1876,20 +1880,104 @@ def link_workflow_bid(division_id, bid_id, project_key, source_url=None):
     bid_date = load_project_bid_dates(division_id).get(project_key)
     bid_time = load_project_bid_times(division_id).get(project_key)
     hm = bid_time_hm(bid_time)
-    if bid_date and bid_date != b.get("due"):
-        patch["due"] = bid_date
-        hist.append({"by": "Bid Scout", "at": at, "field": "Due date",
-                     "from": _board_date(b.get("due")), "to": _board_date(bid_date)})
     cur = (b.get("due_time") or "")[:5]
+    conflict = {}
+    if bid_date and bid_date != b.get("due"):
+        if fill_blank and b.get("due"):
+            conflict["due"] = bid_date
+        else:
+            patch["due"] = bid_date
+            hist.append({"by": "Bid Scout", "at": at, "field": "Due date",
+                         "from": _board_date(b.get("due")), "to": _board_date(bid_date)})
     if hm and (bid_date or b.get("due")) and hm != cur:
-        patch["due_time"] = hm
-        hist.append({"by": "Bid Scout", "at": at, "field": "Due time",
-                     "from": _board_time(cur), "to": _board_time(hm)})
+        if fill_blank and (cur or conflict.get("due")):
+            conflict["due_time"] = hm   # a different date is offered with its time
+        else:
+            patch["due_time"] = hm
+            hist.append({"by": "Bid Scout", "at": at, "field": "Due time",
+                         "from": _board_time(cur), "to": _board_time(hm)})
     patch["history"] = (b.get("history") or []) + hist
     patch["updated_at"] = now.isoformat()
     sb.table("wf_bids").update(patch).eq("id", bid_id).execute()
     _fill_workflow_bid(division_id, bid_id, project_key, bid_time)
-    return bid_id
+    return (conflict or None) if fill_blank else bid_id
+
+
+def workflow_bid_due(bid_id):
+    """A bid's {"division_id", "space_id", "source_project_id", "due", "due_time"}, or None."""
+    r = (get_client().table("wf_bids").select("division_id,space_id,source_project_id,due,due_time")
+         .eq("id", bid_id).limit(1).execute().data)
+    return r[0] if r else None
+
+
+def bid_due_conflict(division_id, bid, project_key):
+    """For a bid already following `project_key`: the project's {"due", "due_time"}
+    where they differ from the bid's, or None."""
+    bid_date = load_project_bid_dates(division_id).get(project_key)
+    hm = bid_time_hm(load_project_bid_times(division_id).get(project_key))
+    out = {}
+    if bid_date and bid_date != bid.get("due"):
+        out["due"] = bid_date
+    if hm and hm != (bid.get("due_time") or "")[:5]:
+        out["due_time"] = hm
+    return out or None
+
+
+# ---------------------------------------------------------------------------
+# Listing links pasted on a bid (listing_import.py reads them; see
+# migrations/002_listing_imports.sql)
+# ---------------------------------------------------------------------------
+
+LISTING_IMPORTS_HINT = "run migrations/002_listing_imports.sql in Supabase"
+
+
+def get_listing_import(bid_id=None, import_id=None):
+    q = get_client().table("listing_imports").select("*")
+    q = q.eq("id", import_id) if import_id else q.eq("bid_id", bid_id)
+    try:
+        rows = q.limit(1).execute().data
+    except Exception as e:
+        raise ValueError(f"couldn't read it — {LISTING_IMPORTS_HINT}") from e
+    return rows[0] if rows else None
+
+
+def start_listing_import(division_id, bid_id, url, app_url=None):
+    """Queue (or re-queue) reading `url` for a bid. Keeps the project it was
+    read into before, so a re-read adds to the same project."""
+    row = {"division_id": division_id, "bid_id": bid_id, "url": url, "status": "queued", "app_url": app_url,
+           "message": None, "progress": [], "recheck": True,
+           "updated_at": datetime.now(timezone.utc).isoformat()}
+    old = get_listing_import(bid_id)
+    if old and old.get("url") != url:
+        row.update(project_key=None, result=None)
+    try:
+        return get_client().table("listing_imports").upsert(row, on_conflict="bid_id").execute().data[0]
+    except Exception as e:
+        raise ValueError(f"couldn't save it — {LISTING_IMPORTS_HINT}") from e
+
+
+def update_listing_import(import_id, **patch):
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    get_client().table("listing_imports").update(patch).eq("id", import_id).execute()
+
+
+def delete_listing_import(bid_id):
+    try:
+        get_client().table("listing_imports").delete().eq("bid_id", bid_id).execute()
+    except Exception:
+        pass
+
+
+def listing_imports_to_recheck():
+    """Imports to re-read tonight: read before, still wanted, and the bid
+    date (when known) not passed yet."""
+    try:
+        rows = (get_client().table("listing_imports").select("*")
+                .eq("recheck", True).in_("status", ["done", "failed"]).execute().data)
+    except Exception:
+        return []
+    today = date.today().isoformat()
+    return [r for r in rows if ((r.get("result") or {}).get("bid_date") or "9999") >= today]
 
 
 BID_FILES_BUCKET = "bid-files"

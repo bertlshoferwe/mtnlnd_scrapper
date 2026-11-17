@@ -517,6 +517,14 @@ td.over{color:var(--high);font-weight:600}
 .sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
 .leg .n{margin-left:auto;font-weight:600}
 .fine{font-size:12px;color:var(--muted);margin:8px 0 0}
+.lsimp{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.lsimp .fine{margin:2px 0 0}
+.lsrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.lsconf{margin-top:6px}
+.lsbad{color:var(--high)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:lsspin .8s linear infinite;flex-shrink:0}
+@keyframes lsspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
 .srow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .srow:first-of-type{border-top:0}
 .askhd{display:flex;align-items:center;gap:10px;margin:0 0 4px}
@@ -1263,7 +1271,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var flushing=false,again=false,pendingLocal=false,rebuildPending=false,flushTimer=null,profBusy=false,READY=false;
   var ROLES=["Manager","Estimator","Inside Sales","Outside Sales"];
   var TPL_DEFAULT=[{name:"To do",cat:"todo"},{name:"In progress",cat:"doing"},{name:"Done",cat:"done"}];
-  var ui={f:{q:"",type:"",who:"",pri:"",teams:[],month:"",range:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},bsPick:null,fileTab:"att",cdraft:{},replyTo:null,replyDraft:""};
+  var ui={f:{q:"",type:"",who:"",pri:"",teams:[],month:"",range:""},sort:"rank",dir:1,rsel:null,issueId:null,actTab:"comments",draft:"",editC:null,armC:null,armI:false,armS:null,armP:false,armD:false,ar:{status:"",to:"",col:""},expanded:{},dragId:null,keyTouched:false,createPreset:{},bs:{},bsc:{},ls:{},bsPick:null,fileTab:"att",cdraft:{},replyTo:null,replyDraft:""};
 
   /* ---------- helpers ---------- */
   function $(id){return document.getElementById(id)}
@@ -2410,7 +2418,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var txt=L.list?'Open their advertised projects page':(L.own?'Open on '+hostOf(L.url):'Open the original listing');
     return h+'<div class="ro"><a href="'+esc(L.url)+'" target="_blank" rel="noopener">'+esc(txt)+'</a>'+
       (canAct()?' <button class="linkbtn" data-lsedit style="font-size:12px;margin-left:8px">Change</button>':'')+
-      (L.list?'<div class="fine" style="margin:2px 0 0">Look for '+esc(bsProjectName(is))+'</div>':'')+'</div>';
+      (L.list?'<div class="fine" style="margin:2px 0 0">Look for '+esc(bsProjectName(is))+'</div>':'')+(L.own?lsStatusHTML(is):'')+'</div>';
   }
   function bsProjectName(is){var k=srcKey(is),i=k.indexOf(" — ");return i>-1?k.slice(i+3):(is.title||"")}
   function saveListing(is){
@@ -2418,8 +2426,62 @@ img.who{object-fit:cover;background:var(--chip)}
     if(v&&!/^https?:\/\//i.test(v))v="https://"+v;
     if(v){try{new URL(v)}catch(e){toast("That link doesn’t look right.");return}}
     var old=((is.fields||{})._listing||"");ui.lsEdit=null;
-    if(v!==old){logH(is,"Original listing",old||"None",v||"None");is.fields=is.fields||{};if(v)is.fields._listing=v;else delete is.fields._listing;is.updated=Date.now();save();render()}
+    if(v!==old){logH(is,"Original listing",old||"None",v||"None");is.fields=is.fields||{};if(v)is.fields._listing=v;else delete is.fields._listing;is.updated=Date.now();save();render();
+      if(v)lsRead(is,v);else lsForget(is)}
     renderIssueSideOnly();
+  }
+
+  /* A link pasted as the original listing is read by the scan worker into a Bid Scout project:
+     its documents (downloaded and keyword-checked), bid date and time, location and plan holders.
+     The bid links to that project, so Bid Docs and Plan Holders fill in; a due date or time the
+     bid already has is never changed, a different one from the listing is offered instead. */
+  function lsApi(is,opts){return fetch("/api/"+encodeURIComponent(is.divisionId)+"/bids/"+encodeURIComponent(is.id)+"/listing",opts||{}).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})}
+  function lsRead(is,url){
+    if(pendingLocal||flushing){setTimeout(function(){lsRead(is,url)},400);return}   // the bid is saved first
+    ui.ls[is.id]={import:{status:"queued",url:url,progress:["Starting…"]}};renderIssueSideOnly();
+    lsApi(is,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:url})})
+      .then(function(d){ui.ls[is.id]={import:d.import};lsShow(is.id);lsPoll(is.id)})
+      .catch(function(e){ui.ls[is.id]={import:{status:"failed",url:url,message:"Couldn’t start reading it: "+e.message}};lsShow(is.id)});
+  }
+  function lsForget(is){delete ui.ls[is.id];lsApi(is,{method:"DELETE"}).catch(function(){})}
+  function lsLoad(is){
+    if(!is||ui.ls[is.id])return;
+    ui.ls[is.id]={loading:true};
+    lsApi(is).then(function(d){ui.ls[is.id]={import:d.import};lsShow(is.id);lsPoll(is.id)}).catch(function(){ui.ls[is.id]={import:null}});
+  }
+  function lsBusy(im){return !!im&&(im.status==="queued"||im.status==="reading")&&!im.stale}
+  function lsShow(id){if(ui.issueId===id&&ui.lsEdit!==id)renderIssueSideOnly()}
+  function lsPoll(id){
+    clearTimeout(ui.lsTimer);
+    var st=ui.ls[id];if(!st||!lsBusy(st.import))return;
+    ui.lsTimer=setTimeout(function(){
+      var is=byId(id);if(!is||ui.issueId!==id)return;
+      lsApi(is).then(function(d){
+        ui.ls[id]={import:d.import};lsShow(id);
+        if(lsBusy(d.import))lsPoll(id);
+        else if(d.import&&d.import.status==="done")setTimeout(function(){var b=byId(id);if(b){delete ui.bs[id];bsLoad(b);renderAttach()}},1500);   // its Bid Docs now
+      }).catch(function(){lsPoll(id)});
+    },3000);
+  }
+  function lsStatusHTML(is){
+    var st=ui.ls[is.id],im=st&&st.import,L=listingOf(is);
+    if(!im){return L&&L.own&&canAct()&&st&&!st.loading?'<div class="lsimp"><button class="linkbtn" data-lsread>Read this listing</button><span class="fine"> — bring in its documents, bid date and plan holders</span></div>':''}
+    var h='<div class="lsimp">';
+    if(lsBusy(im)){
+      var last=(im.progress||[]).slice(-1)[0]||"Starting…";
+      h+='<div class="lsrow"><span class="spin" aria-hidden="true"></span><b>Reading the listing…</b></div><div class="fine">'+esc(last)+'</div>';
+    }else if(im.status==="done"){
+      var r=im.result||{},bits=[r.files+(r.files===1?" file":" files")+(r.matched?" ("+r.matched+" matched keywords)":"")];
+      if(r.holders)bits.push(r.holders+" plan holders");
+      h+='<div class="fine">Read '+(im.last_read_at?esc(shortDate(im.last_read_at.slice(0,10))):"")+': '+esc(bits.join(" · "))+'</div>';
+      if(im.message)h+='<div class="fine">'+esc(im.message)+'</div>';
+      var c=r.conflict||{},cd=c.due&&c.due!==is.due?c.due:"",ct=c.due_time&&c.due_time!==(is.dueTime||"")?c.due_time:"";
+      if((cd||ct)&&canAct())h+='<div class="lsrow lsconf">The listing says '+esc([cd&&shortDate(cd),ct&&fmtTime(ct)].filter(Boolean).join(" · "))+' <button class="btn small" data-lsuse>Use it</button></div>';
+      if(canAct())h+='<button class="linkbtn" data-lsread style="font-size:12px">Read it again</button>';
+    }else{
+      h+='<div class="fine lsbad">'+esc(im.stale?"Reading it stopped partway.":(im.message||"Couldn’t read the listing."))+'</div>'+(canAct()?'<button class="linkbtn" data-lsread style="font-size:12px">Try again</button>':'');
+    }
+    return h+'</div>';
   }
 
   /* ---------- divisions and spaces ---------- */
@@ -3826,7 +3888,7 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- issue modal ---------- */
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.replyTo=null;ui.replyDraft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
-    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
+    ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];delete ui.ls[id];
     ui.descEdit=null;renderIssue();openOv("ov-issue");saveHere();syncUrl();
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});
   }
@@ -3839,6 +3901,7 @@ img.who{object-fit:cover;background:var(--chip)}
     renderIssueAct();
     bsLoad(is);
     bscLoad(is);
+    lsLoad(is);
   }
   function renderIssueHead(is){
     var par=is.parent?byId(is.parent):null;
@@ -4883,6 +4946,9 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-lsedit]")){ui.lsEdit=ui.issueId;renderIssueSideOnly();var li=$("ls-url");if(li)li.focus();return}
     if(t.closest("[data-lscancel]")){ui.lsEdit=null;renderIssueSideOnly();return}
     if(t.closest("[data-lssave]")){var lb=byId(ui.issueId);if(lb)saveListing(lb);return}
+    if(t.closest("[data-lsread]")){var rb=byId(ui.issueId),rl=rb&&listingOf(rb);if(rl&&rl.own)lsRead(rb,rl.url);return}
+    if(t.closest("[data-lsuse]")){var ub=byId(ui.issueId),uc=ub&&((((ui.ls[ub.id]||{}).import||{}).result||{}).conflict||{});
+      if(ub){var ch=false;if(uc.due&&uc.due!==ub.due)ch=setField(ub,"due",uc.due)||ch;if(HAS_DUETIME&&uc.due_time)ch=setField(ub,"dueTime",uc.due_time)||ch;if(ch){ub.updated=Date.now();save();render()}renderIssueSideOnly()}return}
     if(t.classList&&t.classList.contains("overlay")){closeOv(t.id);return}
     if((el=t.closest("[data-space]"))){switchSpace(el.getAttribute("data-space"));return}
     if((el=t.closest("[data-div]"))){switchDiv(el.getAttribute("data-div"));return}

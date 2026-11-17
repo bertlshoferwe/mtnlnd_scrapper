@@ -960,6 +960,80 @@ def ai_semantic_keyword_scan(client, filename, pages, keywords):
 # Local Excel file
 # ---------------------------------------------------------------------------
 
+def process_document(division_id, ctx, run_date, row_site_name, doc_key, doc_url, filename,
+                     content=None, source_url=None, cookies=None):
+    """Download one document (unless its bytes were captured already), pull
+    its text, check it against the keywords (literal, then the AI pass) and
+    log the row. Returns the logged row. `ctx` holds keywords,
+    keyword_vectors, embedder and ai_client for the division. Shared by the
+    daily scan and listing_import.py (a link pasted on a bid)."""
+    keywords, keyword_vectors = ctx["keywords"], ctx["keyword_vectors"]
+    embedder, ai_client = ctx["embedder"], ctx["ai_client"]
+    raw = content if content is not None else download_document(doc_url, cookies=cookies)
+    if raw is None:
+        row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
+        supabase_store.log_scan_row(division_id, *row, source_url=source_url)
+        return row
+
+    # Browser-captured content (no real per-document URL, e.g.
+    # ConstructConnect) can't be viewed later via a live re-fetch —
+    # persist the bytes once, now, while we actually have them
+    # ("already scanned" skipping means we'll never see them again
+    # after this run).
+    storage_path = (
+        supabase_store.upload_document_bytes(division_id, doc_key, raw)
+        if not doc_url else None
+    )
+
+    pages, page_numbers_are_real = extract_pages(raw, filename)
+
+    # Literal substring pass — the deterministic baseline, always runs.
+    literal_hits = check_keywords_by_page(pages, keywords)
+
+    # AI semantic pass — runs on every document with text, not just
+    # ones the literal pass already flagged, so it can catch
+    # paraphrases/synonyms the literal pass would miss entirely.
+    # The keyword list is pre-filtered per document (see
+    # select_semantic_keywords) so a huge list doesn't bloat the prompt.
+    semantic_keywords = select_semantic_keywords(
+        pages, keywords, keyword_vectors, literal_hits, embedder
+    )
+    ai_hits, ai_truncated = ai_semantic_keyword_scan(
+        ai_client, filename, pages, semantic_keywords
+    )
+
+    merged_pages = {}
+    for kw, page_list in literal_hits.items():
+        merged_pages.setdefault(kw, set()).update(page_list)
+    ai_reason_notes = []
+    for kw, entries in ai_hits.items():
+        for page, reason in entries:
+            merged_pages.setdefault(kw, set()).add(page)
+            if reason:
+                ai_reason_notes.append(f"{kw} (p.{page}): {reason}")
+
+    matched = sorted(merged_pages.keys())
+    locations = format_locations({k: sorted(v) for k, v in merged_pages.items()}, page_numbers_are_real)
+
+    if not pages:
+        status = "No text extracted"
+    elif matched:
+        status = "Matched" if page_numbers_are_real else "Matched (approx. location)"
+    else:
+        status = "No match"
+
+    ai_notes = " | ".join(ai_reason_notes)
+    if ai_truncated:
+        print(f"    (AI scan covered the first {AI_DOC_CHAR_BUDGET} chars of {filename})")
+
+    row = [run_date, row_site_name, doc_key, filename,
+           ", ".join(matched), len(matched), locations, status, ai_notes]
+    supabase_store.log_scan_row(
+        division_id, *row, source_url=source_url, storage_path=storage_path
+    )
+    return row
+
+
 def _scan_division(division):
     """Run the full scan for one division (a dict with 'id' and 'name'),
     logging every row to Supabase as it goes."""
@@ -1009,6 +1083,8 @@ def _scan_division(division):
         # day, so without this every run redoes all of them).
         already_scanned = supabase_store.already_scanned_urls(division_id)
         skipped_seen = 0
+        doc_ctx = {"keywords": keywords, "keyword_vectors": keyword_vectors,
+                   "embedder": embedder, "ai_client": ai_client}
 
         rows = []  # kept in memory too, just for the final "N new row(s) logged" count
         n_sites = len(sites)
@@ -1123,72 +1199,13 @@ def _scan_division(division):
                         done=site_done, total=site_total, overall=overall_done,
                     )
 
-                raw = content if content is not None else download_document(doc_url, cookies=site_cookies)
-                if raw is None:
-                    row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
-                    rows.append(row)
-                    supabase_store.log_scan_row(division_id, *row, source_url=source_url)
-                    continue
-
-                # Browser-captured content (no real per-document URL, e.g.
-                # ConstructConnect) can't be viewed later via a live re-fetch —
-                # persist the bytes once, now, while we actually have them
-                # ("already scanned" skipping means we'll never see them again
-                # after this run).
-                storage_path = (
-                    supabase_store.upload_document_bytes(division_id, doc_key, raw)
-                    if not doc_url else None
-                )
-
-                pages, page_numbers_are_real = extract_pages(raw, filename)
-
-                # Literal substring pass — the deterministic baseline, always runs.
-                literal_hits = check_keywords_by_page(pages, keywords)
-
-                # AI semantic pass — runs on every document with text, not just
-                # ones the literal pass already flagged, so it can catch
-                # paraphrases/synonyms the literal pass would miss entirely.
-                # The keyword list is pre-filtered per document (see
-                # select_semantic_keywords) so a huge list doesn't bloat the prompt.
-                semantic_keywords = select_semantic_keywords(
-                    pages, keywords, keyword_vectors, literal_hits, embedder
-                )
-                ai_hits, ai_truncated = ai_semantic_keyword_scan(
-                    ai_client, filename, pages, semantic_keywords
-                )
-
-                merged_pages = {}
-                for kw, page_list in literal_hits.items():
-                    merged_pages.setdefault(kw, set()).update(page_list)
-                ai_reason_notes = []
-                for kw, entries in ai_hits.items():
-                    for page, reason in entries:
-                        merged_pages.setdefault(kw, set()).add(page)
-                        if reason:
-                            ai_reason_notes.append(f"{kw} (p.{page}): {reason}")
-
-                matched = sorted(merged_pages.keys())
-                locations = format_locations({k: sorted(v) for k, v in merged_pages.items()}, page_numbers_are_real)
-
-                if not pages:
-                    status = "No text extracted"
-                elif matched:
-                    status = "Matched" if page_numbers_are_real else "Matched (approx. location)"
-                else:
-                    status = "No match"
-
-                ai_notes = " | ".join(ai_reason_notes)
-                if ai_truncated:
-                    print(f"    (AI scan covered the first {AI_DOC_CHAR_BUDGET} chars of {filename})")
-
-                row = [run_date, row_site_name, doc_key, filename,
-                       ", ".join(matched), len(matched), locations, status, ai_notes]
+                row = process_document(division_id, doc_ctx, run_date, row_site_name, doc_key, doc_url,
+                                       filename, content, source_url, site_cookies)
                 rows.append(row)
-                supabase_store.log_scan_row(
-                    division_id, *row, source_url=source_url, storage_path=storage_path
-                )
+                if row[7] == "Download failed":
+                    continue
                 already_scanned[doc_key] = source_url
-                print(f"  - [{label or 'page'}] {filename}: {status} ({locations if locations else 'none'})")
+                print(f"  - [{label or 'page'}] {filename}: {row[7]} ({row[6] or 'none'})")
 
         if skipped_seen:
             print(f"  Skipped {skipped_seen} document(s) already scanned in a previous run")
@@ -1248,6 +1265,16 @@ def main(division_id=None):
         except Exception as e:
             print(f"! Division '{division['id']}' failed: {e}", file=sys.stderr)
             failures.append(division["id"])
+
+    # Links pasted on bids: re-read the ones whose bid date hasn't passed, so
+    # new addenda and plan holders come in (see listing_import.py). Only on
+    # the full daily run, never fails it.
+    if not division_id:
+        try:
+            import listing_import
+            listing_import.recheck_all()
+        except Exception as e:
+            print(f"! Re-reading pasted listing links failed: {e}", file=sys.stderr)
 
     if failures:
         print(f"FATAL: {len(failures)} division(s) failed: {', '.join(failures)}", file=sys.stderr)

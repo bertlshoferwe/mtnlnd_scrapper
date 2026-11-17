@@ -52,6 +52,8 @@ Routes:
   GET  /api/<division_id>/bids/<bid_id>/zip    one tab of a bid board bid (?tab=docs|att) as a zip
   GET  /api/<division_id>/bids/<bid_id>/project-candidates  Bid Scout projects a hand-made bid might be
   POST /api/<division_id>/bids/<bid_id>/link-project        tie a hand-made bid to a Bid Scout project
+  GET/POST/DEL /api/<division_id>/bids/<bid_id>/listing     a link pasted on a bid: how reading it went / read it
+                                                            (the scan worker, listing_import.py) / stop re-reading it
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
   GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
@@ -1637,6 +1639,54 @@ def api_bid_link_project(division_id, bid_id):
     except Exception as e:
         print(f"  ! couldn't record the board decision for {key} ({e})")
     return jsonify({"ok": True, "project_key": key, "source_url": back})
+
+
+@app.route("/api/<division_id>/bids/<bid_id>/listing", methods=["GET", "POST", "DELETE"])
+def api_bid_listing(division_id, bid_id):
+    """A listing link pasted on a bid. POST {"url"} reads it on the scan
+    worker into a Bid Scout project — its documents, bid date and time,
+    location and plan holders — and links the bid to it (listing_import.py);
+    GET says how that's going ({"import": row or null}); DELETE stops it
+    being re-read nightly (the link was removed)."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    if request.method == "DELETE":
+        supabase_store.delete_listing_import(bid_id)
+        return jsonify({"ok": True})
+    try:
+        if request.method == "GET":
+            return jsonify({"import": _public_import(supabase_store.get_listing_import(bid_id))})
+        bid = supabase_store.workflow_bid_due(bid_id)
+        if bid is None or str(bid.get("division_id")) != division_id:
+            return jsonify({"error": "that bid isn't on this division's board"}), 404
+        url = (request.get_json(force=True, silent=True) or {}).get("url") or ""
+        url = url.strip()
+        if not re.match(r"^https?://[^\s/]+\.[^\s]+$", url):
+            return jsonify({"error": "that link doesn't look right"}), 400
+        row = supabase_store.start_listing_import(division_id, bid_id, url, app_url=request.host_url.rstrip("/"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    _, err = _scanner_post("/import-listing", {"import_id": row["id"]})
+    if err:
+        msg = (err[0].get_json() or {}).get("error") or "the scan worker didn't answer"
+        supabase_store.update_listing_import(row["id"], status="failed", message=f"Couldn't start reading it: {msg}")
+        row = supabase_store.get_listing_import(bid_id)
+    return jsonify({"ok": True, "import": _public_import(row)})
+
+
+def _public_import(row):
+    if not row:
+        return None
+    row = {k: v for k, v in row.items() if k != "app_url"}
+    if row.get("status") in ("queued", "reading"):
+        # The reader writes progress as it goes; silence this long means it died.
+        try:
+            at = datetime.fromisoformat(row.get("updated_at"))
+            row["stale"] = (datetime.now(timezone.utc) - at).total_seconds() > LEARN_STALE_S
+        except (TypeError, ValueError):
+            pass
+    return row
 
 
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")

@@ -118,6 +118,21 @@ every run, the scan worker skips any document URL it has already processed to
 a non-failure status (`already_scanned_urls` in `supabase_store.py`) — so a
 daily run only downloads and AI-scans genuinely new documents.
 
+## A listing link pasted on a bid
+
+On the bid board, saving a link as a bid's **Original listing** has the scan
+worker read it (`listing_import.py`, state in `listing_imports` — run
+`migrations/002_listing_imports.sql` once). A site Bid Scout already scans is
+read the same way (its portal adapter, AI-learned recipe and saved login);
+anything else is opened in a browser, its document links collected and the AI
+reads the project name, bid date and time, location and plan holders — and
+when the page shows no documents, clicks around for a few steps to find them.
+The documents are downloaded and keyword-checked like any scan, into a Bid
+Scout project the bid is then linked to, so its Bid Docs and Plan Holders fill
+in. A due date or time the bid already has is never changed; a different one
+from the listing shows as "The listing says … Use it". Each link is re-read
+after the daily scan until its bid date passes, so addenda come in.
+
 ## Choosing between Anthropic and Gemini
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:
