@@ -938,8 +938,8 @@
 
   .bs-table { overflow-x: auto; }
   .bs-head, .bs-row {
-    display: grid; align-items: center; min-width: 1010px;
-    grid-template-columns: 40px minmax(220px, 2fr) 140px minmax(110px, .8fr) minmax(190px, 1.5fr) 96px 132px 196px;
+    display: grid; align-items: center; min-width: 880px;
+    grid-template-columns: 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 140px 196px;
   }
   .bs-head {
     background: var(--surface-2); border-bottom: 1px solid var(--border);
@@ -976,6 +976,7 @@
   .bs-badge.new { background: var(--accent-soft); color: var(--accent-soft-text); }
   .bs-badge.closed { border: 1px solid var(--border-strong); color: var(--muted); }
   .bs-badge.back { background: var(--warning-soft); color: var(--warning); }
+  .bs-badge.newdocs { background: var(--warning-soft); color: var(--warning); }
   .bs-due { font-size: 12.5px; color: var(--muted); }
   .bs-due.soon { color: var(--warning); font-weight: 650; }
   .bs-none { color: var(--muted); }
@@ -985,7 +986,6 @@
     font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
   .bs-more { color: var(--muted); font-size: 12.5px; white-space: nowrap; flex-shrink: 0; }
-  .bs-newdocs { color: var(--accent); font-size: 12.5px; font-weight: 650; }
   .bs-fit { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
   .bs-fit.fit { color: var(--success); }
   .bs-fit.unsure { color: var(--muted); }
@@ -1030,8 +1030,6 @@
   .bf-paging .status-line:empty { display: none; }
   .bf-perpage { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
   .bf-perpage select { width: auto; padding: 5px 8px; font-size: 13px; }
-  /* A long address takes two lines at most; the whole of it is in the tooltip */
-  .c-loc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-top: 0; padding-bottom: 0; }
 
   /* Wide screens: the page stays put under the top bar; the filters and the
      project table each scroll on their own, with the column headers pinned. */
@@ -1066,8 +1064,7 @@
     .bs-row { display: flex; flex-wrap: wrap; min-width: 0; padding: 10px 8px 10px 12px; gap: 2px 12px; align-items: flex-start; }
     .bs-row > .c-name { order: 1; flex: 1 1 calc(100% - 52px); padding: 0; }
     .bs-row > .bs-chev { order: 2; width: 44px; height: 44px; margin: -8px -4px 0 0; }
-    .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-docs, .bs-row > .c-fit { order: 3; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
-    .bs-row > .c-loc { display: none; }
+    .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-fit { order: 3; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
     .bs-row > .c-act { order: 4; flex: 1 1 100%; padding: 8px 0 0; justify-content: stretch; }
     .c-act button { flex: 1; min-height: 44px; }
     .bs-sub { white-space: normal; }
@@ -1196,9 +1193,7 @@
           <span></span>
           <button type="button" class="bs-sort" data-sort="name" onclick="pickSort(this)">Project<span class="bs-arrow"></span></button>
           <button type="button" class="bs-sort" data-sort="bid" onclick="pickSort(this)">Bid date<span class="bs-arrow"></span></button>
-          <span class="bs-col-loc">Location</span>
           <button type="button" class="bs-sort" data-sort="keywords" onclick="pickSort(this)">Keywords<span class="bs-arrow"></span></button>
-          <button type="button" class="bs-sort" data-sort="docs" onclick="pickSort(this)">Documents<span class="bs-arrow"></span></button>
           <span id="bsColStatus">Suggestion</span>
           <span class="bs-col-act"></span>
         </div>
@@ -3420,7 +3415,7 @@ function applyFilterPrefs(divisionId, urlSite) {
   // Remembered from before the tabs were renamed: Active -> To Review, Done -> Not a Fit.
   currentResultsView = ({ active: 'review', done: 'not_fit' })[saved.view] || saved.view;
   if (RESULT_VIEWS.indexOf(currentResultsView) < 0) currentResultsView = 'review';
-  currentResultsSort = saved.sort || 'bid';
+  currentResultsSort = saved.sort && saved.sort !== 'docs' ? saved.sort : 'bid';
   currentResultsDir = saved.dir === 'desc' ? 'desc' : 'asc';
   currentResultsFit = Array.isArray(saved.fit) ? saved.fit.filter(function(f) { return ['fit', 'unsure', 'not_fit'].indexOf(f) >= 0; }) : [];
   peekKey = askKey = null;
@@ -3466,7 +3461,7 @@ let currentResultsFit = [];         // suggestion buckets to keep: 'fit' | 'unsu
 let currentResultsView = 'review';  // "review" | "jira" | "not_fit" — the tabs over the table
 const RESULT_VIEWS = ['review', 'jira', 'not_fit'];
 let notFitReasons = [];
-let currentResultsSort = 'bid';     // name | bid | keywords | docs (also flagged | recent, from before)
+let currentResultsSort = 'bid';     // name | bid | keywords (also flagged | recent, from before)
 let currentResultsDir = 'asc';      // 'desc' flips the column's natural order
 let peekKey = null;                 // the project opened in place (chevron)
 let askKey = null;                  // the project asking "why isn't it a fit?"
@@ -3540,7 +3535,7 @@ function setListLoading(on) {
     list.innerHTML = [72, 55, 80, 64, 48, 76, 60, 68].map(function(w) {
       return '<li class="bs-item bs-skel-row" aria-hidden="true"><div class="bs-row"><span></span>' +
         '<div class="bs-cell"><span class="bs-skel" style="width:' + w + '%"></span><span class="bs-skel bs-skel-sub"></span></div>' +
-        cell('70%') + cell('60%') + cell('75%') + cell('50%') + cell('65%') + cell('80%') + '</div></li>';
+        cell('70%') + cell('75%') + cell('65%') + cell('80%') + '</div></li>';
     }).join('');
   }
 }
@@ -3744,6 +3739,8 @@ function projectRowHtml(p, i) {
   if (p.closed) badges += '<span class="bs-badge closed">no longer listed</span>';
   else if (p.reopened) badges += '<span class="bs-badge back" title="Marked not a fit (' + escapeHtml(p.decision_reason || 'no reason') + ') — a new matching document came in since">new document</span>';
   else if (isFirstScan(p)) badges += '<span class="bs-badge new" title="First seen in the last few days">NEW</span>';
+  if (p.updated && !p.reopened) badges += '<span class="bs-badge newdocs" title="New matching document(s) since the last time this was looked at">' +
+    (p.new_file_count ? '+' + p.new_file_count + ' new ' + (p.new_file_count === 1 ? 'file' : 'files') : 'new file') + '</span>';
 
   const sub = [p.source_prefix];
   if (p.decision === 'duplicate') sub.push('Duplicate of ' + (p.duplicate_of_site || p.duplicate_of_name || ''));
@@ -3763,8 +3760,6 @@ function projectRowHtml(p, i) {
     kw = '<span class="bs-none">' + (p.status === 'Download failed' ? "couldn't download" : 'no matches') + '</span>';
   }
 
-  const docs = '<div>' + p.file_count + (p.file_count === 1 ? ' file' : ' files') + '</div>' +
-    (p.updated ? '<div class="bs-newdocs">' + (p.new_file_count ? '+' + p.new_file_count + ' new' : 'new document') + '</div>' : '');
 
   let status = '<span class="bs-none">—</span>';
   let act = '';
@@ -3788,9 +3783,7 @@ function projectRowHtml(p, i) {
       '<div class="bs-cell c-name"><div class="bs-name-line"><button type="button" class="bs-name" data-act="open" title="Open project">' + escapeHtml(p.project) + '</button>' + badges + '</div>' +
         '<div class="bs-sub">' + escapeHtml(sub.filter(Boolean).join(' · ')) + '</div></div>' +
       '<div class="bs-cell c-bid">' + bid + '</div>' +
-      '<div class="bs-cell c-loc"' + (p.location ? ' title="' + escapeHtml(p.location) + '">' + escapeHtml(p.location) : '><span class="bs-none">—</span>') + '</div>' +
       '<div class="bs-cell c-kw bs-kw-cell">' + kw + '</div>' +
-      '<div class="bs-cell c-docs">' + docs + '</div>' +
       '<div class="bs-cell c-fit">' + status + '</div>' +
       '<div class="bs-cell c-act">' + act + '</div>' +
     '</div>';
@@ -5062,8 +5055,8 @@ function toggleFiltersPanel() {
 }
 
 // Column headers sort; clicking the sorted one again flips it. Name and bid
-// date start A→Z / soonest; keywords and documents start most-first.
-const SORT_MOST_FIRST = ['keywords', 'docs'];
+// date start A→Z / soonest; keywords start most-first.
+const SORT_MOST_FIRST = ['keywords'];
 function pickSort(el) {
   const v = el.dataset.sort || 'bid';
   if (currentResultsSort === v) currentResultsDir = currentResultsDir === 'desc' ? 'asc' : 'desc';

@@ -2276,17 +2276,6 @@ def save_project_plan_holders(division_id, mapping):
         print(f"  ! couldn't save plan holders ({e})")
 
 
-def load_project_locations(division_id):
-    """{project_key: "City, ST"} — saved by the sites that report one. Empty
-    if the column isn't there."""
-    try:
-        rows = _all_pages(lambda: get_client().table("project_flags").select("project_key,location")
-                          .eq("division_id", division_id).not_.is_("location", "null")).data
-    except Exception:
-        return {}
-    return {r["project_key"]: r["location"] for r in rows if r.get("location")}
-
-
 def fit_class(fit, settings):
     """The list's suggestion bucket for a saved fit prediction — "fit",
     "unsure" or "not_fit" — or None (none yet, or suggestions are off).
@@ -2518,7 +2507,6 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     fits = load_project_fit(division_id)
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
-    locations = load_project_locations(division_id)
     settings = get_division_settings(division_id)
     jira_keys = load_project_jira_keys(division_id)
     board = board_links(division_id, strict=True)
@@ -2622,7 +2610,6 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "duplicates": [],
             "fit": fits.get(site_key),
             "fit_class": fit_class(fits.get(site_key), settings),
-            "location": locations.get(site_key),
             "updated": is_updated, "new_file_count": new_file_count,
             "reopened": reopened,
             "closed": closed, "overdue": overdue, "last_seen_at": last_seen,
