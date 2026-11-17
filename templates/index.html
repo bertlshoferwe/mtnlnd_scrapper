@@ -942,7 +942,7 @@
   .bs-head, .bs-row {
     display: grid; align-items: center; min-width: var(--bs-minw, 780px);
     /* default widths keep the proportions 465 : 205 : 277 : 144 at any table width */
-    grid-template-columns: var(--bs-cols, 40px minmax(240px, 465fr) minmax(150px, 205fr) minmax(170px, 277fr) minmax(120px, 144fr) 52px);
+    grid-template-columns: var(--bs-cols, minmax(240px, 465fr) minmax(150px, 205fr) minmax(170px, 277fr) minmax(120px, 144fr) 52px);
   }
   .bs-head {
     background: var(--surface-2); border-bottom: 1px solid var(--border);
@@ -973,15 +973,8 @@
   .bs-item:last-child { border-bottom: none; }
   .bs-item.p-closed .c-name, .bs-item.p-overdue .c-name { opacity: .5; }
   .bs-row { min-height: 56px; cursor: pointer; }
-  .bs-row:hover, .bs-item.is-open > .bs-row { background: var(--surface-2); }
+  .bs-row:hover { background: var(--surface-2); }
   .bs-cell { padding: 8px 10px; min-width: 0; font-size: 13.5px; }
-  .bs-chev {
-    justify-self: center; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;
-    background: none; border: 0; border-radius: 8px; color: var(--muted); cursor: pointer;
-  }
-  .bs-chev:hover { background: var(--border); color: var(--text); }
-  .bs-chev svg { width: 16px; height: 16px; flex-shrink: 0; transition: transform .15s; }
-  .bs-item.is-open .bs-chev svg { transform: rotate(90deg); }
   .bs-name-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .bs-name {
     background: none; border: 0; padding: 0; font: inherit; font-weight: 650; font-size: 14px; color: var(--text);
@@ -1035,20 +1028,6 @@
     border-radius: 999px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer;
   }
   .bs-reason:hover { border-color: var(--accent); color: var(--accent); }
-  .bs-peek { display: flex; flex-wrap: wrap; gap: 14px 32px; padding: 4px 16px 16px 50px; background: var(--surface-2); }
-  .bs-peek-files { flex: 2 1 380px; min-width: 0; }
-  .bs-peek-side { flex: 1 1 220px; min-width: 0; }
-  .bs-peek-title { font-size: 11px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 6px 0; }
-  .bs-file { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
-  .bs-file button {
-    flex: 1; min-width: 0; background: none; border: 0; padding: 0; font: inherit; font-size: 13.5px; font-weight: 600;
-    color: var(--accent); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .bs-file button:hover { text-decoration: underline; }
-  .bs-file-kw { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
-  .bs-peek-kws { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .bs-peek-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
-  .bs-peek .linkbtn { font-size: 13.5px; padding: 0; }
 
   .bs-toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90;
@@ -1122,17 +1101,14 @@
     .results-pagerbar { border-top: 0; }
     .bs-row { display: flex; flex-wrap: wrap; min-width: 0; padding: 10px 8px 10px 12px; gap: 2px 12px; align-items: flex-start; }
     .bs-row > .c-name { order: 1; flex: 1 1 0; min-width: 0; padding: 0; }
-    .bs-row > .bs-chev { order: 3; width: 44px; height: 44px; margin: -8px -4px 0 0; }
     .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-fit { order: 4; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
     .bs-row > .c-bid { flex-basis: 100%; display: flex; gap: 8px; }
-    .bs-row > .c-act { order: 2; flex: 0 0 auto; padding: 0; margin: -8px -8px 0 0; }
+    .bs-row > .c-act { order: 2; flex: 0 0 auto; padding: 0; margin: -8px -4px 0 0; }
     .bs-more-btn { width: 44px; height: 44px; }
     .bs-sub { flex-wrap: wrap; }
     .bs-sub-text { white-space: normal; }
     .bs-name { white-space: normal; }
     .bs-ask { padding: 2px 12px 12px; }
-    .bs-peek { padding: 4px 12px 14px; }
-    .bs-file-kw { display: none; }
   }
 </style>
 </head>
@@ -1254,7 +1230,6 @@
 
       <div class="bs-table">
         <div class="bs-head">
-          <span></span>
           <button type="button" class="bs-sort" data-sort="name" onclick="pickSort(this)">Project<span class="bs-arrow"></span><span class="bs-resize" data-col="name" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Project column (arrow keys; double-click resets all)"></span></button>
           <button type="button" class="bs-sort" data-sort="bid" onclick="pickSort(this)">Bid date<span class="bs-arrow"></span><span class="bs-resize" data-col="bid" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Bid date column (arrow keys; double-click resets all)"></span></button>
           <button type="button" class="bs-sort" data-sort="keywords" onclick="pickSort(this)">Keywords<span class="bs-arrow"></span><span class="bs-resize" data-col="kw" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Keywords column (arrow keys; double-click resets all)"></span></button>
@@ -3483,7 +3458,7 @@ function applyFilterPrefs(divisionId, urlSite) {
   currentResultsSort = saved.sort && saved.sort !== 'docs' ? saved.sort : 'bid';
   currentResultsDir = saved.dir === 'desc' ? 'desc' : 'asc';
   currentResultsFit = Array.isArray(saved.fit) ? saved.fit.filter(function(f) { return ['fit', 'unsure', 'not_fit'].indexOf(f) >= 0; }) : [];
-  peekKey = askKey = null;
+  askKey = null;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = '';
   document.getElementById('keywordFilter').value = '';
@@ -3528,7 +3503,6 @@ const RESULT_VIEWS = ['review', 'jira', 'not_fit'];
 let notFitReasons = [];
 let currentResultsSort = 'bid';     // name | bid | keywords (also flagged | recent, from before)
 let currentResultsDir = 'asc';      // 'desc' flips the column's natural order
-let peekKey = null;                 // the project opened in place (chevron)
 let askKey = null;                  // the project asking "why isn't it a fit?"
 
 // The tab counts belong to one division — blank them on a switch ('' =
@@ -3608,7 +3582,7 @@ function setListLoading(on) {
     const n = Math.min(60, Math.max(3, Math.ceil(room / rowH)));
     const widths = [72, 55, 80, 64, 48, 76, 60, 68];
     list.innerHTML = Array.from({ length: n }, function(_, k) { return widths[k % widths.length]; }).map(function(w) {
-      return '<li class="bs-item bs-skel-row" aria-hidden="true"><div class="bs-row"><span></span>' +
+      return '<li class="bs-item bs-skel-row" aria-hidden="true"><div class="bs-row">' +
         '<div class="bs-cell"><span class="bs-skel" style="width:' + w + '%"></span><span class="bs-skel bs-skel-sub"></span></div>' +
         cell('70%') + cell('75%') + cell('65%') + '<span></span></div></li>';
     }).join('');
@@ -3786,7 +3760,6 @@ async function loadProjects(opts) {
 // ---- One row per project: the columns, then (opened) the quick look underneath ----
 
 const ICON_DOTS = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
-const ICON_ROW_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 
 function daysUntil(iso) {
   const d = new Date(iso + 'T00:00:00');
@@ -3805,9 +3778,7 @@ function dueText(n) {
 }
 
 function projectRowHtml(p, i) {
-  const open = peekKey === p.key;
   const cls = ['bs-item'];
-  if (open) cls.push('is-open');
   if (p.closed) cls.push('p-closed');
   if (p.overdue) cls.push('p-overdue');
 
@@ -3851,7 +3822,6 @@ function projectRowHtml(p, i) {
 
   let html = '<li class="' + cls.join(' ') + '" data-i="' + i + '">' +
     '<div class="bs-row">' +
-      '<button type="button" class="bs-chev" data-act="peek" aria-expanded="' + open + '" aria-label="' + (open ? 'Hide' : 'Show') + ' matching files for ' + escapeHtml(p.project) + '">' + ICON_ROW_CHEVRON + '</button>' +
       '<div class="bs-cell c-name"><div class="bs-name-line"><button type="button" class="bs-name" data-act="open" title="Open project">' + escapeHtml(p.project) + '</button></div>' +
         '<div class="bs-sub"><span class="bs-sub-text">' + escapeHtml(sub.filter(Boolean).join(' · ')) + '</span>' + badges + '</div></div>' +
       '<div class="bs-cell c-bid">' + bid + '</div>' +
@@ -3866,28 +3836,10 @@ function projectRowHtml(p, i) {
       '<button type="button" class="linkbtn" data-act="cancelask">Cancel</button></div>';
   }
 
-  if (open) {
-    const matched = p.files.filter(function(f) { return f.filename && f.status.indexOf('Matched') === 0; });
-    const shown = matched.slice(0, 8);
-    html += '<div class="bs-peek"><div class="bs-peek-files"><div class="bs-peek-title">Matching files</div>' +
-      (shown.length ? shown.map(function(f) {
-        return '<div class="bs-file"><button type="button" data-act="open" title="Open project">' + escapeHtml(f.filename) + '</button>' +
-          '<span class="bs-file-kw">' + escapeHtml((f.is_new ? 'new · ' : '') + f.keywords.join(', ')) + '</span></div>';
-      }).join('') : '<p class="bs-peek-note">No file matched a keyword.</p>') +
-      (matched.length > shown.length ? '<p class="bs-peek-note">+' + (matched.length - shown.length) + ' more in the project</p>' : '') +
-      '</div><div class="bs-peek-side">' +
-      (p.keywords.length ? '<div class="bs-peek-title">Keywords found</div><div class="bs-peek-kws">' +
-        p.keywords.map(function(k) { return '<span class="bs-kw">' + escapeHtml(k) + '</span>'; }).join('') + '</div>' : '') +
-      (p.bucket === 'review' && p.fit && p.fit.explanation && fitLabel(p.fit) ? '<p class="bs-peek-note">Suggestion: ' + escapeHtml(p.fit.explanation) + '</p>' : '') +
-      (p.decision_note ? '<p class="bs-peek-note">Note: ' + escapeHtml(p.decision_note) + '</p>' : '') +
-      '<button type="button" class="linkbtn" data-act="open">Open project →</button>' +
-      '</div></div>';
-  }
   return html + '</li>';
 }
 
 function renderProjectRows() {
-  if (peekKey && !projectsData.some(function(p) { return p.key === peekKey; })) peekKey = null;
   if (askKey && !projectsData.some(function(p) { return p.key === askKey && p.bucket === 'review'; })) askKey = null;
   closeRowMenu();
   document.getElementById('projectList').innerHTML = projectsData.map(projectRowHtml).join('');
@@ -3970,14 +3922,13 @@ document.getElementById('projectList').addEventListener('click', function(e) {
   const p = projectsData[i];
   if (!p) return;
   const el = e.target.closest('[data-act]');
-  const act = el ? el.dataset.act : (e.target.closest('a, input, select, textarea') || !e.target.closest('.bs-row') ? null : 'peek');
+  const act = el ? el.dataset.act : (e.target.closest('a, input, select, textarea') || !e.target.closest('.bs-row') ? null : 'open');
   if (!act) return;
   if (act === 'menu') { openRowMenu(i, el); return; }
   rowAction(act, p, i, el);
 });
 
 function rowAction(act, p, i, el) {
-  if (act === 'peek') { peekKey = peekKey === p.key ? null : p.key; renderProjectRows(); return; }
   if (act === 'open') { openProjectModal(i); return; }
   if (act === 'board') { rowAddToBoard(p, i, el); return; }
   if (act === 'openboard') { openOnBoard(p); return; }
@@ -5174,13 +5125,13 @@ function applyColWidths() {
   const t = document.querySelector('.bs-table');
   if (!colWidths) { t.style.removeProperty('--bs-cols'); t.style.removeProperty('--bs-minw'); return; }
   const w = colWidths;
-  t.style.setProperty('--bs-cols', '40px ' + w.name + 'px ' + w.bid + 'px ' + w.kw + 'px minmax(' + w.fit + 'px, 1fr) 52px');
-  t.style.setProperty('--bs-minw', (92 + w.name + w.bid + w.kw + w.fit) + 'px');
+  t.style.setProperty('--bs-cols', w.name + 'px ' + w.bid + 'px ' + w.kw + 'px minmax(' + w.fit + 'px, 1fr) 52px');
+  t.style.setProperty('--bs-minw', (52 + w.name + w.bid + w.kw + w.fit) + 'px');
 }
 function measureColWidths() {
-  const cells = document.querySelectorAll('.bs-head > *');   // chevron, name, bid, kw, fit, actions
+  const cells = document.querySelectorAll('.bs-head > *');   // name, bid, kw, fit, actions
   const out = {};
-  COL_ORDER.forEach(function(c, k) { out[c] = Math.round(cells[k + 1].getBoundingClientRect().width); });
+  COL_ORDER.forEach(function(c, k) { out[c] = Math.round(cells[k].getBoundingClientRect().width); });
   return out;
 }
 function setColWidth(col, w) {
@@ -5319,7 +5270,7 @@ function switchResultsView(view) {
   if (view === currentResultsView) return;
   currentResultsView = view;
   resultsPage = 1;
-  peekKey = askKey = null;
+  askKey = null;
   syncViewTabs();
   syncFilterUI();
   loadProjects();
