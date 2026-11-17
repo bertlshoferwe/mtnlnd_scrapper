@@ -21,8 +21,6 @@ create table if not exists sites (
   listing jsonb,          -- null = not a listing site; {} = AI-detected; {"link_selector": "..."} = manual
   tabs jsonb,              -- null = no tabs; otherwise a list of {"label": "...", "selector": "..."}
   adapter text,            -- null = generic HTML crawl; otherwise a key from adapters.py (portal-specific API)
-  active boolean not null default true,  -- unused since sites are shared: division_sites.active
-  sort_order bigint,       -- unused since sites are shared: division_sites.sort_order
   -- Login, for a site whose documents sit behind a login form. Only used by
   -- the generic browser crawl (adapters and listing/tabs crawls don't use a
   -- real browser session). login_password_enc is Fernet-encrypted with
@@ -64,15 +62,12 @@ create table if not exists app_settings (
 );
 -- Migration for existing databases:
 --   alter table sites add column if not exists adapter text;
---   alter table sites add column if not exists active boolean not null default true;
 --   alter table sites add column if not exists login_username text;
 --   alter table sites add column if not exists login_password_enc text;
 --   alter table sites add column if not exists login_url text;
 --   alter table sites add column if not exists login_last_ok boolean;
 --   alter table sites add column if not exists login_last_checked_at timestamptz;
 --   alter table sites add column if not exists login_last_error text;
---   alter table sites add column if not exists sort_order bigint;
---   update sites set sort_order = id where sort_order is null;
 --   alter table sites add column if not exists learned jsonb;
 
 create table if not exists keywords (
