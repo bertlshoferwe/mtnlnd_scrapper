@@ -2020,6 +2020,7 @@ function setSitesAdmin(on) {
   sitesAdmin = on;
   document.getElementById('sitesModal').classList.toggle('sites-admin', on);
   if (!on) {
+    if (learnSiteId != null) closeLearn();
     hideAddSite();
     document.getElementById('learnFieldsBox').style.display = 'none';
   }
@@ -2201,6 +2202,8 @@ function learnStatusTag(site) {
     attention: ['needs a look', 'tag-danger'],
   };
   const t = map[st.status] || ['not learned yet', 'tag-tabs'];
+  // the review window is part of the hidden menu; everyone else just sees the status
+  if (!sitesAdmin) return '<span class="tag ' + t[1] + '" title="Learned by AI">' + t[0] + '</span>';
   return '<button type="button" class="tag tag-btn ' + t[1] + '" title="Learned by AI — open to review" onclick="openLearn(' + site.id + ')">' + t[0] + '</button>';
 }
 
@@ -2254,6 +2257,7 @@ function learnSite() {
 }
 
 async function openLearn(siteId) {
+  if (!sitesAdmin) return;
   learnSiteId = siteId;
   learnFixOpen = learnRemoving = learnRule = null;
   learnError = '';
