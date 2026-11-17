@@ -4074,7 +4074,7 @@ img.who{object-fit:cover;background:var(--chip)}
   // (or say so, when someone's still typing in bids)
   function offerBsLink(is){
     bscLoad(is,function(){
-      if(!bsSuggest(is)||!byId(is.id))return;
+      if(!bsSuggest(is)||!byId(is.id)||ui.issueId===is.id)return;   // already open: its window shows the suggestion
       if(!ui.qc&&!ui.issueId&&!document.querySelector(".overlay.open"))openIssue(is.id);
       else toast(ikey(is)+" looks like a project in Bid Scout. Open it to link them.",5000);
     });
@@ -4792,7 +4792,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var is=createIssue({type:$("c-type").value,title:title,desc:$("c-desc").value.trim(),status:$("c-status").value,priority:$("c-pri").value,
       assignee:$("c-who").value,due:$("c-due").value,dueTime:HAS_DUETIME?$("c-due-time").value:"",parent:$("c-parent").value,
       labels:$("c-labels").value.split(",").map(function(s){return s.trim()}).filter(Boolean),fields:fields});
-    closeOv("ov-create");render();toast(ikey(is)+" created");
+    // the new bid opens right away; the Bid Scout check fills in its window when it comes back
+    closeOv("ov-create");render();openIssue(is.id);
     offerBsLink(is);
   }
   function quickAdd(parentId){
