@@ -424,10 +424,9 @@ td.over{color:var(--high);font-weight:600}
 .qc textarea[data-qct]{width:100%;border:0;background:none;resize:none;font-size:14px;padding:2px 2px 8px;outline:none;color:var(--ink)}
 .qcb{display:flex;align-items:center;gap:6px}
 .qcb .sp{flex:1}
-.qctype,.qcwho,.qcdue{position:relative;display:inline-flex;align-items:center;gap:2px;height:26px;padding:0 4px;border-radius:6px;color:var(--muted)}
-.qctype:hover,.qcwho:hover,.qcdue:hover{background:var(--chip)}
-.qctype select,.qcwho select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.qctype .ic:last-of-type{margin-left:1px}
+.qcwho,.qcdue{position:relative;display:inline-flex;align-items:center;gap:2px;height:26px;padding:0 4px;border-radius:6px;color:var(--muted)}
+.qcwho:hover,.qcdue:hover{background:var(--chip)}
+.qcwho select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .qcdue input{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0}
 .qci{display:grid;place-items:center;background:none;border:0;padding:0;color:var(--muted);width:22px;height:22px}
 .qcdue .qci{width:auto}
@@ -2926,16 +2925,17 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- quick create (Jira-style): a small box in a board column, at the foot of the List, or over a calendar day ---------- */
   function qcHTML(kind){
     var q=ui.qc,pp=proj(),who=q.assignee;
-    var type='<span class="qctype">'+tiHTML(q.type)+ic("chevD",12)+'<select data-qctype aria-label="Type">'+TYPES.filter(function(x){return x!=="Subtask"}).map(function(x){return opt(x,x,q.type)}).join("")+'</select></span>';
     var due=q.where==="day"?'':'<span class="qcdue"><button class="qci" data-qcduebtn type="button" title="Due date" aria-label="Due date">'+(q.due?'<span class="qcd">'+shortDate(q.due)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button><input type="date" data-qcdue value="'+esc(q.due)+'" tabindex="-1" aria-hidden="true"></span>';
+    // a due time, once there's a due date (a bid made on a calendar day has one already)
+    if(HAS_DUETIME&&(q.due||q.where==="day"))due+='<span class="qcdue"><button class="qci" data-qctimebtn type="button" title="Due time" aria-label="Due time">'+(q.dueTime?'<span class="qcd">'+fmtTime(q.dueTime)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>')+'</button><input type="time" data-qctime value="'+esc(q.dueTime||"")+'" tabindex="-1" aria-hidden="true"></span>';
     var person='<span class="qcwho" title="Assignee">'+(who?nameAv(nameOf(who)):'<span class="qci"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'+'</span>')+'<select data-qcwho aria-label="Assignee">'+teamOptions(who)+'</select></span>';
     // the space's Team field, when it has one and the division has teams
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],tms=divTeams(curDiv()),tmn=tmf&&q.team?cfShow(tmf,q.team):"",team="";
     if(tmf&&tms.length)team='<span class="qcwho qcteam" title="'+esc(tmf.name||"Team")+(tmn?": "+esc(tmn):"")+'">'+(q.team?(teamIcon(q.team)||"")+'<span class="qcd">'+esc(tmn)+'</span>':'<span class="qci"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></svg></span>')+
       '<select data-qcteam aria-label="'+esc(tmf.name||"Team")+'">'+opt("","No team",q.team||"")+tms.map(function(x){return opt(x.id,x.name,q.team||"")}).join("")+'</select></span>';
     var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?ic("enter",15):'Create '+ic("enter",14))+'</button>';
-    if(kind==="row")return '<div class="qc qcrow">'+type+'<input data-qct placeholder="Enter project name" maxlength="140" value="'+esc(q.title)+'" aria-label="Project name">'+due+person+team+go+'</div>';
-    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="Enter project name" maxlength="140" aria-label="Project name">'+esc(q.title)+'</textarea><div class="qcb">'+type+due+person+team+'<span class="sp"></span>'+go+'</div></div>';
+    if(kind==="row")return '<div class="qc qcrow"><input data-qct placeholder="Enter project name" maxlength="140" value="'+esc(q.title)+'" aria-label="Project name">'+due+person+team+go+'</div>';
+    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="Enter project name" maxlength="140" aria-label="Project name">'+esc(q.title)+'</textarea><div class="qcb">'+due+person+team+'<span class="sp"></span>'+go+'</div></div>';
   }
   function openQC(where,key,extra){
     ui.calPop=null;
@@ -2952,7 +2952,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var title=(q.title||"").trim();if(!title){focusQC();return}
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],fields={};
     if(tmf&&q.team)fields[tmf.id]=q.team;
-    var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due,fields:fields});
+    var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due,dueTime:q.dueTime||"",fields:fields});
     // the new bid opens right away, like one made in the Create window
     ui.qc=null;render();openIssue(is.id);
     offerBsLink(is);
@@ -5256,6 +5256,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-qcday]"))){var qd=el.getAttribute("data-qcday");openQC("day",qd,{due:qd});return}
     if(t.closest("[data-qcgo]")){submitQC();return}
     if(t.closest("[data-qcduebtn]")){var qdi=document.querySelector("[data-qcdue]");if(qdi){try{qdi.showPicker()}catch(x){qdi.focus();qdi.click()}}return}
+    if(t.closest("[data-qctimebtn]")){var qti=document.querySelector("[data-qctime]");if(qti){try{qti.showPicker()}catch(x){qti.focus();qti.click()}}return}
     
     if((el=t.closest("[data-add-due]"))){closeOv("ov-day");openCreate({due:el.getAttribute("data-add-due")});return}
     if((el=t.closest("[data-mv]"))){
@@ -5513,10 +5514,10 @@ img.who{object-fit:cover;background:var(--chip)}
     if(el.hasAttribute("data-calmodesel")){setCalMode(el.value);return}
     if((v=el.getAttribute("data-cardpri"))){var cpi=byId(v);if(cpi)setField(cpi,"priority",el.value);return}
     if((v=el.getAttribute("data-cardwho"))){var cwi=byId(v);if(cwi)setField(cwi,"assignee",el.value);return}
-    if(ui.qc&&el.hasAttribute("data-qctype")){ui.qc.type=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcwho")){ui.qc.assignee=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcteam")){ui.qc.team=el.value;render();return}
-    if(ui.qc&&el.hasAttribute("data-qcdue")){ui.qc.due=el.value;render();return}
+    if(ui.qc&&el.hasAttribute("data-qcdue")){ui.qc.due=el.value;if(!el.value)ui.qc.dueTime="";render();return}
+    if(ui.qc&&el.hasAttribute("data-qctime")){ui.qc.dueTime=el.value;render();return}
     if(el.hasAttribute("data-spacefs")){
       var fsp=proj(),pick=D.config.fieldSets.filter(function(x){return x.id===el.value})[0];
       if(fsp&&pick){fsp.fieldSet=isDefaultFieldSet(pick)?"":pick.id;save();render();toast("Fields set to "+pick.name)}
