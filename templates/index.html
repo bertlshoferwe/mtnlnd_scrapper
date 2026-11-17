@@ -647,15 +647,6 @@
     .file-row .f-top:hover .f-dl, .file-row .f-top:hover .f-dl-icon,
     .file-row .f-top:focus-within .f-dl, .file-row .f-top:focus-within .f-dl-icon { opacity: 1; }
   }
-  .doc-find { margin: 4px 0 10px; }
-  .doc-find[hidden] { display: none; }
-  .doc-find label {
-    display: flex; align-items: center; gap: 8px; max-width: 360px;
-    border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 10px; color: var(--muted);
-  }
-  .doc-find label:focus-within { border-color: var(--accent); }
-  .doc-find svg { width: 15px; height: 15px; flex-shrink: 0; }
-  .doc-find input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 8px 0; font-size: 14px; color: var(--text); font-family: inherit; }
   .file-row.f-open .f-body { display: block; }
   /* Project window: Documents / Plan Holders tabs. Wider than the other
      modals — the plan-holders table has up to six columns. */
@@ -1541,13 +1532,6 @@
         <label class="hide-nomatch-toggle" id="hideNoMatchWrap">
           <input type="checkbox" id="hideNoMatchFiles" checked style="width:auto;" onchange="renderProjectFiles()">
           Hide non-matches
-        </label>
-      </div>
-      <div class="doc-find" id="docFindWrap">
-        <label>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <span class="sr-only">Find a document by name</span>
-          <input type="search" id="docFind" placeholder="Find by name" autocomplete="off" oninput="renderProjectFiles()">
         </label>
       </div>
       <div id="projectModalFiles"></div>
@@ -4093,7 +4077,6 @@ function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
   currentProject = p;
-  document.getElementById('docFind').value = '';   // a search doesn't carry over to another project
   document.getElementById('projectModalTitle').textContent = p.project;
 
   const meta = [];
@@ -4144,7 +4127,6 @@ function setProjectTab(which) {
   document.getElementById('projectModalFiles').hidden = !docs;
   document.getElementById('projectModalHolders').hidden = docs;
   document.getElementById('hideNoMatchWrap').style.display = docs ? '' : 'none';
-  document.getElementById('docFindWrap').hidden = !docs;
 }
 
 // Plan Holders tab — fetched when the project opens (not part of the results
@@ -4311,26 +4293,18 @@ function renderProjectFiles() {
 
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
-  const q = document.getElementById('docFind').value.trim().toLowerCase();
   let files = p.files.slice();
   if (hideNoMatch) {
     files = files.filter(function(f) { return f.keywords.length > 0; });
   }
-  if (q) {
-    files = files.filter(function(f) {
-      const path = docTreePath(p, f);
-      return path.folders.concat([path.name]).join('/').toLowerCase().indexOf(q) > -1;
-    });
-  }
   if (!files.length) {
     const empty = document.createElement('p');
     empty.className = 'desc';
-    empty.textContent = q ? 'No documents match “' + q + '”' + (hideNoMatch ? ' — uncheck "Hide non-matches" to search the rest.' : '.')
-      : 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matches" to see the rest.' : '.');
+    empty.textContent = 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matches" to see the rest.' : '.');
     filesEl.appendChild(empty);
     return;
   }
-  renderDocTree(buildDocTree(p, files), filesEl, 0, !!q);
+  renderDocTree(buildDocTree(p, files), filesEl, 0);
 }
 
 // Documents tab as a folder tree. Folders come from what each site gives us:
@@ -4384,12 +4358,13 @@ function buildDocTree(p, files) {
 const naturalCmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
 const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
-function renderDocTree(node, el, depth, openAll) {
+function renderDocTree(node, el, depth) {
   Object.keys(node.folders).sort(naturalCmp).forEach(function(k) {
     const sub = node.folders[k];
     const wrap = document.createElement('div');
-    // Opens on its own only when something inside matched a keyword.
-    wrap.className = 'tree-folder' + (sub.matched || openAll ? ' open' : '');
+    // Starts with just the top level open (when something inside matched a
+    // keyword), so a big project reads as its folders, not every file at once.
+    wrap.className = 'tree-folder' + (depth === 0 && sub.matched ? ' open' : '');
 
     const head = document.createElement('div');
     head.className = 'tf-head';
@@ -4421,7 +4396,7 @@ function renderDocTree(node, el, depth, openAll) {
 
     const kids = document.createElement('div');
     kids.className = 'tf-children';
-    renderDocTree(sub, kids, depth + 1, openAll);
+    renderDocTree(sub, kids, depth + 1);
     wrap.appendChild(kids);
     el.appendChild(wrap);
   });
