@@ -609,22 +609,22 @@
   .pager button:disabled { opacity: .4; cursor: default; }
   .pager .pager-gap { min-width: 18px; text-align: center; color: var(--muted); align-self: center; font-size: 13px; }
   .project-list { list-style: none; margin: 0; padding: 0; }
-  .file-row.f-new {
-    background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning);
-    border-radius: 4px; padding-left: 10px;
-  }
   .f-new-tag {
     font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
     color: var(--warning); border: 1px solid var(--warning); border-radius: 4px;
     padding: 1px 5px; flex-shrink: 0; align-self: center;
   }
 
-  .file-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
-  .file-row:last-child { border-bottom: none; }
-  .file-row .f-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; }
-  .f-top-left { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .f-top-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-  .file-row .f-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+  /* Documents tree: rows with no rules between them, a chevron for each level, indent for depth */
+  .file-row { border-radius: 8px; }
+  .file-row .f-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 7px 8px; border-radius: 8px; cursor: pointer; user-select: none;
+  }
+  .file-row .f-top:hover { background: var(--surface-2); }
+  .f-top-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .f-top-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .file-row .f-name { font-weight: 500; font-size: 13.5px; overflow-wrap: anywhere; }
   .f-kw-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .file-row .f-dl {
     font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap;
@@ -635,12 +635,27 @@
   .f-dl-icon { padding: 6px; margin: -6px 0; color: var(--muted); }
   .f-dl-icon:hover { color: var(--accent); background: transparent; }
   .f-chevron {
-    width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); transition: transform .15s;
-    padding: 10px; margin: -10px;  /* bigger touch target, no extra visual space */
-    box-sizing: content-box; display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); display: inline-flex;
+    transform: rotate(-90deg); transition: transform .15s;
   }
-  .file-row.f-open .f-chevron { transform: rotate(180deg); }
-  .f-body { display: none; }
+  .f-chevron svg { width: 100%; height: 100%; }
+  .file-row.f-open .f-chevron { transform: none; }
+  .f-body { display: none; padding: 2px 8px 10px 30px; }
+  /* the row's View PDF / Download show on hover; touch screens always show them */
+  @media (hover: hover) {
+    .file-row .f-dl, .file-row .f-dl-icon { opacity: 0; transition: opacity .12s; }
+    .file-row .f-top:hover .f-dl, .file-row .f-top:hover .f-dl-icon,
+    .file-row .f-top:focus-within .f-dl, .file-row .f-top:focus-within .f-dl-icon { opacity: 1; }
+  }
+  .doc-find { margin: 4px 0 10px; }
+  .doc-find[hidden] { display: none; }
+  .doc-find label {
+    display: flex; align-items: center; gap: 8px; max-width: 360px;
+    border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 10px; color: var(--muted);
+  }
+  .doc-find label:focus-within { border-color: var(--accent); }
+  .doc-find svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .doc-find input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 8px 0; font-size: 14px; color: var(--text); font-family: inherit; }
   .file-row.f-open .f-body { display: block; }
   /* Project window: Documents / Plan Holders tabs. Wider than the other
      modals — the plan-holders table has up to six columns. */
@@ -648,22 +663,20 @@
   .project-tabs { align-items: center; }
   .project-tabs .hide-nomatch-toggle { padding-bottom: 2px; }
   /* Documents tree */
-  .tree-folder { border-bottom: 1px solid var(--border); }
-  .tree-folder:last-child { border-bottom: none; }
   .tf-head {
-    display: flex; align-items: center; gap: 7px; padding: 10px 0;
-    cursor: pointer; user-select: none; font-size: 13px;
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+    cursor: pointer; user-select: none; font-size: 13.5px;
   }
+  .tf-head:hover { background: var(--surface-2); }
   .tf-chevron { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); display: inline-flex; transform: rotate(-90deg); transition: transform .15s; }
   .tree-folder.open > .tf-head .tf-chevron { transform: none; }
   .tf-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); display: inline-flex; }
   .tf-chevron svg, .tf-icon svg { width: 100%; height: 100%; }
-  .tf-name { font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
+  .tf-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
   .tf-count { font-size: 12px; color: var(--muted); }
   .tf-matches { margin-left: auto; padding-left: 10px; }
-  .tf-children { display: none; padding-left: 20px; border-left: 1px solid var(--border); margin-left: 6px; }
+  .tf-children { display: none; padding-left: 22px; }
   .tree-folder.open > .tf-children { display: block; }
-  .tf-children .tree-folder:last-child, .tf-children .file-row:last-child { border-bottom: none; }
   /* Plan holders table */
   .ph-table td { vertical-align: top; }
   .ph-company { font-weight: 600; min-width: 160px; }
@@ -1528,6 +1541,13 @@
         <label class="hide-nomatch-toggle" id="hideNoMatchWrap">
           <input type="checkbox" id="hideNoMatchFiles" checked style="width:auto;" onchange="renderProjectFiles()">
           Hide non-matches
+        </label>
+      </div>
+      <div class="doc-find" id="docFindWrap">
+        <label>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="sr-only">Find a document by name</span>
+          <input type="search" id="docFind" placeholder="Find by name" autocomplete="off" oninput="renderProjectFiles()">
         </label>
       </div>
       <div id="projectModalFiles"></div>
@@ -4073,6 +4093,7 @@ function openProjectModal(i) {
   const p = projectsData[i];
   if (!p) return;
   currentProject = p;
+  document.getElementById('docFind').value = '';   // a search doesn't carry over to another project
   document.getElementById('projectModalTitle').textContent = p.project;
 
   const meta = [];
@@ -4123,6 +4144,7 @@ function setProjectTab(which) {
   document.getElementById('projectModalFiles').hidden = !docs;
   document.getElementById('projectModalHolders').hidden = docs;
   document.getElementById('hideNoMatchWrap').style.display = docs ? '' : 'none';
+  document.getElementById('docFindWrap').hidden = !docs;
 }
 
 // Plan Holders tab — fetched when the project opens (not part of the results
@@ -4289,18 +4311,26 @@ function renderProjectFiles() {
 
   const filesEl = document.getElementById('projectModalFiles');
   filesEl.innerHTML = '';
+  const q = document.getElementById('docFind').value.trim().toLowerCase();
   let files = p.files.slice();
   if (hideNoMatch) {
     files = files.filter(function(f) { return f.keywords.length > 0; });
   }
+  if (q) {
+    files = files.filter(function(f) {
+      const path = docTreePath(p, f);
+      return path.folders.concat([path.name]).join('/').toLowerCase().indexOf(q) > -1;
+    });
+  }
   if (!files.length) {
     const empty = document.createElement('p');
     empty.className = 'desc';
-    empty.textContent = 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matches" to see the rest.' : '.');
+    empty.textContent = q ? 'No documents match “' + q + '”' + (hideNoMatch ? ' — uncheck "Hide non-matches" to search the rest.' : '.')
+      : 'No matching files' + (p.files.length ? ' — uncheck "Hide non-matches" to see the rest.' : '.');
     filesEl.appendChild(empty);
     return;
   }
-  renderDocTree(buildDocTree(p, files), filesEl, 0);
+  renderDocTree(buildDocTree(p, files), filesEl, 0, !!q);
 }
 
 // Documents tab as a folder tree. Folders come from what each site gives us:
@@ -4354,12 +4384,12 @@ function buildDocTree(p, files) {
 const naturalCmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
 const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
-function renderDocTree(node, el, depth) {
+function renderDocTree(node, el, depth, openAll) {
   Object.keys(node.folders).sort(naturalCmp).forEach(function(k) {
     const sub = node.folders[k];
     const wrap = document.createElement('div');
     // Opens on its own only when something inside matched a keyword.
-    wrap.className = 'tree-folder' + (sub.matched ? ' open' : '');
+    wrap.className = 'tree-folder' + (sub.matched || openAll ? ' open' : '');
 
     const head = document.createElement('div');
     head.className = 'tf-head';
@@ -4391,7 +4421,7 @@ function renderDocTree(node, el, depth) {
 
     const kids = document.createElement('div');
     kids.className = 'tf-children';
-    renderDocTree(sub, kids, depth + 1);
+    renderDocTree(sub, kids, depth + 1, openAll);
     wrap.appendChild(kids);
     el.appendChild(wrap);
   });
@@ -4412,6 +4442,10 @@ function buildFileRow(f, displayName) {
 
   const left = document.createElement('div');
   left.className = 'f-top-left';
+  const chevron = document.createElement('span');
+  chevron.className = 'f-chevron';
+  chevron.innerHTML = ICON_CHEVRON;
+  left.appendChild(chevron);
   const nm = document.createElement('span');
   nm.className = 'f-name';
   nm.textContent = displayName || f.filename || '(document)';
@@ -4460,10 +4494,6 @@ function buildFileRow(f, displayName) {
     a.onclick = function(e) { e.stopPropagation(); };
     right.appendChild(a);
   }
-  const chevron = document.createElement('span');
-  chevron.className = 'f-chevron';
-  chevron.innerHTML = ICON_CHEVRON;
-  right.appendChild(chevron);
   top.appendChild(right);
 
   top.onclick = function() { row.classList.toggle('f-open'); };
