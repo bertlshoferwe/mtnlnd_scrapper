@@ -1201,7 +1201,7 @@ img.who{object-fit:cover;background:var(--chip)}
   var TYPES=["Task","Subtask"];
   // line icons (24px grid, drawn in the current text color); ic("plus") etc.
   var ICONS={
-    plus:'<path d="M12 5v14M5 12h14"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
     chevD:'<path d="m6 9 6 6 6-6"/>',chevR:'<path d="m9 6 6 6-6 6"/>',chevL:'<path d="m15 6-6 6 6 6"/>',
     arrowL:'<path d="M19 12H5M11 6l-6 6 6 6"/>',arrowR:'<path d="M5 12h14M13 6l6 6-6 6"/>',
     arrowU:'<path d="M12 19V5M6 11l6-6 6 6"/>',arrowD:'<path d="M12 5v14M6 13l6 6 6-6"/>',
@@ -1838,6 +1838,33 @@ img.who{object-fit:cover;background:var(--chip)}
   // refresh comes back to the same place. A new visit still starts on the default space and view.
   var HKEY="wf_here",HERE=null;
   function saveHere(){try{sessionStorage.setItem(HKEY,JSON.stringify({div:state.div||"",cur:state.cur||"",view:state.view||"",bid:ui.issueId||""}))}catch(e){}}
+  /* The address bar follows the open bid (?bid=<id>), so it can be copied, shared and refreshed.
+     Opening a bid from the board adds a history entry, so Back closes it; moving between bids in the
+     window, or arriving from a link, replaces it. Closing a bid that added an entry steps back off it. */
+  function urlBid(){try{return new URLSearchParams(location.search).get("bid")||""}catch(e){return ""}}
+  function bidLink(id){return location.origin+location.pathname+"?bid="+encodeURIComponent(id)}
+  function syncUrl(){
+    if(ui.urlBack)return;   // a step back is on its way; popstate syncs after it lands
+    var id=ui.issueId||"",cur=urlBid();
+    if(id===cur&&!(cur&&location.search!=="?bid="+encodeURIComponent(cur)))return;
+    try{
+      if(!id){
+        if(history.state&&history.state.wfBid===cur){ui.urlBack=true;history.back()}
+        else history.replaceState(null,"",location.pathname);
+      }else if(!cur&&!ui.urlReplace)history.pushState({wfBid:id},"",bidLink(id));
+      else history.replaceState(history.state&&history.state.wfBid?{wfBid:id}:null,"",bidLink(id));
+    }catch(e){}
+  }
+  window.addEventListener("popstate",function(){
+    if(ui.urlBack){ui.urlBack=false;if(ui.issueId)syncUrl();return}
+    var b=urlBid();
+    if(b===(ui.issueId||""))return;
+    ui.urlReplace=true;
+    if(!b)closeOv("ov-issue");
+    else if(findBid(b))gotoBid(b);
+    else{closeOv("ov-issue");toast("That bid wasn’t found.")}
+    ui.urlReplace=false;
+  });
   function loadHere(){try{var r=sessionStorage.getItem(HKEY);return r?JSON.parse(r):null}catch(e){return null}}
   function orgView(v){return v==="overview"||v==="orgsettings"}
   function archivedBlocked(){
@@ -2143,13 +2170,16 @@ img.who{object-fit:cover;background:var(--chip)}
   function handoff(){
     if(handoffDone)return;
     handoffDone=true;
+    ui.urlReplace=true;try{handoffOpen()}finally{ui.urlReplace=false}
+  }
+  function handoffOpen(){
     var q=new URLSearchParams(location.search);
     if(!q.get("bid")&&!q.get("division")&&!q.get("project")){   // a refresh reopens the bid that was open
       var hb=HERE&&HERE.bid,hi=hb&&byId(hb);
       if(hi&&hi.spaceId===state.cur)openIssue(hb);else if(hb&&D.spaces.some(function(s){return s.issues.some(function(i){return i.id===hb})}))gotoBid(hb);
       return;
     }
-    try{history.replaceState(null,"",location.pathname)}catch(e){}
+    try{history.replaceState(history.state,"",location.pathname)}catch(e){}   // the bid that opens puts ?bid= back
     openLink(q);
   }
   function openLink(q){
@@ -3167,13 +3197,14 @@ img.who{object-fit:cover;background:var(--chip)}
     groups.forEach(function(gr){lines.push(gr.label+": "+fmtM(mval(gr.items)))});
     return lines.join("\n");
   }
-  function copyText(text){
+  function copyText(text,what){
+    what=what||"summary";
     function fallback(){
       var ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
       var ok=false;try{ok=document.execCommand("copy")}catch(e){}
-      document.body.removeChild(ta);toast(ok?"Summary copied":"Couldn’t copy the summary");
+      document.body.removeChild(ta);toast(ok?what.charAt(0).toUpperCase()+what.slice(1)+" copied":"Couldn’t copy the "+what);
     }
-    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){toast("Summary copied")},fallback);else fallback()}catch(e){fallback()}
+    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){toast(what.charAt(0).toUpperCase()+what.slice(1)+" copied")},fallback);else fallback()}catch(e){fallback()}
   }
 
   function tplStatuses(id){
@@ -3777,7 +3808,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){if(ui.ask&&ui.ask.quote)quoteDrop(ui.ask.quote);ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere();syncUrl()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){if(ui.ask&&ui.ask.quote)quoteDrop(ui.ask.quote);ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -3796,7 +3827,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function openIssue(id){
     ui.issueId=id;ui.draft="";ui.replyTo=null;ui.replyDraft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.addSub=false;
     ui.fileTab="att";ui.docOpen={};ui.fmenu=false;ui.imenu=false;ui.bsPick=null;delete ui.bs[id];
-    ui.descEdit=null;renderIssue();openOv("ov-issue");saveHere();
+    ui.descEdit=null;renderIssue();openOv("ov-issue");saveHere();syncUrl();
     var sh=$("ov-issue").querySelector(".sheet");sh.scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});
   }
   function renderIssue(){
@@ -3813,7 +3844,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var par=is.parent?byId(is.parent):null;
     $("i-head").innerHTML=(par?'<button class="crumb-btn" data-goto="'+par.id+'">'+tiHTML(par.type)+ikey(par)+'</button><span class="key">/</span>':'')+
       '<span class="isecw" data-isecret>'+tiHTML(is.type)+'<span class="key">'+ikey(is)+'</span>'+
-        (ui.imenu&&canAct()?'<div class="fmenu" role="menu"><button type="button" role="menuitem" class="danger" data-delissue>'+ic("trash",15)+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div>':'')+'</span><span class="sp"></span><button class="x" data-close="ov-issue" aria-label="Close">'+ic("x",18)+'</button>';
+        (ui.imenu&&canAct()?'<div class="fmenu" role="menu"><button type="button" role="menuitem" class="danger" data-delissue>'+ic("trash",15)+(ui.armI?'Tap again to delete':'Delete bid')+'</button></div>':'')+'</span><span class="sp"></span><button class="x" data-copylink title="Copy link to this bid" aria-label="Copy link">'+ic("link",16)+'</button><button class="x" data-close="ov-issue" aria-label="Close">'+ic("x",18)+'</button>';
   }
   function issueTopHTML(is){
     var kids=children(is);
@@ -5118,11 +5149,11 @@ img.who{object-fit:cover;background:var(--chip)}
       return;
     }
     if((el=t.closest("[data-dupopen]"))){var did=el.getAttribute("data-dupopen");closeOv("ov-create");closeOv("ov-settings");gotoBid(did);return}
-    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.descEdit=null;renderIssue();$("ov-issue").querySelector(".sheet").scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});return}
+    if((el=t.closest("[data-goto]"))){ui.issueId=el.getAttribute("data-goto");ui.imenu=false;ui.draft="";ui.editC=null;ui.armC=null;ui.armI=false;ui.actTab="comments";ui.descEdit=null;renderIssue();saveHere();syncUrl();$("ov-issue").querySelector(".sheet").scrollTop=0;["i-act","i-files","i-side"].forEach(function(k){$(k).scrollTop=0});return}
     if(t.closest(".cpick"))return;
     if((el=t.closest("[data-open]"))){
       var id=el.getAttribute("data-open");
-      if($("ov-issue").classList.contains("open")&&$("ov-issue").contains(el)){ui.issueId=id;ui.draft="";ui.editC=null;ui.actTab="comments";renderIssue()}
+      if($("ov-issue").classList.contains("open")&&$("ov-issue").contains(el)){ui.issueId=id;ui.draft="";ui.editC=null;ui.actTab="comments";renderIssue();saveHere();syncUrl()}
       else{closeOv("ov-day");openIssue(id)}
       return;
     }
@@ -5221,6 +5252,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(ui.armAtt!==aid){ui.armAtt=aid;renderAttach();return}
       ui.armAtt=null;removeAttachment(adi,aid);renderAttach();renderIssueAct();return;
     }
+    if(t.closest("[data-copylink]")){if(ui.issueId)copyText(bidLink(ui.issueId),"link");return}
     // hidden delete: tap the bid's type icon / key three times quickly
     if(t.closest("[data-isecret]")&&!t.closest(".fmenu")){
       var tn=Date.now();ui.secT=(ui.secT||[]).filter(function(x){return tn-x<700});ui.secT.push(tn);
