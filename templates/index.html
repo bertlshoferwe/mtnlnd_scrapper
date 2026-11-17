@@ -668,6 +668,15 @@
   .tf-matches { margin-left: auto; padding-left: 10px; }
   .tf-children { display: none; padding-left: 22px; }
   .tree-folder.open > .tf-children { display: block; }
+  /* Plan holders: a closed section per role, opened by its heading */
+  .ph-group > summary {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+    cursor: pointer; user-select: none; font-size: 13.5px; list-style: none;
+  }
+  .ph-group > summary::-webkit-details-marker { display: none; }
+  .ph-group > summary:hover { background: var(--surface-2); }
+  .ph-group[open] > summary .tf-chevron { transform: none; }
+  .ph-group-body { overflow-x: auto; padding: 0 0 10px 22px; }
   /* Plan holders table */
   .ph-table td { vertical-align: top; }
   .ph-company { font-weight: 600; min-width: 160px; }
@@ -675,12 +684,6 @@
     margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--success);
     border: 1px solid var(--success); border-radius: 4px; padding: 0 4px;
   }
-  .ph-role {
-    display: inline-block; font-size: 11.5px; font-weight: 600; white-space: nowrap;
-    padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text);
-  }
-  .ph-role-prime { background: var(--accent); color: var(--accent-contrast); }
-  .ph-role-room { background: transparent; color: var(--muted); border: 1px solid var(--border); }
   .ph-sub { font-size: 11.5px; color: var(--muted); }
   .ph-email, .ph-phone { color: var(--accent); text-decoration: none; display: block; }
   .ph-email { overflow-wrap: break-word; }
@@ -4179,6 +4182,40 @@ function renderPlanHolders() {
   const list = holders.slice().sort(function(a, b) {
     return planHolderRank(a) - planHolderRank(b) || naturalCmp(a.company || '', b.company || '');
   });
+
+  // One section per role (Bidder, Planholder, Plan Room, …), in the list's
+  // role order, all starting closed; each table shows only the columns its
+  // companies have. Companies with no role go last, under "Other".
+  const groups = [];
+  list.forEach(function(h) {
+    const role = (h.role || '').trim() || 'Other';
+    let g = groups.find(function(x) { return x.role.toLowerCase() === role.toLowerCase(); });
+    if (!g) { g = { role: role, items: [] }; groups.push(g); }
+    g.items.push(h);
+  });
+  groups.sort(function(a, b) { return (a.role === 'Other') - (b.role === 'Other'); });
+  groups.forEach(function(g) {
+    const sec = document.createElement('details');
+    sec.className = 'ph-group';
+    const sum = document.createElement('summary');
+    sum.innerHTML = '<span class="tf-chevron">' + ICON_CHEVRON + '</span>' +
+      '<span class="tf-name">' + escapeHtml(g.role) + '</span><span class="tf-count">' + g.items.length + '</span>';
+    sec.appendChild(sum);
+    sec.appendChild(planHoldersTable(g.items));
+    el.appendChild(sec);
+  });
+
+  if (data.refreshed_at) {
+    const note = document.createElement('p');
+    note.className = 'desc ph-updated';
+    note.textContent = list.length + ' compan' + (list.length === 1 ? 'y' : 'ies') + ' · checked '
+      + new Date(data.refreshed_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    el.appendChild(note);
+  }
+}
+
+// One role's companies as a table (no Role column — the section says it).
+function planHoldersTable(list) {
   const has = function(fn) { return list.some(fn); };
   const cols = [{ label: 'Company', cell: function(h, td) {
     const nm = document.createElement('div');
@@ -4192,14 +4229,6 @@ function renderPlanHolders() {
     }
     td.appendChild(nm);
   } }];
-  if (has(function(h) { return h.role; })) cols.push({ label: 'Role', cell: function(h, td) {
-    if (!h.role) return;
-    const b = document.createElement('span');
-    const rank = planHolderRank(h);
-    b.className = 'ph-role' + (rank === 0 ? ' ph-role-prime' : rank === 3 ? ' ph-role-room' : '');
-    b.textContent = h.role;
-    td.appendChild(b);
-  } });
   if (has(function(h) { return h.contact; })) cols.push({ label: 'Contact', cell: function(h, td) {
     if (h.contact) td.appendChild(document.createTextNode(h.contact));
     if (h.title) {
@@ -4273,17 +4302,9 @@ function renderPlanHolders() {
   });
   table.appendChild(tbody);
   const wrap = document.createElement('div');
-  wrap.style.overflowX = 'auto';
+  wrap.className = 'ph-group-body';
   wrap.appendChild(table);
-  el.appendChild(wrap);
-
-  if (data.refreshed_at) {
-    const note = document.createElement('p');
-    note.className = 'desc ph-updated';
-    note.textContent = list.length + ' compan' + (list.length === 1 ? 'y' : 'ies') + ' · checked '
-      + new Date(data.refreshed_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
-    el.appendChild(note);
-  }
+  return wrap;
 }
 
 function renderProjectFiles() {
