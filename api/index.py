@@ -1198,7 +1198,9 @@ def api_get_results(division_id):
 @app.route("/api/<division_id>/results-grouped", methods=["GET"])
 def api_get_results_grouped(division_id):
     """Results collapsed to one entry per project, files nested. Query params:
-    search, status, page (1-based), page_size."""
+    search, status, site, keyword, bid_window, fit (comma list of fit /
+    unsure / not_fit), sort (bid | name | keywords | docs | recent |
+    flagged), dir (asc | desc), page (1-based), page_size."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -1208,6 +1210,8 @@ def api_get_results_grouped(division_id):
     keyword = (request.args.get("keyword") or "").strip()
     bid_window = (request.args.get("bid_window") or "").strip()
     sort = (request.args.get("sort") or "").strip()
+    descending = request.args.get("dir") == "desc"
+    fit = [f for f in (request.args.get("fit") or "").split(",") if f in ("fit", "unsure", "not_fit")]
     include_closed = request.args.get("include_closed") in ("1", "true")
     updated_only = request.args.get("updated") in ("1", "true")
     new_only = request.args.get("new") in ("1", "true")
@@ -1226,15 +1230,16 @@ def api_get_results_grouped(division_id):
     except ValueError:
         return jsonify({"error": "page and page_size must be integers"}), 400
 
-    projects, total, sites, updated_total, new_total, view_counts = supabase_store.get_results_grouped(
+    projects, total, sites, updated_total, new_total, view_counts, fit_counts = supabase_store.get_results_grouped(
         division_id, search=search or None, status=status or None, site=site or None,
         keyword=keyword or None, bid_window=bid_window or None, sort=sort or None,
         include_closed=include_closed, updated_only=updated_only, new_only=new_only,
         view=view, project_key=project_key or None, page=page, page_size=page_size,
+        fit=fit or None, descending=descending,
     )
     return jsonify({"projects": projects, "total": total, "sites": sites,
                     "updated_total": updated_total, "new_total": new_total,
-                    "view_counts": view_counts,
+                    "view_counts": view_counts, "fit_counts": fit_counts,
                     "not_fit_reasons": list(supabase_store.NOT_FIT_REASONS),
                     "fit_training": supabase_store.fit_training_stats(division_id),
                     "page": page, "page_size": page_size})

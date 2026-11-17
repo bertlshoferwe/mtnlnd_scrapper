@@ -994,28 +994,254 @@
     .pager { justify-content: center; }
     .pager button { min-width: 36px; height: 36px; }
   }
+
+  /* ---- The results page: top bar, filter panel on the left, table of projects ---- */
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .linkbtn { background: none; border: 0; padding: 4px; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .linkbtn:hover { text-decoration: underline; }
+  .wrap { max-width: 1480px; padding: 16px 16px 60px; }
+
+  .masthead-inner { flex-wrap: wrap; justify-content: flex-start; gap: 10px 14px; }
+  .mh-divisions { margin: 0; padding: 0; border: 0; align-items: center; gap: 4px; }
+  .mh-divisions .tab {
+    background: rgba(255,255,255,.08); color: var(--masthead-muted);
+    border: 1px solid rgba(255,255,255,.16); border-radius: 999px; margin: 0; padding: 5px 8px 5px 12px;
+  }
+  .mh-divisions .tab:hover { background: rgba(255,255,255,.15); }
+  .mh-divisions .tab.active { background: #ffffff; color: #202c54; border-color: #ffffff; padding-bottom: 5px; }
+  .mh-divisions .tab-add {
+    align-self: center; margin: 0; padding: 4px 10px;
+    border: 1px dashed rgba(255,255,255,.32); border-radius: 999px; color: var(--masthead-muted);
+  }
+  .mh-divisions .tab-add:hover { color: #ffffff; border-color: #ffffff; }
+  .mh-search {
+    flex: 1 1 240px; max-width: 460px; display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border-radius: 999px; padding: 0 12px; color: var(--muted);
+  }
+  .mh-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .mh-search input {
+    flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+    padding: 8px 0; font-size: 14px; color: var(--text); font-family: inherit;
+  }
+  .mh-search:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+  .mh-status { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; font-size: 12.5px; color: var(--masthead-muted); }
+  .mh-status .status-dot { margin-right: 0; flex-shrink: 0; }
+  .mh-status #statusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .mh-btn {
+    background: #ffffff; color: #202c54; border: 0; border-radius: 999px;
+    padding: 6px 12px; font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap;
+  }
+  .mh-btn:disabled { opacity: .5; cursor: default; }
+  .mh-btn-danger { background: var(--danger); color: #ffffff; }
+  .mh-count { opacity: .7; font-weight: 500; margin-left: 3px; }
+  .mh-strip { padding: 0 18px 10px; }
+  .mh-strip .status-line { color: var(--masthead-muted); margin: 0 0 4px; font-size: 12.5px; }
+  .mh-strip .status-line:empty { display: none; }
+  .mh-strip:has(#statusDetail:empty):has(#scanProgress[style*="none"]) { display: none; }
+  .mh-strip .progress { background: rgba(255,255,255,.15); margin: 4px 0 0; }
+  .mh-strip .progress-fill { background: #ffffff; }
+
+  .bs-layout { display: flex; align-items: flex-start; gap: 16px; }
+  .bs-filters {
+    flex: 0 0 236px; box-sizing: border-box; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px 4px;
+    position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto;
+  }
+  .bf-head { display: flex; align-items: center; justify-content: space-between; min-height: 28px; margin-bottom: 4px; }
+  .bf-heading { font-weight: 750; font-size: 14px; }
+  .bf-group { border-top: 1px solid var(--border); padding: 9px 0; }
+  .bf-group[hidden] { display: none; }
+  .bf-title { font-size: 11px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .bf-opt { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13.5px; color: var(--text); cursor: pointer; }
+  .bf-opt input { width: auto; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+  .bf-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bf-count { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .bf-count:empty { display: none; }
+  .bf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .bf-dot.fit { background: var(--success); }
+  .bf-dot.unsure { background: var(--border-strong); }
+  .bf-dot.not_fit { background: var(--warning); }
+  .bf-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
+  .bf-chip {
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+    border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left;
+  }
+  .bf-chip:hover { border-color: var(--accent); }
+  .bf-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+  .bf-chip .bf-count { color: inherit; opacity: .7; }
+
+  .bs-results { flex: 1 1 auto; min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .bs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 0 14px; border-bottom: 1px solid var(--border); }
+  .bs-bar .view-tabs { margin: 0; gap: 2px; flex-wrap: nowrap; }
+  .bs-bar .view-tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 13px 10px 11px; font-size: 14px; }
+  .bs-bar .view-tab:hover { color: var(--text); border-color: transparent; border-bottom-color: var(--border-strong); }
+  .bs-bar .view-tab.active { background: transparent; color: var(--text); border-bottom-color: var(--accent); font-weight: 700; }
+  .bs-bar .view-tab .vt-count { background: var(--surface-2); color: var(--muted); opacity: 1; border-radius: 999px; padding: 1px 7px; }
+  .bs-bar .view-tab.active .vt-count { background: var(--accent); color: var(--accent-contrast); }
+  .bs-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+  .bs-bar-right .status-line { margin: 0; font-size: 13px; }
+  .bs-export, .bs-filters-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 13px; padding: 6px 10px; }
+  .bs-export svg { width: 15px; height: 15px; }
+  .bs-filters-btn { display: none; }
+
+  .bs-table { overflow-x: auto; }
+  .bs-head, .bs-row {
+    display: grid; align-items: center; min-width: 1010px;
+    grid-template-columns: 40px minmax(220px, 2fr) 140px minmax(110px, .8fr) minmax(190px, 1.5fr) 96px 132px 196px;
+  }
+  .bs-head {
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+    font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .bs-head > span, .bs-sort { padding: 9px 10px; }
+  .bs-sort {
+    background: none; border: 0; text-align: left; font: inherit; color: inherit;
+    text-transform: inherit; letter-spacing: inherit; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  }
+  .bs-sort:hover, .bs-sort.active { color: var(--text); }
+  .bs-arrow { font-size: 12px; }
+  .project-list li.bs-item {
+    display: block; padding: 0; gap: 0; border-radius: 0; cursor: default;
+    border-bottom: 1px solid var(--border);
+  }
+  .project-list li.bs-item:hover { background: transparent; }
+  .project-list li.bs-item:last-child { border-bottom: none; }
+  .bs-row { min-height: 56px; cursor: pointer; }
+  .bs-row:hover, .bs-item.is-open > .bs-row { background: var(--surface-2); }
+  .bs-cell { padding: 8px 10px; min-width: 0; font-size: 13.5px; }
+  .bs-chev {
+    justify-self: center; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; border-radius: 8px; color: var(--muted); cursor: pointer;
+  }
+  .bs-chev:hover { background: var(--border); color: var(--text); }
+  .bs-chev svg { width: 16px; height: 16px; flex-shrink: 0; transition: transform .15s; }
+  .bs-item.is-open .bs-chev svg { transform: rotate(90deg); }
+  .bs-name-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .bs-name {
+    background: none; border: 0; padding: 0; font: inherit; font-weight: 650; font-size: 14px; color: var(--text);
+    text-align: left; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bs-name:hover { color: var(--accent); text-decoration: underline; }
+  .bs-sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bs-badge { flex-shrink: 0; font-size: 10.5px; font-weight: 750; letter-spacing: .03em; border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
+  .bs-badge.new { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .bs-badge.closed { border: 1px solid var(--border-strong); color: var(--muted); }
+  .bs-badge.back { background: var(--warning-soft); color: var(--warning); }
+  .bs-due { font-size: 12.5px; color: var(--muted); }
+  .bs-due.soon { color: var(--warning); font-weight: 650; }
+  .bs-none { color: var(--muted); }
+  .bs-kw-cell { display: flex; align-items: center; gap: 6px; }
+  .bs-kw {
+    background: var(--success-soft); color: var(--success); border-radius: 6px; padding: 3px 8px;
+    font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+  .bs-more { color: var(--muted); font-size: 12.5px; white-space: nowrap; flex-shrink: 0; }
+  .bs-newdocs { color: var(--accent); font-size: 12.5px; font-weight: 650; }
+  .bs-fit { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+  .bs-fit.fit { color: var(--success); }
+  .bs-fit.unsure { color: var(--muted); }
+  .bs-fit.not_fit { color: var(--warning); }
+  .bs-why { font-size: 13px; color: var(--muted); }
+  .c-act { display: flex; justify-content: flex-end; gap: 6px; }
+  .c-act button { font-size: 13px; padding: 7px 10px; white-space: nowrap; }
+  .bs-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 14px 12px 50px; }
+  .bs-ask-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  .bs-reason {
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .bs-reason:hover { border-color: var(--accent); color: var(--accent); }
+  .bs-peek { display: flex; flex-wrap: wrap; gap: 14px 32px; padding: 4px 16px 16px 50px; background: var(--surface-2); }
+  .bs-peek-files { flex: 2 1 380px; min-width: 0; }
+  .bs-peek-side { flex: 1 1 220px; min-width: 0; }
+  .bs-peek-title { font-size: 11px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 6px 0; }
+  .bs-file { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .bs-file button {
+    flex: 1; min-width: 0; background: none; border: 0; padding: 0; font: inherit; font-size: 13.5px; font-weight: 600;
+    color: var(--accent); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bs-file button:hover { text-decoration: underline; }
+  .bs-file-kw { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+  .bs-peek-kws { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .bs-peek-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
+  .bs-peek .linkbtn { font-size: 13.5px; padding: 0; }
+
+  .bs-toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90;
+    display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px);
+    background: #161d2e; color: #ffffff; border-radius: 10px; padding: 10px 12px 10px 16px;
+    font-size: 13.5px; box-shadow: var(--shadow-md);
+  }
+  .bs-toast[hidden] { display: none; }
+  .bs-toast button { background: none; border: 0; color: #a9b6e6; font: inherit; font-weight: 700; cursor: pointer; padding: 4px; white-space: nowrap; }
+
+  .results-pagerbar { justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
+
+  /* Narrow screens: filters fold behind the Filters button */
+  @media (max-width: 900px) {
+    .bs-layout { flex-direction: column; align-items: stretch; }
+    .bs-filters { display: none; position: static; max-height: none; flex-basis: auto; }
+    .bs-layout.filters-open .bs-filters { display: block; }
+    .bs-filters-btn { display: inline-flex; }
+    .mh-status { margin-left: 0; }
+  }
+  /* Phones: each project becomes a card */
+  @media (max-width: 700px) {
+    .wrap { padding: 12px 10px 44px; }
+    .mh-search { flex-basis: 100%; max-width: none; order: 5; }
+    .mh-status #statusText { max-width: 150px; }
+    .bs-bar { padding: 0 8px; }
+    .bs-bar .view-tab { padding: 12px 7px 10px; font-size: 13.5px; }
+    .bs-bar-right .status-line { display: none; }
+    .bs-head { display: none; }
+    .bs-row { display: flex; flex-wrap: wrap; min-width: 0; padding: 10px 8px 10px 12px; gap: 2px 12px; align-items: flex-start; }
+    .bs-row > .c-name { order: 1; flex: 1 1 calc(100% - 52px); padding: 0; }
+    .bs-row > .bs-chev { order: 2; width: 44px; height: 44px; margin: -8px -4px 0 0; }
+    .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-docs, .bs-row > .c-fit { order: 3; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
+    .bs-row > .c-loc { display: none; }
+    .bs-row > .c-act { order: 4; flex: 1 1 100%; padding: 8px 0 0; justify-content: stretch; }
+    .c-act button { flex: 1; min-height: 44px; }
+    .bs-sub { white-space: normal; }
+    .bs-name { white-space: normal; }
+    .bs-ask { padding: 2px 12px 12px; }
+    .bs-peek { padding: 4px 12px 14px; }
+    .bs-file-kw { display: none; }
+  }
 </style>
 </head>
 <body>
 <header class="masthead">
   <div class="masthead-inner">
-    <div>
-      <h1 id="mastheadTitle">Bid Scout</h1>
-      <p class="subtitle">Scan. Flag. Match. Bid.</p>
+    <h1 id="mastheadTitle">Bid Scout</h1>
+    <div class="tabs mh-divisions" id="divisionTabs"></div>
+    <label class="mh-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="sr-only">Search projects</span>
+      <input type="search" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" autocomplete="off">
+    </label>
+    <div class="mh-status">
+      <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
+      <button class="mh-btn" id="runNowBtn" onclick="runNow()">Run now</button>
+      <button class="mh-btn mh-btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
     </div>
-    <div class="masthead-actions">
+    <nav class="masthead-actions" aria-label="Settings and the bid board">
+      <button class="theme-toggle" onclick="openModal('sites')" title="Web pages scanned daily">Sites <span class="mh-count" id="sitesCount">&ndash;</span></button>
+      <button class="theme-toggle" onclick="openModal('keywords')" title="Words and phrases used to judge whether a plan is worth pursuing">Keywords <span class="mh-count" id="keywordsCount">&ndash;</span></button>
       <a class="theme-toggle" id="bidBoardLink" href="/workflow/" target="bidboard"
          onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
          title="Track the projects this division is bidding on">Bid board</a>
       <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
         <span id="themeToggleIcon" style="display:inline-flex"></span><span id="themeToggleLabel">Auto</span>
       </button>
-    </div>
+    </nav>
+  </div>
+  <!-- While a scan runs (or just after one): what it's doing, and how far along -->
+  <div class="mh-strip">
+    <div class="status-line" id="statusDetail"></div>
+    <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
   </div>
 </header>
 <div class="wrap">
-
-  <div class="tabs" id="divisionTabs"></div>
 
   <div class="card" id="addDivisionCard" style="display:none;">
     <h2>New division</h2>
@@ -1026,164 +1252,94 @@
     </div>
   </div>
 
-  <div class="summary-grid">
-    <div class="summary-card status-card">
-      <div class="summary-top">
-        <span class="summary-title">Status</span>
+  <div class="bs-layout" id="bsLayout">
+    <!-- Filters: always in view on a wide screen; behind the Filters button on a phone -->
+    <aside class="bs-filters" id="filtersPanel" aria-label="Filters">
+      <div class="bf-head">
+        <span class="bf-heading">Filters</span>
+        <button type="button" class="linkbtn" id="clearFiltersBtn" onclick="clearAllFilters()" hidden>Clear all</button>
       </div>
-      <span class="summary-sub"><span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span></span>
-      <div class="status-line" id="statusDetail"></div>
-      <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
-      <div class="row" style="margin-top:auto; gap:8px;">
-        <button class="btn-primary" id="runNowBtn" onclick="runNow()">Run scan now</button>
-        <button class="btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel scan</button>
+      <div class="bf-group">
+        <div class="bf-title">Show</div>
+        <label class="bf-opt"><input type="checkbox" id="fNew" onchange="toggleNewFilter()"><span class="bf-label">New projects only</span><span class="bf-count" id="newCount"></span></label>
+        <label class="bf-opt"><input type="checkbox" id="fUpdated" onchange="toggleUpdatedFilter()"><span class="bf-label">New documents only</span><span class="bf-count" id="updatedCount"></span></label>
+        <label class="bf-opt"><input type="checkbox" id="fClosed" onchange="toggleClosedFilter()"><span class="bf-label">Include closed projects</span></label>
       </div>
-    </div>
-    <button class="summary-card" onclick="openModal('sites')">
-      <div class="summary-top">
-        <span class="summary-title">Sites</span>
-        <span class="summary-count" id="sitesCount">&ndash;</span>
+      <div class="bf-group">
+        <div class="bf-title">Bid date</div>
+        <label class="bf-opt"><input type="radio" name="fBid" value="" onchange="pickBid(this)"><span class="bf-label">Any bid date</span></label>
+        <label class="bf-opt"><input type="radio" name="fBid" value="7" onchange="pickBid(this)"><span class="bf-label">Opening within 7 days</span></label>
+        <label class="bf-opt"><input type="radio" name="fBid" value="30" onchange="pickBid(this)"><span class="bf-label">Opening within 30 days</span></label>
+        <label class="bf-opt"><input type="radio" name="fBid" value="past" onchange="pickBid(this)"><span class="bf-label">Already opened</span></label>
+        <label class="bf-opt"><input type="radio" name="fBid" value="none" onchange="pickBid(this)"><span class="bf-label">No bid date</span></label>
       </div>
-      <span class="summary-sub">Web pages scanned daily around <strong class="local-schedule" data-utc="{{ schedule_utc_hm }}">{{ display_schedule }}</strong>.</span>
-      <span class="summary-manage">Manage sites &rarr;</span>
-    </button>
-    <button class="summary-card" onclick="openModal('keywords')">
-      <div class="summary-top">
-        <span class="summary-title">Keywords</span>
-        <span class="summary-count" id="keywordsCount">&ndash;</span>
+      <div class="bf-group" id="fSiteGroup" hidden>
+        <div class="bf-title">Site</div>
+        <div id="fSiteOptions"></div>
       </div>
-      <span class="summary-sub">Words and phrases used to judge whether a plan is worth pursuing.</span>
-      <span class="summary-manage">Manage keywords &rarr;</span>
-    </button>
-  </div>
+      <div class="bf-group" id="fFitGroup" hidden>
+        <div class="bf-title">Suggestion</div>
+        <div id="fFitOptions"></div>
+      </div>
+      <div class="bf-group" id="fKeywordGroup" hidden>
+        <div class="bf-title">Keyword</div>
+        <div class="bf-chips" id="fKeywordOptions"></div>
+      </div>
+    </aside>
 
-  <div class="card">
-    <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 14px;">
-      <div class="row" style="gap:10px; align-items:center; margin:0;">
-        <h2 style="margin:0;">Results</h2>
-        <button type="button" id="newBadge" class="updates-badge new-badge" style="display:none;" onclick="showNewOnly()"></button>
-        <button type="button" id="updatesBadge" class="updates-badge" style="display:none;" onclick="showUpdatedOnly()"></button>
-      </div>
-      <div class="results-head-actions">
-        <div class="filter-wrap">
-          <button type="button" id="searchToggleBtn" class="icon-btn bordered" aria-label="Search projects" aria-expanded="false" onclick="toggleSearchMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
-          <div class="filter-menu search-menu" id="searchMenu">
-            <div class="row" style="gap:8px; padding:4px; flex-wrap:nowrap;">
-              <input type="text" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" style="flex:1; min-width:0;">
-              <button type="button" class="btn-ghost" id="searchClearBtn" style="display:none;" onclick="clearResultsSearch()">Clear</button>
-            </div>
-          </div>
+    <section class="bs-results">
+      <div class="bs-bar">
+        <div class="view-tabs" role="tablist" aria-label="To review, bid board, or not a fit">
+          <button type="button" class="view-tab" id="viewTabReview" role="tab" onclick="switchResultsView('review')">To Review<span class="vt-count" id="viewCountReview"></span></button>
+          <button type="button" class="view-tab" id="viewTabJira" role="tab" onclick="switchResultsView('jira')">Bid Board<span class="vt-count" id="viewCountJira"></span></button>
+          <button type="button" class="view-tab" id="viewTabNotFit" role="tab" onclick="switchResultsView('not_fit')">Not a Fit<span class="vt-count" id="viewCountNotFit"></span></button>
         </div>
-        <div class="filter-wrap">
-          <button type="button" id="filterToggleBtn" class="icon-btn bordered" aria-label="Filter projects" aria-expanded="false" onclick="toggleFilterMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
-          <div class="filter-menu" id="filterMenu">
-            <div class="fm-group open" id="filterShowGroup">
-              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
-                <span class="fm-head-label">Show</span><span class="fm-head-val" id="fmShowVal"></span><span class="fm-chev">&#9656;</span>
-              </button>
-              <div class="fm-body">
-                <button type="button" class="fm-toggle" id="fmNewToggle" onclick="toggleNewFilter()">
-                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                  New projects only
-                </button>
-                <button type="button" class="fm-toggle" id="fmUpdatedToggle" onclick="toggleUpdatedFilter()">
-                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                  New documents only
-                </button>
-                <button type="button" class="fm-toggle" id="fmClosedToggle" onclick="toggleClosedFilter()">
-                  <span class="fm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                  Show closed projects
-                </button>
-              </div>
-            </div>
-            <div class="fm-group" id="filterKeywordGroup" hidden>
-              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
-                <span class="fm-head-label">Keyword</span><span class="fm-head-val" id="fmKeywordVal"></span><span class="fm-chev">&#9656;</span>
-              </button>
-              <div class="fm-body" id="filterKeywordOptions"></div>
-            </div>
-            <div class="fm-group" id="filterBidGroup">
-              <button type="button" class="fm-head" onclick="toggleFmGroup(this)">
-                <span class="fm-head-label">Bid date</span><span class="fm-head-val" id="fmBidVal"></span><span class="fm-chev">&#9656;</span>
-              </button>
-              <div class="fm-body">
-                <button type="button" data-bid="" onclick="pickBid(this)">Any bid date</button>
-                <button type="button" data-bid="7" onclick="pickBid(this)">Opening within 7 days</button>
-                <button type="button" data-bid="30" onclick="pickBid(this)">Opening within 30 days</button>
-                <button type="button" data-bid="past" onclick="pickBid(this)">Already opened</button>
-                <button type="button" data-bid="none" onclick="pickBid(this)">No bid date</button>
-              </div>
-            </div>
-          </div>
+        <div class="bs-bar-right">
+          <span class="status-line" id="resultsShown"></span>
+          <button type="button" class="btn-ghost bs-filters-btn" id="filtersToggleBtn" onclick="toggleFiltersPanel()" aria-expanded="false" aria-controls="filtersPanel">Filters<span class="bf-count" id="filtersActiveCount"></span></button>
+          <a id="downloadBtn" class="btn-ghost bs-export" style="display:none;" href="#" title="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Export</a>
         </div>
-        <div class="filter-wrap">
-          <button type="button" id="sortToggleBtn" class="icon-btn bordered" aria-label="Sort projects" aria-expanded="false" onclick="toggleSortMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg></button>
-          <div class="filter-menu" id="sortMenu">
-            <div class="fm-group open">
-              <div class="fm-head" style="cursor:default;"><span class="fm-head-label">Sort by</span></div>
-              <div class="fm-body" id="sortOptions">
-                <button type="button" data-sort="flagged" onclick="pickSort(this)">Flagged first</button>
-                <button type="button" data-sort="bid" onclick="pickSort(this)">Bid date &mdash; soonest</button>
-                <button type="button" data-sort="keywords" onclick="pickSort(this)">Most keywords</button>
-                <button type="button" data-sort="recent" onclick="pickSort(this)">Recently found</button>
-                <button type="button" data-sort="name" onclick="pickSort(this)">Name (A&ndash;Z)</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <a id="downloadBtn" class="icon-btn bordered" style="display:none;" href="#" title="Download matches (.xlsx)" aria-label="Download matched documents as an Excel spreadsheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>
       </div>
-    </div>
 
-    <div class="view-tabs" role="tablist" aria-label="To review, bid board, or not a fit">
-      <button type="button" class="view-tab" id="viewTabReview" role="tab" onclick="switchResultsView('review')">To Review<span class="vt-count" id="viewCountReview"></span></button>
-      <button type="button" class="view-tab" id="viewTabJira" role="tab" onclick="switchResultsView('jira')">Bid Board<span class="vt-count" id="viewCountJira"></span></button>
-      <button type="button" class="view-tab" id="viewTabNotFit" role="tab" onclick="switchResultsView('not_fit')">Not a Fit<span class="vt-count" id="viewCountNotFit"></span></button>
-      <button type="button" class="stats-peek" id="statsPeekBtn" aria-label="Toggle flagged counts" onclick="toggleStatsPeek()"></button>
-    </div>
-
-    <div class="row" id="statsRow" style="display:none; gap: 12px; margin-bottom: 12px;">
-      <div class="stat-tile stat-tile-primary">
-        <div class="stat-label">Projects flagged</div>
-        <div class="stat-value" id="statFlagged">0</div>
-        <div class="stat-sub" id="statFlaggedSub"></div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Documents flagged</div>
-        <div class="stat-value" id="statDocs">0</div>
-        <div class="stat-sub" id="statDocsSub"></div>
-      </div>
-    </div>
-
-    <div class="site-tabs" id="siteTabs" style="display:none;" role="tablist" aria-label="Filter by source site"></div>
-
-    <div class="row results-toolbar" style="margin-bottom: 6px;">
       <!-- Retired match-status filter: To Review only ever holds matched
            projects now and unmatched ones file themselves under Not a Fit.
            Kept (always "") so the code paths that read it stay simple. -->
       <select id="resultsStatusFilter" hidden><option value="" selected></option></select>
-    </div>
 
-    <ul class="project-list" id="projectList"></ul>
-    <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
-
-    <div class="row results-pagerbar" style="justify-content: space-between; margin-top: 12px; gap: 10px; flex-wrap: wrap;">
-      <div class="row" style="gap:10px; align-items:center;">
-        <span class="status-line" id="resultsPageInfo"></span>
-        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted);">
-          Per page
-          <select id="resultsPageSizeSelect" onchange="onPageSizeChange(this)" style="width:auto;">
-            <option value="15">15</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
-        </label>
+      <div class="bs-table">
+        <div class="bs-head">
+          <span></span>
+          <button type="button" class="bs-sort" data-sort="name" onclick="pickSort(this)">Project<span class="bs-arrow"></span></button>
+          <button type="button" class="bs-sort" data-sort="bid" onclick="pickSort(this)">Bid date<span class="bs-arrow"></span></button>
+          <span class="bs-col-loc">Location</span>
+          <button type="button" class="bs-sort" data-sort="keywords" onclick="pickSort(this)">Keywords<span class="bs-arrow"></span></button>
+          <button type="button" class="bs-sort" data-sort="docs" onclick="pickSort(this)">Documents<span class="bs-arrow"></span></button>
+          <span id="bsColStatus">Suggestion</span>
+          <span class="bs-col-act"></span>
+        </div>
+        <ul class="project-list" id="projectList"></ul>
+        <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
       </div>
-      <div class="pager" id="resultsPager"></div>
-    </div>
+
+      <div class="row results-pagerbar">
+        <div class="row" style="gap:10px; align-items:center;">
+          <span class="status-line" id="resultsPageInfo"></span>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted);">
+            Per page
+            <select id="resultsPageSizeSelect" onchange="onPageSizeChange(this)" style="width:auto;">
+              <option value="15">15</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+        <div class="pager" id="resultsPager"></div>
+      </div>
+    </section>
   </div>
 
+  <div class="bs-toast" id="bsToast" role="status" hidden><span id="bsToastText"></span><button type="button" id="bsToastBtn"></button></div>
 
 </div>
 
@@ -1759,12 +1915,6 @@ async function renderPdfPage(pdf, wrap, token) {
 }
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  const fm = document.getElementById('filterMenu');
-  if (fm && fm.classList.contains('open')) { closeFilterMenu(); return; }
-  const sm = document.getElementById('sortMenu');
-  if (sm && sm.classList.contains('open')) { closeSortMenu(); return; }
-  const seaM = document.getElementById('searchMenu');
-  if (seaM && seaM.classList.contains('open')) { closeSearchMenu(); return; }
   if (document.getElementById('pdfModal').classList.contains('open')) { closePdfModal(); return; }
   if (document.getElementById('learnModal').classList.contains('open')) { closeLearn(); return; }
   closeModal();
@@ -1961,10 +2111,7 @@ function switchDivision(id) {
   applyFilterPrefs(id);
   // Clear results UI so nothing from the previous division flashes through.
   document.getElementById('projectList').innerHTML = '';
-  document.getElementById('siteTabs').style.display = 'none';
-  document.getElementById('filterKeywordOptions').innerHTML = '';
-  document.getElementById('filterKeywordGroup').hidden = true;
-  document.getElementById('statsRow').style.display = 'none';
+  resetDataFilters();
   clearResultsCounts('');
   renderDivisionTabs();
   updateUrl();
@@ -3375,6 +3522,8 @@ function saveFilterPrefs() {
       newOnly: currentResultsNew,
       view: currentResultsView,
       sort: currentResultsSort,
+      dir: currentResultsDir,
+      fit: currentResultsFit,
     }));
   } catch (e) { /* per-viewer convenience only */ }
 }
@@ -3399,13 +3548,12 @@ function applyFilterPrefs(divisionId, urlSite) {
   currentResultsView = ({ active: 'review', done: 'not_fit' })[saved.view] || saved.view;
   if (RESULT_VIEWS.indexOf(currentResultsView) < 0) currentResultsView = 'review';
   currentResultsSort = saved.sort || 'bid';
+  currentResultsDir = saved.dir === 'desc' ? 'desc' : 'asc';
+  currentResultsFit = Array.isArray(saved.fit) ? saved.fit.filter(function(f) { return ['fit', 'unsure', 'not_fit'].indexOf(f) >= 0; }) : [];
+  peekKey = askKey = null;
   document.getElementById('resultsSearch').value = '';
   document.getElementById('resultsStatusFilter').value = '';
   document.getElementById('keywordFilter').value = '';
-  updateSearchToggleState();
-  closeSearchMenu();
-  closeFilterMenu();
-  closeSortMenu();
   syncFilterUI();
   syncSortUI();
   syncViewTabs();
@@ -3438,37 +3586,34 @@ let resultsSearchDebounce = null;
 let currentResultsSite = '';
 let currentResultsKeyword = '';
 let currentResultsBid = '';         // '' | '7' | '30' | 'past' | 'none'
-let currentResultsClosed = false;   // "Show closed projects" toggle
-let currentResultsUpdated = false;  // "New documents only" toggle
-let currentResultsNew = false;      // "New projects only" toggle
-
-// Flagged-count tiles are hidden by default — only the unlabeled dot at the
-// end of the Active/Done tabs reveals them, remembered per browser.
-function statsPeekEnabled() {
-  try { return localStorage.getItem('statsPeek') === '1'; } catch (e) { return false; }
-}
-function toggleStatsPeek() {
-  const on = !statsPeekEnabled();
-  try { localStorage.setItem('statsPeek', on ? '1' : '0'); } catch (e) {}
-  document.getElementById('statsPeekBtn').classList.toggle('active', on);
-  loadResultsInfo();
-}
-let currentResultsView = 'review';  // "review" | "jira" | "not_fit" — the folder tabs
+let currentResultsClosed = false;   // "Include closed projects"
+let currentResultsUpdated = false;  // "New documents only"
+let currentResultsNew = false;      // "New projects only"
+let currentResultsFit = [];         // suggestion buckets to keep: 'fit' | 'unsure' | 'not_fit'
+let currentResultsView = 'review';  // "review" | "jira" | "not_fit" — the tabs over the table
 const RESULT_VIEWS = ['review', 'jira', 'not_fit'];
 let notFitReasons = [];
-let currentResultsSort = 'bid';     // flagged | bid | keywords | recent | name
+let currentResultsSort = 'bid';     // name | bid | keywords | docs (also flagged | recent, from before)
+let currentResultsDir = 'asc';      // 'desc' flips the column's natural order
+let peekKey = null;                 // the project opened in place (chevron)
+let askKey = null;                  // the project asking "why isn't it a fit?"
 
-// The "new projects" / "new docs" badges and the tab counts belong to one
-// division — blank them on a switch ('' = loading) and zero them when the
-// division has no scans, so the previous division's numbers never linger.
+// The tab counts belong to one division — blank them on a switch ('' =
+// loading) and zero them when the division has no scans, so the previous
+// division's numbers never linger.
 function clearResultsCounts(v) {
-  ['updatesBadge', 'newBadge'].forEach(function(id) {
-    const b = document.getElementById(id);
-    if (b) b.style.display = 'none';
-  });
+  ['newCount', 'updatedCount'].forEach(function(id) { document.getElementById(id).textContent = ''; });
   ['viewCountReview', 'viewCountJira', 'viewCountNotFit'].forEach(function(id) {
     document.getElementById(id).textContent = v;
   });
+}
+
+// Site / Suggestion / Keyword filters come from the data; hide them until it's in.
+function resetDataFilters() {
+  document.getElementById('fSiteGroup').hidden = true;
+  document.getElementById('fFitGroup').hidden = true;
+  document.getElementById('fKeywordGroup').hidden = true;
+  document.getElementById('fKeywordOptions').innerHTML = '';
 }
 
 async function loadResultsInfo() {
@@ -3477,19 +3622,16 @@ async function loadResultsInfo() {
   const info = await api('/api/' + div + '/results-info');
   if (div !== currentDivision) return;
   const btn = document.getElementById('downloadBtn');
-  const statsRow = document.getElementById('statsRow');
 
   if (!info.exists) {
     btn.style.display = 'none';
-    statsRow.style.display = 'none';
-    document.getElementById('siteTabs').style.display = 'none';
-    document.getElementById('filterKeywordOptions').innerHTML = '';
-    document.getElementById('filterKeywordGroup').hidden = true;
+    resetDataFilters();
     document.getElementById('projectList').innerHTML = '';
     const emptyEl = document.getElementById('resultsEmpty');
     emptyEl.textContent = 'No scans yet — run a scan to see projects here.';
     emptyEl.style.display = 'block';
     document.getElementById('resultsPageInfo').textContent = '';
+    document.getElementById('resultsShown').textContent = '';
     document.getElementById('resultsPager').innerHTML = '';
     clearResultsCounts('0');
     return;
@@ -3499,85 +3641,95 @@ async function loadResultsInfo() {
   btn.href = '/download/' + currentDivision + '/results';
   // The download is matches-only, so there's nothing to download with no hits.
   btn.style.display = (st.documents_matched || 0) > 0 ? '' : 'none';
-
-  document.getElementById('statFlagged').textContent = st.projects_flagged || 0;
-  document.getElementById('statFlaggedSub').textContent =
-    'of ' + (st.projects_scanned || 0) + ' scanned';
-  document.getElementById('statDocs').textContent = st.documents_matched || 0;
-  document.getElementById('statDocsSub').textContent =
-    'of ' + (st.documents_scanned || 0) + ' scanned';
-  statsRow.style.display = statsPeekEnabled() ? 'flex' : 'none';
-
   renderKeywordFilterOptions(st.top_keywords || []);
 
   await loadProjects();
 }
 
-function renderSiteTabs(sites) {
-  const bar = document.getElementById('siteTabs');
-  bar.innerHTML = '';
-
-  // Shown even with a single site, so the row (and which site the list is
-  // from) doesn't come and go between To Review, Bid Board and Not a Fit.
-  if (!sites || !sites.length) {
-    bar.style.display = 'none';
-    if (currentResultsSite) { currentResultsSite = ''; updateUrl(); }
-    return;
+function filterOpt(type, name, checked, label, count, onPick, dotCls) {
+  const l = document.createElement('label');
+  l.className = 'bf-opt';
+  const inp = document.createElement('input');
+  inp.type = type;
+  if (type === 'radio') inp.name = name;
+  inp.checked = checked;
+  inp.onchange = onPick;
+  l.appendChild(inp);
+  if (dotCls) {
+    const d = document.createElement('span');
+    d.className = 'bf-dot ' + dotCls;
+    l.appendChild(d);
   }
+  const t = document.createElement('span');
+  t.className = 'bf-label';
+  t.textContent = label;
+  l.appendChild(t);
+  if (count != null) {
+    const c = document.createElement('span');
+    c.className = 'bf-count';
+    c.textContent = count;
+    l.appendChild(c);
+  }
+  return l;
+}
 
-  const val = function(s) { return s.count; };
-  const total = sites.reduce(function(a, s) { return a + val(s); }, 0);
-
-  if (currentResultsSite && !sites.some(function(s) { return s.name === currentResultsSite; })) {
+// [{name, count}] — counts reflect every other filter, not the site itself.
+function renderSiteOptions(sites) {
+  const group = document.getElementById('fSiteGroup');
+  const box = document.getElementById('fSiteOptions');
+  box.innerHTML = '';
+  if (currentResultsSite && !(sites || []).some(function(s) { return s.name === currentResultsSite; })) {
     currentResultsSite = '';
     updateUrl();
   }
+  if (!sites || !sites.length) { group.hidden = true; return; }
+  const total = sites.reduce(function(a, s) { return a + s.count; }, 0);
+  box.appendChild(filterOpt('radio', 'fSite', !currentResultsSite, 'All sites', total, function() { pickSite(''); }));
+  sites.forEach(function(s) {
+    box.appendChild(filterOpt('radio', 'fSite', currentResultsSite === s.name, s.name, s.count, function() { pickSite(s.name); }));
+  });
+  group.hidden = false;
+}
 
-  function tab(key, label, count) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'site-tab' + (key === currentResultsSite ? ' active' : '');
-    b.dataset.site = key;
-    b.setAttribute('role', 'tab');
-    b.setAttribute('aria-selected', key === currentResultsSite ? 'true' : 'false');
-    b.innerHTML = escapeHtml(label) + '<span class="rtab-count">' + count + '</span>';
-    b.onclick = function() { pickSite(key); };
-    bar.appendChild(b);
-  }
-  tab('', 'All sites', total);
-  sites.forEach(function(s) { tab(s.name, s.name, val(s)); });
-  bar.style.display = 'flex';
+// {fit, unsure, not_fit} counts under every other filter. Suggestions are for To Review only.
+function renderFitOptions(counts) {
+  const group = document.getElementById('fFitGroup');
+  const box = document.getElementById('fFitOptions');
+  box.innerHTML = '';
+  counts = counts || {};
+  const any = (counts.fit || 0) + (counts.unsure || 0) + (counts.not_fit || 0) > 0;
+  if (currentResultsView !== 'review' || !fitEnabled || (!any && !currentResultsFit.length)) { group.hidden = true; return; }
+  [['fit', 'Likely fit'], ['unsure', 'Not sure'], ['not_fit', 'Likely not a fit']].forEach(function(f) {
+    box.appendChild(filterOpt('checkbox', '', currentResultsFit.indexOf(f[0]) >= 0, f[1], counts[f[0]] || 0, function() { toggleFitFilter(f[0]); }, f[0]));
+  });
+  group.hidden = false;
 }
 
 // [[keyword, projectCount], …] from the results-info stats
 function renderKeywordFilterOptions(pairs) {
-  if (document.getElementById('filterMenu').classList.contains('open')) { syncFilterUI(); return; }
-  const menuOpts = document.getElementById('filterKeywordOptions');
-  const menuGroup = document.getElementById('filterKeywordGroup');
-  menuOpts.innerHTML = '';
-
+  const box = document.getElementById('fKeywordOptions');
+  const group = document.getElementById('fKeywordGroup');
+  box.innerHTML = '';
   if (!pairs || !pairs.length) {
-    menuGroup.hidden = true;
+    group.hidden = true;
     currentResultsKeyword = '';
     syncFilterUI();
     return;
   }
-  menuGroup.hidden = false;
-
   if (currentResultsKeyword && !pairs.some(function(kv) { return kv[0] === currentResultsKeyword; })) {
     currentResultsKeyword = '';
   }
-
-  function opt(kw, label, count) {
+  pairs.slice(0, 16).forEach(function(kv) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.dataset.kw = kw;
-    b.innerHTML = escapeHtml(label) + (count == null ? '' : '<span class="rtab-count">' + count + '</span>');
-    b.onclick = function() { pickKeyword(kw); };
-    menuOpts.appendChild(b);
-  }
-  opt('', 'Any keyword', null);
-  pairs.forEach(function(kv) { opt(kv[0], kv[0], kv[1]); });
+    b.className = 'bf-chip';
+    b.dataset.kw = kv[0];
+    b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = escapeHtml(kv[0]) + '<span class="bf-count">' + kv[1] + '</span>';
+    b.onclick = function() { pickKeyword(currentResultsKeyword === kv[0] ? '' : kv[0]); };
+    box.appendChild(b);
+  });
+  group.hidden = false;
   syncFilterUI();
 }
 
@@ -3588,7 +3740,6 @@ function pickKeyword(kw) {
     loadProjects();
   }
   syncFilterUI();
-  closeFilterMenu();
 }
 
 async function loadProjects() {
@@ -3604,142 +3755,46 @@ async function loadProjects() {
   if (currentResultsClosed) params.set('include_closed', '1');
   if (currentResultsUpdated) params.set('updated', '1');
   if (currentResultsNew) params.set('new', '1');
+  if (currentResultsFit.length && currentResultsView === 'review') params.set('fit', currentResultsFit.join(','));
   params.set('view', currentResultsView);
   if (currentResultsSort && currentResultsSort !== 'bid') params.set('sort', currentResultsSort);
+  if (currentResultsDir === 'desc') params.set('dir', 'desc');
   saveFilterPrefs();
 
   const div = currentDivision;
   const data = await api('/api/' + div + '/results-grouped?' + params.toString());
-  if (div !== currentDivision) return;  // switched tabs while this was loading
+  if (div !== currentDivision) return;  // switched divisions while this was loading
   projectsData = data.projects || [];
   resultsTotal = data.total || 0;
   renderUpdatesBadge(data.updated_total || 0);
   renderNewBadge(data.new_total || 0);
-  renderSiteTabs(data.sites);
   const vc = data.view_counts || {};
   document.getElementById('viewCountReview').textContent = vc.review != null ? vc.review : '';
   document.getElementById('viewCountJira').textContent = vc.jira != null ? vc.jira : '';
   document.getElementById('viewCountNotFit').textContent = vc.not_fit != null ? vc.not_fit : '';
   if (data.not_fit_reasons) notFitReasons = data.not_fit_reasons;
   renderFitTraining(data.fit_training);
+  renderSiteOptions(data.sites);
+  renderFitOptions(data.fit_counts);
+  syncFilterUI();
 
-  const list = document.getElementById('projectList');
   const empty = document.getElementById('resultsEmpty');
-  list.innerHTML = '';
   empty.style.display = projectsData.length ? 'none' : 'block';
   if (currentResultsView === 'jira' && !search) {
     empty.textContent = 'Nothing on the bid board yet.';
   } else if (currentResultsView === 'not_fit' && !search) {
     empty.textContent = 'Nothing marked "not a fit" yet.';
-  } else if (search || currentResultsSite || currentResultsKeyword || currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew) {
-    empty.textContent = 'No projects match that filter.';
+  } else if (anyResultsFilter()) {
+    empty.textContent = 'No projects match these filters.';
   } else if (currentResultsView === 'review') {
     empty.textContent = 'Nothing to review — no new projects have matched your keywords. Projects without matches are under Not a Fit.';
   } else {
     empty.textContent = 'No results yet — run a scan to see projects here.';
   }
+  renderProjectRows();
 
-  projectsData.forEach(function(p, i) {
-    const li = document.createElement('li');
-    if (p.bucket === 'not_fit') li.classList.add('p-done');
-    if (p.closed) li.classList.add('p-closed');
-    if (p.updated) li.classList.add('p-updated');
-    if (p.reopened) li.classList.add('p-reopened');
-    if (p.overdue) li.classList.add('p-overdue');
-    li.onclick = function() { openProjectModal(i); };
-
-    if (p.reopened) {
-      const badges = document.createElement('div');
-      badges.className = 'p-badges';
-      if (p.reopened) {
-        const chk = document.createElement('span');
-        chk.className = 'p-check';
-        chk.title = 'Was marked not a fit (' + (p.decision_reason || 'no reason') + ') — new matching document since';
-        chk.innerHTML = ICON_NOT_FIT;
-        badges.appendChild(chk);
-      }
-      li.appendChild(badges);
-    }
-
-    const name = document.createElement('div');
-    name.className = 'p-name';
-    name.textContent = p.project;
-    const subParts = [];
-    if (p.source_prefix) subParts.push(p.source_prefix);
-    if (p.bid_date) subParts.push('bids ' + formatBidWhen(p));
-    if (p.decision === 'duplicate') subParts.push('Duplicate of ' + (p.duplicate_of_site || p.duplicate_of_name || ''));
-    else if (p.bucket === 'not_fit' && p.decision_reason) subParts.push(p.decision_reason);
-    if (subParts.length) {
-      const sub = document.createElement('span');
-      sub.className = 'p-sub';
-      sub.textContent = subParts.join('  ·  ');
-      if (p.bid_date) sub.title = 'Bid opening ' + formatBidWhen(p, true);
-      name.appendChild(sub);
-    }
-
-    const pill = document.createElement('span');
-    if (p.closed) {
-      pill.className = 'pill closed';
-      pill.textContent = 'no longer listed';
-    } else if (p.status === 'Matched') {
-      pill.className = 'pill match';
-      pill.textContent = p.keywords.length + (p.keywords.length === 1 ? ' keyword' : ' keywords');
-    } else if (p.status === 'Download failed') {
-      pill.className = 'pill fail';
-      pill.textContent = "couldn't download";
-    } else {
-      pill.className = 'pill nomatch';
-      pill.textContent = 'no matches';
-    }
-
-    // A project can be both inside its own "first seen" window and have new
-    // documents added since (e.g. discovered 2 days ago, gains a fresh match
-    // today) — the two badges say overlapping things, so show only the more
-    // specific one (how many new documents) when both would otherwise apply.
-    const badgeSlot = document.createElement('span');
-    badgeSlot.className = 'p-badge-slot';
-    if (p.updated) {
-      const u = document.createElement('span');
-      u.className = 'pill updated';
-      const n = p.new_file_count || 0;
-      u.textContent = n ? '+' + n + ' new' : 'new document';
-      u.title = p.reopened
-        ? 'New document(s) added since you marked this project not a fit'
-        : 'New document(s) added to this project';
-      badgeSlot.appendChild(u);
-    } else if (isFirstScan(p)) {
-      const fs = document.createElement('span');
-      fs.className = 'pill firstscan';
-      fs.textContent = 'New';
-      const seenDay = p.first_seen ? new Date(p.first_seen).getDay() : -1;
-      fs.title = 'First time this project has been seen — shows for '
-        + (seenDay === 5 ? '120 hours (first seen on a Friday)' : '72 hours');
-      badgeSlot.appendChild(fs);
-    }
-
-    const statusSlot = document.createElement('span');
-    statusSlot.className = 'p-status-slot';
-    statusSlot.appendChild(pill);
-    // the AI suggestion sits under the keyword pill, not in the title line
-    const fitLab = p.bucket === 'review' ? fitLabel(p.fit) : null;
-    if (fitLab && fitLab.cls !== 'unsure') {
-      const ft = document.createElement('span');
-      ft.className = 'p-fit ' + fitLab.cls;
-      ft.textContent = fitLab.text;
-      if (p.fit.explanation) ft.title = p.fit.explanation;
-      statusSlot.appendChild(ft);
-    }
-
-    const meta = document.createElement('div');
-    meta.className = 'p-meta';
-    meta.appendChild(badgeSlot);
-    meta.appendChild(statusSlot);
-
-    li.appendChild(name);
-    li.appendChild(meta);
-    list.appendChild(li);
-  });
-
+  document.getElementById('resultsShown').textContent =
+    resultsTotal ? resultsTotal + (resultsTotal === 1 ? ' project' : ' projects') : '';
   const pageInfo = document.getElementById('resultsPageInfo');
   if (resultsTotal === 0) {
     pageInfo.textContent = '';
@@ -3750,6 +3805,209 @@ async function loadProjects() {
   }
   renderPager();
 }
+
+// ---- One row per project: the columns, then (opened) the quick look underneath ----
+
+const ICON_ROW_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+
+function daysUntil(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return null;
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return Math.round((d - t) / 864e5);
+}
+
+function dueText(n) {
+  if (n == null) return '';
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n > 1) return 'in ' + n + ' days';
+  return n === -1 ? 'opened yesterday' : 'opened ' + (-n) + ' days ago';
+}
+
+function projectRowHtml(p, i) {
+  const open = peekKey === p.key;
+  const cls = ['bs-item'];
+  if (open) cls.push('is-open');
+  if (p.closed) cls.push('p-closed');
+  if (p.overdue) cls.push('p-overdue');
+
+  let badges = '';
+  if (p.closed) badges += '<span class="bs-badge closed">no longer listed</span>';
+  else if (p.reopened) badges += '<span class="bs-badge back" title="Marked not a fit (' + escapeHtml(p.decision_reason || 'no reason') + ') — a new matching document came in since">new document</span>';
+  else if (isFirstScan(p)) badges += '<span class="bs-badge new" title="First seen in the last few days">NEW</span>';
+
+  const sub = [p.source_prefix];
+  if (p.decision === 'duplicate') sub.push('Duplicate of ' + (p.duplicate_of_site || p.duplicate_of_name || ''));
+
+  let bid = '<span class="bs-none">—</span>';
+  if (p.bid_date) {
+    const n = daysUntil(p.bid_date);
+    bid = '<div title="Bid opening ' + escapeHtml(formatBidWhen(p, true)) + '">' + escapeHtml(formatBidDate(p.bid_date) + (p.bid_time ? ' · ' + p.bid_time : '')) + '</div>' +
+      '<div class="bs-due' + (n != null && n >= 0 && n <= 4 && p.bucket === 'review' ? ' soon' : '') + '">' + dueText(n) + '</div>';
+  }
+
+  let kw;
+  if (p.keywords.length) {
+    kw = '<span class="bs-kw" title="' + escapeHtml(p.keywords.join(', ')) + '">' + escapeHtml(p.keywords[0]) + '</span>' +
+      (p.keywords.length > 1 ? '<span class="bs-more">+' + (p.keywords.length - 1) + ' more</span>' : '');
+  } else {
+    kw = '<span class="bs-none">' + (p.status === 'Download failed' ? "couldn't download" : 'no matches') + '</span>';
+  }
+
+  const docs = '<div>' + p.file_count + (p.file_count === 1 ? ' file' : ' files') + '</div>' +
+    (p.updated ? '<div class="bs-newdocs">' + (p.new_file_count ? '+' + p.new_file_count + ' new' : 'new document') + '</div>' : '');
+
+  let status = '<span class="bs-none">—</span>';
+  let act = '';
+  if (p.bucket === 'review') {
+    const lab = fitLabel(p.fit);
+    if (lab) status = '<span class="bs-fit ' + lab.cls + '"' + (p.fit.explanation ? ' title="' + escapeHtml(p.fit.explanation) + '"' : '') + '><span class="bf-dot ' + lab.cls + '"></span>' + lab.text + '</span>';
+    act = '<button type="button" class="btn-primary" data-act="board">Add to Board</button>' +
+      '<button type="button" class="btn-ghost" data-act="notfit" aria-expanded="' + (askKey === p.key) + '">Not a fit</button>';
+  } else if (p.bucket === 'jira') {
+    if (p.decided_at) status = '<span class="bs-why">Added ' + new Date(p.decided_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) + '</span>';
+    act = '<button type="button" class="btn-ghost" data-act="openboard">Open in Bid Board</button>';
+  } else {
+    const why = p.decision === 'duplicate' ? 'Duplicate' : p.decision_reason;
+    if (why) status = '<span class="bs-why" title="' + escapeHtml(p.decision_note || why) + '">' + escapeHtml(why) + '</span>';
+    if (!p.auto_not_fit) act = '<button type="button" class="btn-ghost" data-act="review">Back to review</button>';
+  }
+
+  let html = '<li class="' + cls.join(' ') + '" data-i="' + i + '">' +
+    '<div class="bs-row">' +
+      '<button type="button" class="bs-chev" data-act="peek" aria-expanded="' + open + '" aria-label="' + (open ? 'Hide' : 'Show') + ' matching files for ' + escapeHtml(p.project) + '">' + ICON_ROW_CHEVRON + '</button>' +
+      '<div class="bs-cell c-name"><div class="bs-name-line"><button type="button" class="bs-name" data-act="open" title="Open project">' + escapeHtml(p.project) + '</button>' + badges + '</div>' +
+        '<div class="bs-sub">' + escapeHtml(sub.filter(Boolean).join(' · ')) + '</div></div>' +
+      '<div class="bs-cell c-bid">' + bid + '</div>' +
+      '<div class="bs-cell c-loc">' + (p.location ? escapeHtml(p.location) : '<span class="bs-none">—</span>') + '</div>' +
+      '<div class="bs-cell c-kw bs-kw-cell">' + kw + '</div>' +
+      '<div class="bs-cell c-docs">' + docs + '</div>' +
+      '<div class="bs-cell c-fit">' + status + '</div>' +
+      '<div class="bs-cell c-act">' + act + '</div>' +
+    '</div>';
+
+  if (askKey === p.key && p.bucket === 'review') {
+    html += '<div class="bs-ask"><span class="bs-ask-label">Why isn’t it a fit?</span>' +
+      notFitReasons.map(function(r) { return '<button type="button" class="bs-reason" data-act="reason" data-reason="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>'; }).join('') +
+      '<button type="button" class="linkbtn" data-act="cancelask">Cancel</button></div>';
+  }
+
+  if (open) {
+    const matched = p.files.filter(function(f) { return f.filename && f.status.indexOf('Matched') === 0; });
+    const shown = matched.slice(0, 8);
+    html += '<div class="bs-peek"><div class="bs-peek-files"><div class="bs-peek-title">Matching files</div>' +
+      (shown.length ? shown.map(function(f) {
+        return '<div class="bs-file"><button type="button" data-act="open" title="Open project">' + escapeHtml(f.filename) + '</button>' +
+          '<span class="bs-file-kw">' + escapeHtml((f.is_new ? 'new · ' : '') + f.keywords.join(', ')) + '</span></div>';
+      }).join('') : '<p class="bs-peek-note">No file matched a keyword.</p>') +
+      (matched.length > shown.length ? '<p class="bs-peek-note">+' + (matched.length - shown.length) + ' more in the project</p>' : '') +
+      '</div><div class="bs-peek-side">' +
+      (p.keywords.length ? '<div class="bs-peek-title">Keywords found</div><div class="bs-peek-kws">' +
+        p.keywords.map(function(k) { return '<span class="bs-kw">' + escapeHtml(k) + '</span>'; }).join('') + '</div>' : '') +
+      (p.bucket === 'review' && p.fit && p.fit.explanation && fitLabel(p.fit) ? '<p class="bs-peek-note">Suggestion: ' + escapeHtml(p.fit.explanation) + '</p>' : '') +
+      (p.decision_note ? '<p class="bs-peek-note">Note: ' + escapeHtml(p.decision_note) + '</p>' : '') +
+      '<button type="button" class="linkbtn" data-act="open">Open project →</button>' +
+      '</div></div>';
+  }
+  return html + '</li>';
+}
+
+function renderProjectRows() {
+  if (peekKey && !projectsData.some(function(p) { return p.key === peekKey; })) peekKey = null;
+  if (askKey && !projectsData.some(function(p) { return p.key === askKey && p.bucket === 'review'; })) askKey = null;
+  document.getElementById('projectList').innerHTML = projectsData.map(projectRowHtml).join('');
+  document.getElementById('bsColStatus').textContent =
+    ({ review: 'Suggestion', jira: 'Added', not_fit: 'Why' })[currentResultsView];
+}
+
+let toastTimer = null;
+function showToast(text, actionLabel, action) {
+  const box = document.getElementById('bsToast');
+  const btn = document.getElementById('bsToastBtn');
+  document.getElementById('bsToastText').textContent = text;
+  btn.hidden = !actionLabel;
+  btn.textContent = actionLabel || '';
+  btn.onclick = function() { box.hidden = true; if (action) action(); };
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { box.hidden = true; }, 7000);
+}
+
+function openOnBoard(p) {
+  openInTab('bidboard', '/workflow/?division=' + encodeURIComponent(currentDivision)
+    + (p.board_bid_id ? '&bid=' + encodeURIComponent(p.board_bid_id) : '&project=' + encodeURIComponent(p.key)), 'wfOpenLink');
+}
+
+// Add to Board from the row. Same checks as the project window's button:
+// a bid typed in by hand that looks like this project, or one with the same
+// name, opens the window at that question instead of adding a second bid.
+async function rowAddToBoard(p, i, btn) {
+  btn.disabled = true;
+  let cands = [];
+  try { cands = await fetchLinkCandidates(p); } catch (e) { /* board unreachable — just add */ }
+  if (cands.length && cands[0].score >= LINK_SUGGEST_AT) {
+    btn.disabled = false;
+    openProjectModal(i);
+    openLinkPanel(cands);
+    return;
+  }
+  try {
+    const res = await api('/api/' + currentDivision + '/projects/jira', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_key: p.key, summary: p.project, due_date: p.bid_date }),
+    });
+    p.board_bid_id = res.board_bid_id || null;
+    p.bucket = 'jira';
+    showToast('Added “' + p.project + '” to the bid board', 'Open', function() { openOnBoard(p); });
+    loadProjects();
+  } catch (e) {
+    btn.disabled = false;
+    if (e.status === 409 && e.body && e.body.exists) {
+      openProjectModal(i);
+      showAlreadyOnBoard(e.body.exists);
+    } else {
+      alert(e.message);
+    }
+  }
+}
+
+async function rowDecide(p, decision, reason, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await sendDecision(p, decision, reason);
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    alert(e.message);
+    return;
+  }
+  askKey = null;
+  if (decision === 'not_fit') {
+    showToast('Marked “' + p.project + '” not a fit — ' + reason, 'Undo', function() { sendDecision(p, 'review').catch(function(e) { alert(e.message); }); });
+  } else if (decision === 'review') {
+    showToast('Moved “' + p.project + '” back to To Review');
+  }
+}
+
+document.getElementById('projectList').addEventListener('click', function(e) {
+  const li = e.target.closest('li.bs-item');
+  if (!li) return;
+  const i = parseInt(li.dataset.i, 10);
+  const p = projectsData[i];
+  if (!p) return;
+  const el = e.target.closest('[data-act]');
+  const act = el ? el.dataset.act : (e.target.closest('a, input, select, textarea') || !e.target.closest('.bs-row') ? null : 'peek');
+  if (!act) return;
+  if (act === 'peek') { peekKey = peekKey === p.key ? null : p.key; renderProjectRows(); return; }
+  if (act === 'open') { openProjectModal(i); return; }
+  if (act === 'board') { rowAddToBoard(p, i, el); return; }
+  if (act === 'openboard') { openOnBoard(p); return; }
+  if (act === 'notfit') { askKey = askKey === p.key ? null : p.key; renderProjectRows(); return; }
+  if (act === 'cancelask') { askKey = null; renderProjectRows(); return; }
+  if (act === 'reason') { rowDecide(p, 'not_fit', el.dataset.reason, el); return; }
+  if (act === 'review') { rowDecide(p, 'review', null, el); return; }
+});
 
 function renderPager() {
   const pager = document.getElementById('resultsPager');
@@ -4837,7 +5095,6 @@ async function addProjectToJira(skipLinkCheck) {
 }
 
 document.getElementById('resultsSearch').addEventListener('input', function() {
-  updateSearchToggleState();
   clearTimeout(resultsSearchDebounce);
   resultsSearchDebounce = setTimeout(function() {
     resultsPage = 1;
@@ -4845,148 +5102,61 @@ document.getElementById('resultsSearch').addEventListener('input', function() {
   }, 300);
 });
 
-// The search icon glows while a search term is active, whether or not the
-// search dropdown itself is currently open.
-function updateSearchToggleState() {
-  const has = !!document.getElementById('resultsSearch').value.trim();
-  document.getElementById('searchClearBtn').style.display = has ? '' : 'none';
-  document.getElementById('searchToggleBtn').classList.toggle('active', has);
-}
-// Search opens as a dropdown anchored to its button — same treatment as the
-// filter/sort menus — so it always pops up right where it was clicked
-// instead of taking over the screen or centering in the viewport.
-function toggleSearchMenu(e) {
-  if (e) e.stopPropagation();
-  const menu = document.getElementById('searchMenu');
-  if (menu.classList.contains('open')) { closeSearchMenu(); return; }
-  closeFilterMenu();
-  closeSortMenu();
-  menu.classList.add('open');
-  keepMenuOnScreen(menu);
-  document.getElementById('searchToggleBtn').classList.add('active');
-  document.getElementById('searchToggleBtn').setAttribute('aria-expanded', 'true');
-  setTimeout(function() {
-    // Focus only after the menu has actually opened, so mobile doesn't try
-    // to zoom into a field that hasn't finished laying out yet.
-    document.getElementById('resultsSearch').focus();
-    document.addEventListener('click', onSearchOutside);
-  }, 0);
-}
-function closeSearchMenu() {
-  document.getElementById('searchMenu').classList.remove('open');
-  document.getElementById('searchToggleBtn').setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onSearchOutside);
-  updateSearchToggleState();  // drop the "open" glow back to just "has a query"
-}
-function onSearchOutside(e) {
-  const wrap = document.getElementById('searchMenu').closest('.filter-wrap');
-  if (!wrap.contains(e.target)) closeSearchMenu();
-}
-function clearResultsSearch() {
-  const input = document.getElementById('resultsSearch');
-  if (!input.value) return;
-  input.value = '';
-  updateSearchToggleState();
-  resultsPage = 1;
-  loadProjects();
-  input.focus();
-}
-
 document.getElementById('resultsStatusFilter').addEventListener('change', function() {
   resultsPage = 1;
   loadProjects();
 });
 
-// ---- Filter menu (mobile): status filter + site switch behind one button ----
-function toggleFilterMenu(e) {
-  if (e) e.stopPropagation();
-  const menu = document.getElementById('filterMenu');
-  if (menu.classList.contains('open')) { closeFilterMenu(); return; }
-  closeSortMenu();
-  closeSearchMenu();
-  // Each section starts collapsed unless it holds a non-default choice.
-  document.getElementById('filterShowGroup').classList.toggle(
-    'open',
-    currentResultsClosed || currentResultsNew || currentResultsUpdated);
-  document.getElementById('filterKeywordGroup').classList.toggle('open', !!currentResultsKeyword);
-  document.getElementById('filterBidGroup').classList.toggle('open', !!currentResultsBid);
-  menu.classList.add('open');
-  keepMenuOnScreen(menu);
-  document.getElementById('filterToggleBtn').classList.add('active');
-  document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'true');
-  setTimeout(function() { document.addEventListener('click', onFilterOutside); }, 0);
-}
-function toggleFmGroup(headEl) {
-  const group = headEl.closest('.fm-group');
-  const opening = !group.classList.contains('open');
-  group.classList.toggle('open', opening);
-  if (opening) {
-    const sel = group.querySelector('.fm-body button.sel');
-    if (sel) sel.scrollIntoView({ block: 'nearest' });
-  }
-}
-function closeFilterMenu() {
-  document.getElementById('filterMenu').classList.remove('open');
-  document.getElementById('filterToggleBtn').setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onFilterOutside);
-  syncFilterUI();  // drop the "open" glow back to just "a filter is applied"
-}
-function onFilterOutside(e) {
-  const wrap = document.getElementById('filterMenu').closest('.filter-wrap');
-  if (!wrap.contains(e.target)) closeFilterMenu();
+function anyResultsFilter() {
+  return !!document.getElementById('resultsSearch').value.trim() || !!currentResultsSite || !!currentResultsKeyword
+    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew
+    || (currentResultsFit.length > 0 && currentResultsView === 'review');
 }
 
-// ---- Sort menu ----
-function toggleSortMenu(e) {
-  if (e) e.stopPropagation();
-  const menu = document.getElementById('sortMenu');
-  if (menu.classList.contains('open')) { closeSortMenu(); return; }
-  closeFilterMenu();
-  closeSearchMenu();
-  menu.classList.add('open');
-  keepMenuOnScreen(menu);
-  document.getElementById('sortToggleBtn').classList.add('active');
-  document.getElementById('sortToggleBtn').setAttribute('aria-expanded', 'true');
-  setTimeout(function() { document.addEventListener('click', onSortOutside); }, 0);
+function clearAllFilters() {
+  document.getElementById('resultsSearch').value = '';
+  currentResultsSite = '';
+  currentResultsKeyword = '';
+  currentResultsBid = '';
+  currentResultsClosed = currentResultsUpdated = currentResultsNew = false;
+  currentResultsFit = [];
+  updateUrl();
+  resultsPage = 1;
+  syncFilterUI();
+  loadProjects();
 }
-function closeSortMenu() {
-  document.getElementById('sortMenu').classList.remove('open');
-  document.getElementById('sortToggleBtn').setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onSortOutside);
-  syncSortUI();  // drop the "open" glow back to just "sort isn't default"
+
+// Phones: the filter panel folds behind the Filters button.
+function toggleFiltersPanel() {
+  const on = document.getElementById('bsLayout').classList.toggle('filters-open');
+  document.getElementById('filtersToggleBtn').setAttribute('aria-expanded', on ? 'true' : 'false');
 }
-function onSortOutside(e) {
-  const wrap = document.getElementById('sortMenu').closest('.filter-wrap');
-  if (!wrap.contains(e.target)) closeSortMenu();
-}
+
+// Column headers sort; clicking the sorted one again flips it. Name and bid
+// date start A→Z / soonest; keywords and documents start most-first.
+const SORT_MOST_FIRST = ['keywords', 'docs'];
 function pickSort(el) {
   const v = el.dataset.sort || 'bid';
-  if (currentResultsSort !== v) {
-    currentResultsSort = v;
-    resultsPage = 1;
-    loadProjects();
-  }
+  if (currentResultsSort === v) currentResultsDir = currentResultsDir === 'desc' ? 'asc' : 'desc';
+  else { currentResultsSort = v; currentResultsDir = 'asc'; }
+  resultsPage = 1;
   syncSortUI();
-  closeSortMenu();
+  loadProjects();
 }
 function syncSortUI() {
-  document.querySelectorAll('#sortOptions button').forEach(function(b) {
-    b.classList.toggle('sel', (b.dataset.sort || 'bid') === currentResultsSort);
+  document.querySelectorAll('.bs-sort').forEach(function(b) {
+    const on = b.dataset.sort === currentResultsSort;
+    const down = SORT_MOST_FIRST.indexOf(b.dataset.sort) >= 0 ? currentResultsDir !== 'desc' : currentResultsDir === 'desc';
+    b.classList.toggle('active', on);
+    b.querySelector('.bs-arrow').textContent = on ? (down ? '↓' : '↑') : '';
+    b.setAttribute('aria-label', b.firstChild.textContent + (on ? ', sorted ' + (down ? 'descending' : 'ascending') : ', sort'));
   });
-  document.getElementById('sortToggleBtn').classList.toggle('active', currentResultsSort !== 'bid');
 }
 function pickSite(key) {
   if (currentResultsSite === key) return;
   currentResultsSite = key;
   updateUrl();
   resultsPage = 1;
-  // Mark the active tab immediately; loadProjects() re-renders the row with
-  // refreshed counts when the request lands.
-  document.querySelectorAll('#siteTabs .site-tab').forEach(function(b) {
-    const on = (b.dataset.site || '') === key;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-selected', on ? 'true' : 'false');
-  });
   loadProjects();
 }
 function toggleClosedFilter() {
@@ -4995,18 +5165,27 @@ function toggleClosedFilter() {
   syncFilterUI();
   loadProjects();
 }
+function toggleFitFilter(f) {
+  const i = currentResultsFit.indexOf(f);
+  if (i >= 0) currentResultsFit.splice(i, 1); else currentResultsFit.push(f);
+  resultsPage = 1;
+  loadProjects();
+}
 function switchResultsView(view) {
   if (view === currentResultsView) return;
   currentResultsView = view;
   resultsPage = 1;
+  peekKey = askKey = null;
   syncViewTabs();
   syncFilterUI();
   loadProjects();
 }
 function syncViewTabs() {
-  document.getElementById('viewTabReview').classList.toggle('active', currentResultsView === 'review');
-  document.getElementById('viewTabJira').classList.toggle('active', currentResultsView === 'jira');
-  document.getElementById('viewTabNotFit').classList.toggle('active', currentResultsView === 'not_fit');
+  [['viewTabReview', 'review'], ['viewTabJira', 'jira'], ['viewTabNotFit', 'not_fit']].forEach(function(t) {
+    const b = document.getElementById(t[0]);
+    b.classList.toggle('active', currentResultsView === t[1]);
+    b.setAttribute('aria-selected', currentResultsView === t[1] ? 'true' : 'false');
+  });
 }
 function toggleUpdatedFilter() {
   currentResultsUpdated = !currentResultsUpdated;
@@ -5022,76 +5201,39 @@ function toggleNewFilter() {
   syncFilterUI();
   loadProjects();
 }
+// How many projects have new documents / are new — shown beside those two filters.
 function renderUpdatesBadge(n) {
-  const b = document.getElementById('updatesBadge');
-  if (!b) return;
-  if (n > 0) {
-    b.textContent = n === 1 ? '1 project · new docs' : n + ' projects · new docs';
-    b.style.display = '';
-    b.classList.toggle('on', currentResultsUpdated);
-  } else {
-    b.style.display = 'none';
-    if (currentResultsUpdated) { currentResultsUpdated = false; syncFilterUI(); }
-  }
+  document.getElementById('updatedCount').textContent = n > 0 ? n : '';
+  if (!n && currentResultsUpdated) { currentResultsUpdated = false; syncFilterUI(); }
 }
-function showUpdatedOnly() { toggleUpdatedFilter(); }
 function renderNewBadge(n) {
-  const b = document.getElementById('newBadge');
-  if (!b) return;
-  if (n > 0) {
-    b.textContent = n === 1 ? '1 new project' : n + ' new projects';
-    b.style.display = '';
-    b.classList.toggle('on', currentResultsNew);
-  } else {
-    b.style.display = 'none';
-    if (currentResultsNew) { currentResultsNew = false; syncFilterUI(); }
-  }
+  document.getElementById('newCount').textContent = n > 0 ? n : '';
+  if (!n && currentResultsNew) { currentResultsNew = false; syncFilterUI(); }
 }
-function showNewOnly() { toggleNewFilter(); }
 function pickBid(el) {
-  const v = el.dataset.bid || '';
+  const v = el.value || '';
   if (currentResultsBid !== v) {
     currentResultsBid = v;
     resultsPage = 1;
     loadProjects();
   }
   syncFilterUI();
-  closeFilterMenu();
 }
 function syncFilterUI() {
-  const status = document.getElementById('resultsStatusFilter').value;
-  const btn = document.getElementById('filterToggleBtn');
-  const anyFilter = !!status || !!currentResultsKeyword
-    || !!currentResultsBid || currentResultsClosed || currentResultsUpdated || currentResultsNew;
-  if (btn) btn.classList.toggle('active', anyFilter);
-  document.getElementById('fmClosedToggle').classList.toggle('on', currentResultsClosed);
-  document.getElementById('fmUpdatedToggle').classList.toggle('on', currentResultsUpdated);
-  document.getElementById('fmNewToggle').classList.toggle('on', currentResultsNew);
-  const badge = document.getElementById('updatesBadge');
-  if (badge) badge.classList.toggle('on', currentResultsUpdated);
-  const newBadge = document.getElementById('newBadge');
-  if (newBadge) newBadge.classList.toggle('on', currentResultsNew);
-
-  let showLabel = '';
-  document.querySelectorAll('#filterShowGroup .fm-body button[data-val]').forEach(function(b) {
-    const on = b.dataset.val === status;
-    b.classList.toggle('sel', on);
-    if (on) showLabel = b.textContent;
+  document.getElementById('fNew').checked = currentResultsNew;
+  document.getElementById('fUpdated').checked = currentResultsUpdated;
+  document.getElementById('fClosed').checked = currentResultsClosed;
+  document.querySelectorAll('input[name="fBid"]').forEach(function(r) { r.checked = r.value === currentResultsBid; });
+  document.querySelectorAll('#fKeywordOptions .bf-chip').forEach(function(b) {
+    const on = b.dataset.kw === currentResultsKeyword;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
-  document.querySelectorAll('#filterKeywordOptions button').forEach(function(b) {
-    b.classList.toggle('sel', (b.dataset.kw || '') === currentResultsKeyword);
-  });
-  let bidLabel = '';
-  document.querySelectorAll('#filterBidGroup .fm-body button[data-bid]').forEach(function(b) {
-    const on = (b.dataset.bid || '') === currentResultsBid;
-    b.classList.toggle('sel', on);
-    if (on && currentResultsBid) bidLabel = b.textContent;
-  });
-
-  // Collapsed-section headers echo the current choice.
-  document.getElementById('fmShowVal').textContent = status === 'Matched' ? '' : showLabel;
-  document.getElementById('fmKeywordVal').textContent = currentResultsKeyword || '';
-  document.getElementById('fmBidVal').textContent = bidLabel;
+  const any = anyResultsFilter();
+  document.getElementById('clearFiltersBtn').hidden = !any;
+  const n = [currentResultsSite, currentResultsKeyword, currentResultsBid, currentResultsClosed, currentResultsUpdated, currentResultsNew,
+    currentResultsFit.length && currentResultsView === 'review'].filter(Boolean).length;
+  document.getElementById('filtersActiveCount').textContent = n ? n : '';
 }
 
 async function loadAllForCurrentDivision() {
@@ -5199,7 +5341,6 @@ async function init() {
   syncFilterUI();
   syncSortUI();
   syncViewTabs();
-  document.getElementById('statsPeekBtn').classList.toggle('active', statsPeekEnabled());
   document.getElementById('resultsPageSizeSelect').value = String(resultsPageSize);
   await loadEverything();
   schedulePoll();

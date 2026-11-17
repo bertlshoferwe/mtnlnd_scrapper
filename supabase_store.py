@@ -2276,6 +2276,28 @@ def save_project_plan_holders(division_id, mapping):
         print(f"  ! couldn't save plan holders ({e})")
 
 
+def load_project_locations(division_id):
+    """{project_key: "City, ST"} — saved by the sites that report one. Empty
+    if the column isn't there."""
+    try:
+        rows = _all_pages(lambda: get_client().table("project_flags").select("project_key,location")
+                          .eq("division_id", division_id).not_.is_("location", "null"))
+    except Exception:
+        return {}
+    return {r["project_key"]: r["location"] for r in rows if r.get("location")}
+
+
+def fit_class(fit, settings):
+    """The list's suggestion bucket for a saved fit prediction — "fit",
+    "unsure" or "not_fit" — or None (none yet, or suggestions are off).
+    Same rule as the dashboard's fitLabel()."""
+    if not settings.get("fit_enabled", True) or not fit or not fit.get("verdict"):
+        return None
+    if (fit.get("confidence") or 0) < settings.get("fit_sure_at", 60):
+        return "unsure"
+    return "fit" if fit["verdict"] == "fit" else "not_fit"
+
+
 def save_project_locations(division_id, mapping):
     """Upsert {project_key: "City, ST 12345"} from a scan. Only touches
     location. No-ops if the column is missing."""
@@ -2435,7 +2457,7 @@ def _fetch_all_scan_results(division_id, columns="*"):
 def get_results_grouped(division_id, search=None, status=None, site=None, keyword=None,
                         bid_window=None, sort=None, include_closed=False,
                         updated_only=False, new_only=False, view=None,
-                        project_key=None, page=1, page_size=15):
+                        project_key=None, page=1, page_size=15, fit=None, descending=False):
     """Scan results collapsed to one entry per project (the `site` value),
     each project's files nested underneath. Filtering and pagination happen
     over the grouped projects. Returns (projects, total_project_count,
@@ -2451,6 +2473,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
 
     Projects the source site no longer lists ("closed") are dropped unless
     include_closed is set, in which case each carries closed=True.
+
+    `fit` keeps only projects whose suggestion is one of those buckets
+    ("fit", "unsure", "not_fit" — see fit_class); fit_counts, also
+    returned, counts each bucket under every other filter. `descending`
+    flips the sort (projects without a bid date stay last on a bid sort).
     """
     rows = _fetch_all_scan_results(division_id)
 
@@ -2491,6 +2518,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     fits = load_project_fit(division_id)
     bid_dates = load_project_bid_dates(division_id)
     bid_times = load_project_bid_times(division_id)
+    locations = load_project_locations(division_id)
+    settings = get_division_settings(division_id)
     jira_keys = load_project_jira_keys(division_id)
     board = board_links(division_id, strict=True)
     _return_deleted_board_bids(division_id, decisions, board)
@@ -2592,6 +2621,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             "duplicate_of": d.get("duplicate_of") if decision == "duplicate" else None,
             "duplicates": [],
             "fit": fits.get(site_key),
+            "fit_class": fit_class(fits.get(site_key), settings),
+            "location": locations.get(site_key),
             "updated": is_updated, "new_file_count": new_file_count,
             "reopened": reopened,
             "closed": closed, "overdue": overdue, "last_seen_at": last_seen,
@@ -2697,6 +2728,14 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     if site:
         projects = [p for p in projects if (p["source_prefix"] or "Other") == site]
 
+    # Suggestion counts under every other filter (like the site counts), then the filter itself.
+    fit_counts = {"fit": 0, "unsure": 0, "not_fit": 0}
+    for p in projects:
+        if p["fit_class"]:
+            fit_counts[p["fit_class"]] += 1
+    if fit:
+        projects = [p for p in projects if p["fit_class"] in fit]
+
     # Default sort is bid date, soonest first — matches the dashboard's
     # default "Bid date — soonest" selection.
     if not sort:
@@ -2710,6 +2749,8 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
     elif sort == "name":
         projects.sort(key=lambda p: p["project"].lower())
+    elif sort == "docs":
+        projects.sort(key=lambda p: (-p["file_count"], p["project"].lower()))
     elif sort == "flagged":  # projects with new docs first, then matched,
                              # then most-recently-scanned
         projects.sort(key=lambda p: p["latest_date"] or "", reverse=True)
@@ -2717,6 +2758,11 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
             0 if p["status"] == "Matched" else 1,
             0 if p["updated"] else 1,
         ))
+
+    if descending:
+        projects.reverse()
+        if sort == "bid":   # no bid date stays at the end either way
+            projects.sort(key=lambda p: not p["bid_date"])
 
     total = len(projects)
     page = max(1, page)
@@ -2726,7 +2772,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
         page_size = max(1, min(page_size, 50))
     start = (page - 1) * page_size
     return (projects[start:start + page_size], total, site_tabs, updated_total, new_total,
-            view_counts)
+            view_counts, fit_counts)
 
 
 def get_stats(division_id):
