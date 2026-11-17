@@ -275,8 +275,6 @@ tr:hover .lpen,.lpen:focus-visible{opacity:1}
 .jl table.list tbody tr:hover td{background:var(--col)}
 .jl td.wk{max-width:440px;overflow:hidden}
 .jl td.wk .kc{min-width:0}
-.jl .lkey{background:none;border:0;padding:0;color:var(--c1);font-weight:600;font-size:14px;text-decoration:underline;text-underline-offset:2px;flex:0 0 auto}
-.jl .lkey.done{text-decoration:line-through}
 .jl .lt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-weight:400}
 .jl .tr{overflow:hidden;text-overflow:ellipsis;max-width:170px}
 .jl .who{width:22px;height:22px;font-size:10px;color:#fff}
@@ -2793,8 +2791,8 @@ img.who{object-fit:cover;background:var(--chip)}
       if(fd.type==="money"||fd.type==="number")return '<td class="num">'+esc(cfShow(fd,fv))+'</td>';
       return '<td><span class="tr" title="'+esc(cfShow(fd,fv))+'">'+esc(cfShow(fd,fv))+'</span></td>';
     }
-    if(k==="title")return '<td class="wk"><span class="kc">'+tiHTML(is.type)+'<button class="lkey'+(done?' done':'')+'" data-open="'+is.id+'">'+ikey(is)+'</button>'+
-      '<button class="lt" data-open="'+is.id+'" title="'+esc(is.title)+'">'+esc(is.title)+'</button></span></td>';
+    if(k==="title")return '<td class="wk"><span class="kc">'+tiHTML(is.type)+
+      '<button class="lt" data-open="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+esc(is.title)+'</button></span></td>';
     if(k==="due")return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):''):'<span class="none">None</span>')+'</td>';
     if(k==="assignee"){var an=is.assignee?nameOf(is.assignee):"";return '<td><span class="kc">'+nameAv(an)+'<span class="tr">'+(an?esc(an):'<span class="none">Unassigned</span>')+'</span></span></td>'}
     if(k==="reporter"){var rn=is.reporter?nameOf(is.reporter):"";return '<td><span class="kc">'+nameAv(rn)+'<span class="tr">'+(rn?esc(rn):'<span class="none">None</span>')+'</span></span></td>'}
