@@ -991,12 +991,11 @@
   /* second line: the site, then the tags (NEW, +3 new files, …) */
   .bs-sub { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
   .bs-sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bs-sub .bs-badge { font-size: 10px; padding: 1px 7px; }
+  .bs-sub .bs-badge { font-size: 10.5px; padding: 1px 7px; }
   .bs-badge { flex-shrink: 0; font-size: 10.5px; font-weight: 750; letter-spacing: .03em; border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
-  .bs-badge.new { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .bs-badge.new { background: var(--accent); color: var(--accent-contrast); border: 1px solid var(--accent); }
   .bs-badge.closed { border: 1px solid var(--border-strong); color: var(--muted); }
-  .bs-badge.back { background: var(--warning-soft); color: var(--warning); }
-  .bs-badge.newdocs { background: var(--warning-soft); color: var(--warning); }
+  .bs-badge.back, .bs-badge.newdocs { background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning); }
   .bs-due { font-size: 12.5px; color: var(--muted); }
   .bs-due.soon { color: var(--warning); font-weight: 650; }
   .bs-none { color: var(--muted); }
