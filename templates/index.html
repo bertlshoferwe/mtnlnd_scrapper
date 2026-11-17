@@ -375,6 +375,15 @@
   .learn-status.good { background: var(--success-soft); color: var(--success); }
   .learn-progress { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   .learn-progress li:last-child { color: var(--text); font-weight: 550; }
+  .learn-progress { max-height: 260px; overflow-y: auto; list-style: none; padding-left: 0; }
+  .learn-progress li.step { font-size: 12.5px; opacity: .8; overflow-wrap: anywhere; }
+  .learn-progress li.you { color: var(--accent); }
+  .learn-nudge { display: flex; gap: 6px; margin-top: 10px; }
+  .learn-nudge input { flex: 1; }
+  .learn-modal details.learn-log { margin: 0 0 12px; font-size: 13px; }
+  .learn-modal details.learn-log summary { cursor: pointer; color: var(--muted); }
+  .learn-modal textarea.recipe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; min-height: 320px; white-space: pre; }
+  .learn-modal pre.recipe-format { white-space: pre-wrap; font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 10px; max-height: 320px; overflow: auto; }
   .learn-list { margin: 4px 0 12px; padding-left: 18px; font-size: 13px; }
   .learn-list.bad { color: var(--danger); }
   .learn-list.warn { color: var(--warning); }
@@ -2258,6 +2267,7 @@ function learnSite() {
 
 async function openLearn(siteId) {
   if (!sitesAdmin) return;
+  if (learnSiteId !== siteId) { learnRecipe = null; learnNudgeText = ''; }
   learnSiteId = siteId;
   learnFixOpen = learnRemoving = learnRule = null;
   learnError = '';
@@ -2453,6 +2463,17 @@ function learnProjectCard(p, i, checks) {
   '</div>';
 }
 
+let learnRecipe = null;   // the hand-written recipe editor, while open: {text, format}
+let learnNudgeText = '';
+
+// What the learner did, step by step: "→ …" lines are its own actions, "Your message: …" is you.
+function learnProgressHtml(lines) {
+  return '<ol class="learn-progress" id="learnProgress">' + (lines || []).map(function(l) {
+    const cls = /^\s*→|^\s{2}/.test(l) ? 'step' : /^Your message:/.test(l) ? 'you' : '';
+    return '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + escapeHtml(l.trim()) + '</li>';
+  }).join('') + '</ol>';
+}
+
 function renderLearn() {
   const site = learnSite();
   const body = document.getElementById('learnBody');
@@ -2460,6 +2481,8 @@ function renderLearn() {
   const st = site.learned || {};
   const hintsEl = document.getElementById('learnHints');
   const typedHints = hintsEl && document.activeElement === hintsEl ? hintsEl.value : null;
+  const nudgeEl = document.getElementById('learnNudge');
+  const nudgeFocused = nudgeEl && document.activeElement === nudgeEl;
   document.getElementById('learnTitle').textContent = 'Learn: ' + site.name;
   document.getElementById('learnDesc').textContent = site.url || '';
   const learning = st.status === 'learning' && !st.stale;
@@ -2472,7 +2495,13 @@ function renderLearn() {
   if (learning || st.stale) {
     html += '<div class="learn-status' + (st.stale ? ' bad' : '') + '">' +
       (st.stale ? 'Learning seems to have stopped — nothing new for 15 minutes.' : '<span class="status-dot running"></span>Learning this site… this can take several minutes.') +
-      '<ol class="learn-progress">' + (st.progress || []).map(function(l) { return '<li>' + escapeHtml(l) + '</li>'; }).join('') + '</ol></div>';
+      learnProgressHtml(st.progress) +
+      (learning
+        ? '<div class="learn-nudge"><input type="text" id="learnNudge" placeholder="Tell it something — e.g. Wrong page, the open bids are under Advertisements" value="' + escapeHtml(learnNudgeText) + '" oninput="learnNudgeText=this.value" onkeydown="if(event.key===\'Enter\') sendLearnNudge()">' +
+          '<button class="btn-ghost" onclick="sendLearnNudge()">Send</button></div>' +
+          '<p class="desc" style="margin:4px 0 0;">It reads your message before its next step. To keep a tip for every future learn, put it in the notes too.</p>'
+        : '') +
+      '</div>';
   } else if (st.status === 'review') {
     html += '<div class="learn-status">Ready for review. Check what it found below, correct anything wrong, then approve it.' +
       (st.draft && st.draft.summary ? '<br><b>How it reads the site:</b> ' + escapeHtml(st.draft.summary) : '') + '</div>';
@@ -2487,6 +2516,19 @@ function renderLearn() {
       (st.message ? ': ' + escapeHtml(st.message) : '') + '</div>';
   } else {
     html += '<div class="learn-status">Not learned yet. Add any notes that would help below, then start learning.</div>';
+  }
+
+  if (!learning && !st.stale && (st.progress || []).length) {
+    html += '<details class="learn-log"><summary>What it did last time</summary>' + learnProgressHtml(st.progress) + '</details>';
+  }
+
+  if (!learning && learnRecipe) {
+    html += '<div class="learn-section-title">Recipe</div>' +
+      '<p class="desc" style="margin:0 0 6px;">Exactly how the daily scan reads this site. Change it, then <b>Try it</b> — it runs on a few projects and shows what it finds below for you to check and approve, like one the AI wrote.</p>' +
+      '<textarea class="recipe" id="learnRecipeText" spellcheck="false" oninput="learnRecipe.text=this.value">' + escapeHtml(learnRecipe.text) + '</textarea>' +
+      '<div class="learn-actions" style="margin-top:8px;"><button class="btn-primary" onclick="tryLearnRecipe()">Try it</button>' +
+      '<button class="btn-ghost" onclick="learnRecipe=null; renderLearn()">Cancel</button></div>' +
+      (learnRecipe.format ? '<details style="margin-top:10px;"><summary class="desc" style="cursor:pointer;">Recipe format</summary><pre class="recipe-format">' + escapeHtml(learnRecipe.format) + '</pre></details>' : '');
   }
 
   if (!learning) {
@@ -2545,6 +2587,7 @@ function renderLearn() {
     const draft = st.draft && st.draft.recipe;
     if (draft && (st.status === 'review' || st.status === 'attention')) html += '<button class="btn-primary" onclick="approveLearn()">Approve — go live</button>';
     html += '<button class="' + (draft ? 'btn-ghost' : 'btn-primary') + '" onclick="startLearn()">' + (st.status ? 'Re-learn' : 'Start learning') + '</button>';
+    if (!learnRecipe) html += '<button class="btn-ghost" onclick="openLearnRecipe()">Edit recipe</button>';
     if (st.status === 'review') html += '<span class="desc">Until you approve, ' + (st.recipe ? 'the scan keeps using the version that\'s live now.' : 'the daily scan skips this site.') + '</span>';
   }
   html += '<button class="btn-ghost" style="margin-left:auto;" onclick="closeLearn()">Close</button></div>';
@@ -2554,6 +2597,72 @@ function renderLearn() {
     const el = document.getElementById('learnHints');
     if (el) { el.value = typedHints; el.focus(); }
   }
+  const prog = document.getElementById('learnProgress');
+  if (prog) prog.scrollTop = prog.scrollHeight;
+  if (nudgeFocused) {
+    const el = document.getElementById('learnNudge');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }
+}
+
+async function sendLearnNudge() {
+  const text = learnNudgeText.trim();
+  if (!text) return;
+  try {
+    const res = await learnPost('/nudge', { text: text });
+    learnNudgeText = '';
+    const site = learnSite();
+    if (site) site.learned = Object.assign({}, site.learned || {}, { nudges: (res.learned || {}).nudges });
+    learnError = '';
+  } catch (e) { learnError = e.message; }
+  renderLearn();
+}
+
+// A starting point when there's no recipe yet: the shape, pointed at the site.
+function recipeStarter(site) {
+  return {
+    list: { type: 'html', url: site.url || '', item_selector: 'CSS for each project link' },
+    project: {
+      fields: {
+        'Project name': { from: 'main', selector: 'h1' },
+        'Bid date': { from: 'main', label: 'Bid Opening' },
+        'Location': { from: 'main', label: 'Location' },
+      },
+      documents: [{ from: 'main' }],
+    },
+  };
+}
+
+async function openLearnRecipe() {
+  const site = learnSite();
+  if (!site) return;
+  try {
+    const res = await api('/api/' + currentDivision + '/sites/' + learnSiteId + '/learn/recipe');
+    learnRecipe = { text: JSON.stringify(res.recipe || recipeStarter(site), null, 2), format: res.format || '' };
+    learnError = '';
+  } catch (e) { learnError = e.message; }
+  renderLearn();
+  const el = document.getElementById('learnRecipeText');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function tryLearnRecipe() {
+  let recipe;
+  try { recipe = JSON.parse(learnRecipe.text); }
+  catch (e) { learnError = 'That isn\'t valid JSON: ' + e.message; renderLearn(); return; }
+  let res;
+  try { res = await learnPost('/recipe', { recipe: recipe }); }
+  catch (e) { learnError = e.message; renderLearn(); return; }
+  learnRecipe = null;
+  learnError = '';
+  const site = learnSite();
+  if (site) site.learned = Object.assign({}, res.learned || site.learned || {}, {
+    status: 'learning', stale: false, message: null, progress: ['Trying your recipe…'], progress_at: new Date().toISOString(),
+  });
+  learnFixOpen = learnRemoving = learnRule = null;
+  renderLearn();
+  loadSites();
+  scheduleLearnPoll();
 }
 
 let siteDragEl = null;

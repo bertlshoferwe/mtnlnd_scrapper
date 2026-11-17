@@ -325,7 +325,8 @@ def _learning():
 @app.route("/learn-site", methods=["POST"])
 def learn_site():
     """Start `site_agent.py learn` for a learned site. Body: {division_id,
-    site_id}. The learner reports progress into sites.learned itself."""
+    site_id, mode}; mode "try" runs the hand-written draft recipe instead of
+    learning. The learner reports progress into sites.learned itself."""
     body = request.get_json(silent=True) or {}
     division_id = (body.get("division_id") or "").strip()
     site_id = body.get("site_id")
@@ -337,7 +338,8 @@ def learn_site():
             return jsonify({"ok": False, "error": "this site is already learning" if same
                             else "another site is learning right now — try again when it's done"}), 409
         _learn["proc"] = subprocess.Popen(
-            [sys.executable, "site_agent.py", "learn", division_id, str(int(site_id))],
+            [sys.executable, "site_agent.py", "try" if body.get("mode") == "try" else "learn",
+             division_id, str(int(site_id))],
             cwd=os.path.dirname(os.path.abspath(__file__)))
         _learn["site_id"] = int(site_id)
     return jsonify({"ok": True})

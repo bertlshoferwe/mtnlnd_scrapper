@@ -25,16 +25,21 @@ is shown). State lives in sites.learned (jsonb):
   status        "learning" | "review" (a draft is waiting) | "live" |
                 "failed" | "attention" (a daily scan couldn't fix it)
   message       the latest problem or note, shown on the site
-  progress      the last few lines of what the learner is doing
+  progress      the last few lines of what the learner is doing — every
+                step it takes, plus what the AI says about it
   progress_at   when progress last moved (a stale "learning" = it died)
   hints         the user's notes about the site
+  nudges        messages the user sent while it was learning ({text, at}),
+                read on every step; cleared when the next learn starts
   checks        corrections the recipe must honor — {kind: "value",
                 project, project_name, field, expected, note} or {kind:
                 "exclude", project, project_name, note}
   rules         confirmed skip rules — {text, skip: {field, matches}}
   recipe        the approved recipe the daily scan replays
   summary       one line, e.g. "Bid list → project page → Documents tab"
-  draft         {recipe, summary} waiting for approval
+  draft         {recipe, summary} waiting for approval — from the AI, or
+                written by hand in the review window and tried with
+                `python site_agent.py try <division_id> <site_id>`
   preview       what the draft found on a sample of projects
   learned_at / approved_at / last_run
 
@@ -64,6 +69,7 @@ import supabase_store
 BUILT_IN_FIELDS = ["Project name", "Bid date", "Bid time", "Location"]
 
 PREVIEW_PROJECTS = 8
+PROGRESS_LINES = 30
 REQUEST_TIMEOUT = 30
 PAGE_TIMEOUT_MS = 25000
 LEARN_MAX_STEPS = int(os.environ.get("LEARN_MAX_STEPS") or "40")
@@ -769,6 +775,11 @@ def _learn_prompt(site, fields, state, history, steps_left):
             lines.append(f'  - Project {c.get("project_name")!r} ({c.get("project")}) is not a bid we want'
                          + (f' — {c["note"]}' if c.get("note") else "")
                          + ". It is filtered out automatically; if others like it exist, add a skip rule.")
+    nudges = [n.get("text") for n in state.get("nudges") or [] if n.get("text")]
+    if nudges:
+        lines += ["", "THE USER IS WATCHING AND SENT THESE MESSAGES WHILE YOU WORKED (oldest first; "
+                      "they override your plan — act on the newest one next):"]
+        lines += [f"  - {t}" for t in nudges]
     old = state.get("recipe") or (state.get("draft") or {}).get("recipe")
     if old:
         lines += ["", "THE PREVIOUS RECIPE (fix or improve it; it may be out of date):", json.dumps(old)]
@@ -826,11 +837,13 @@ def _parse_reply(text):
 _last_ai_call = [0.0]
 
 
-def _ask(ai, prompt, max_tokens=8000):
+def _ask(ai, prompt, max_tokens=8000, progress=None):
     """One AI turn as parsed JSON, or None after a few spaced-out retries
     (a free tier that's over its limit answers nothing for a while)."""
     for wait in (0, 20, 60):
         if wait:
+            if progress:
+                progress(f"No usable answer from the AI — waiting {wait}s and asking again")
             time.sleep(wait)
         gap = AI_MIN_INTERVAL_S - (time.monotonic() - _last_ai_call[0])
         if gap > 0:
@@ -915,16 +928,23 @@ def describe_result(result, max_projects=3):
     return "\n".join(out)
 
 
-def learn(site, fields, state, ai, fetcher, progress=print):
+def learn(site, fields, state, ai, fetcher, progress=print, refresh=None):
     """Explore the site and return (recipe, summary, warnings). Raises
     LearnFailed when the AI gives up, stops answering or runs out of steps
-    without a recipe that reads anything."""
+    without a recipe that reads anything. Every step goes to `progress`;
+    `refresh` (if given) runs before each step to pick up the user's
+    messages into `state`."""
     history, best, done_tries, ai_misses = [], None, 0, 0
     rules = state.get("rules") or []
     excludes = _excluded_urls(state)
     include = _value_check_urls(state) | excludes
     for step in range(LEARN_MAX_STEPS):
-        reply = _ask(ai, _learn_prompt(site, fields, state, history, LEARN_MAX_STEPS - step))
+        if refresh:
+            heard = len(state.get("nudges") or [])
+            refresh()
+            for n in (state.get("nudges") or [])[heard:]:
+                progress(f"Your message: {n.get('text')}"[:200])
+        reply = _ask(ai, _learn_prompt(site, fields, state, history, LEARN_MAX_STEPS - step), progress=progress)
         if reply is None:
             ai_misses += 1
             if ai_misses >= 3:
@@ -938,14 +958,20 @@ def learn(site, fields, state, ai, fetcher, progress=print):
         obs = ""
         try:
             if action == "open":
+                progress((f"→ Opening {reply.get('url')}" + (" in a browser" if reply.get("render") else ""))[:300])
                 obs = _snapshot(*fetcher.explore(reply["url"], bool(reply.get("render"))))
             elif action == "click":
+                progress(f"→ Clicking “{reply.get('text')}”"[:300])
                 obs = _snapshot(*fetcher.click(reply["text"]))
             elif action == "fetch_json":
+                progress(f"→ Reading data from {reply.get('url')}"[:300])
                 obs = json.dumps(_json_preview(fetcher.json(reply["url"])), indent=1)[:6000]
             elif action == "try":
                 shown["recipe"] = reply.get("recipe")
+                progress("→ Trying a recipe on the first 3 projects")
                 res = replay(reply.get("recipe") or {}, fetcher, rules, excludes, limit=3)
+                progress(f"  It read {res['listed']} listed bid(s), {len(res['projects'])} project page(s)"
+                         + (f" — {res['errors'][0]}"[:160] if res["errors"] else ""))
                 obs = describe_result(res)
                 if res["projects"] and (best is None or len(res["projects"]) > best[3]):
                     best = (reply["recipe"], reply.get("summary") or "", [], len(res["projects"]))
@@ -953,6 +979,7 @@ def learn(site, fields, state, ai, fetcher, progress=print):
                 recipe = reply.get("recipe") or {}
                 shown["recipe"] = recipe
                 done_tries += 1
+                progress("→ Checking its finished recipe")
                 res = replay(recipe, fetcher, rules, excludes, limit=PREVIEW_PROJECTS, include=include)
                 hard = check_failures(res, state.get("checks"))
                 if not res["projects"]:
@@ -963,6 +990,7 @@ def learn(site, fields, state, ai, fetcher, progress=print):
                     best = (recipe, summary, soft, len(res["projects"]))
                 if not hard and (not soft or done_tries >= 2):
                     return recipe, summary, soft
+                progress("  Not accepted yet: " + "; ".join(hard + soft)[:240])
                 obs = ("NOT ACCEPTED YET:\n- " + "\n- ".join(hard + soft)
                        + ("\n(If a soft problem is just how this site is, send done again and it will be accepted.)" if not hard else "")
                        + "\n\n" + describe_result(res))
@@ -973,6 +1001,7 @@ def learn(site, fields, state, ai, fetcher, progress=print):
         except LearnFailed:
             raise
         except Exception as e:
+            progress(f"  That didn't work: {e}"[:240])
             obs = f"ERROR: {e}"
         history.append((json.dumps(shown)[:3000], obs))
     if best:
@@ -1045,11 +1074,21 @@ class _State:
 
     def save(self, **patch):
         self.data.update(patch)
+        if "nudges" not in patch:
+            self.refresh()   # the user's messages are written by the dashboard; don't save over new ones
         supabase_store.save_site_learned(self.site["division_id"], self.site["id"], self.data)
+
+    def refresh(self):
+        """Pick up messages the user sent while it learns."""
+        try:
+            fresh = supabase_store.get_site(None, self.site["id"]) or {}
+        except Exception:
+            return
+        self.data["nudges"] = (fresh.get("learned") or {}).get("nudges") or []
 
     def progress(self, line):
         print(f"  [learn] {line}")
-        self.save(progress=((self.data.get("progress") or []) + [line])[-12:], progress_at=_now())
+        self.save(progress=((self.data.get("progress") or []) + [line])[-PROGRESS_LINES:], progress_at=_now())
 
 
 def _preview(result, fields):
@@ -1087,7 +1126,7 @@ def run_learn(division_id, site_id):
         print(f"FATAL: no site {site_id} in {division_id}", file=sys.stderr)
         sys.exit(1)
     state = _State(site)
-    state.save(status="learning", message=None, progress=[], progress_at=_now())
+    state.save(status="learning", message=None, progress=[], progress_at=_now(), nudges=[])
     ai = ai_provider.get_provider()
     if ai is None:
         state.save(status="failed", message="No AI is set up on the scan worker (AI_PROVIDER + a key).")
@@ -1099,7 +1138,8 @@ def run_learn(division_id, site_id):
         if fetcher.login_result and not fetcher.login_result["ok"]:
             state.progress(f"Login didn't work: {fetcher.login_result['message']}")
         state.progress("Opening the site")
-        recipe, summary, warnings = learn(site, fields, state.data, ai, fetcher, progress=state.progress)
+        recipe, summary, warnings = learn(site, fields, state.data, ai, fetcher, progress=state.progress,
+                                          refresh=state.refresh)
         state.progress("Reading a sample of projects for the preview")
         result = replay(recipe, fetcher, state.data.get("rules"), _excluded_urls(state.data),
                         limit=PREVIEW_PROJECTS, include=_value_check_urls(state.data))
@@ -1116,6 +1156,45 @@ def run_learn(division_id, site_id):
     except Exception as e:
         state.save(status="live" if state.data.get("recipe") else "failed", message=f"Learning crashed: {e}")
         raise
+    finally:
+        if fetcher:
+            fetcher.close()
+
+
+def run_try(division_id, site_id):
+    """Run the recipe written by hand in the review window (saved as the
+    draft) on a sample of projects, and show what it finds for review —
+    the same preview and Approve as a recipe the AI wrote. No AI."""
+    site = supabase_store.get_site(division_id, site_id)
+    if site is None:
+        print(f"FATAL: no site {site_id} in {division_id}", file=sys.stderr)
+        sys.exit(1)
+    state = _State(site)
+    recipe = (state.data.get("draft") or {}).get("recipe")
+    if not recipe:
+        state.save(message="There's no recipe to try.")
+        return
+    back = "live" if state.data.get("recipe") else "failed"
+    state.save(status="learning", message=None, progress=[], progress_at=_now(), nudges=[])
+    fields = extra_fields()
+    fetcher = None
+    try:
+        fetcher = Fetcher(site_login(site))
+        if fetcher.login_result and not fetcher.login_result["ok"]:
+            state.progress(f"Login didn't work: {fetcher.login_result['message']}")
+        state.progress("Trying your recipe on a sample of projects")
+        result = replay(recipe, fetcher, state.data.get("rules"), _excluded_urls(state.data),
+                        limit=PREVIEW_PROJECTS, include=_value_check_urls(state.data))
+        preview = _preview(result, fields)
+        preview["warnings"] = (["your recipe found no projects"] if not result["projects"] else []) \
+            + _soft_problems(result, fields)
+        preview["check_failures"] = check_failures(result, state.data.get("checks"))
+        preview["compare"] = _compare_with_adapter(site)
+        state.save(status="review", preview=preview, learned_at=_now(), message=None)
+        state.progress("Ready for review")
+    except Exception as e:
+        state.save(status=back, message=f"Your recipe hit an error: {e}")
+        state.progress(f"Stopped: {e}"[:240])
     finally:
         if fetcher:
             fetcher.close()
@@ -1177,7 +1256,8 @@ def _heal(site, state, fields, ai, fetcher, broken):
     print("  Re-learning the site")
     state.save(progress=[], progress_at=_now())
     try:
-        recipe, summary, _ = learn(site, fields, state.data, ai, fetcher, progress=state.progress)
+        recipe, summary, _ = learn(site, fields, state.data, ai, fetcher, progress=state.progress,
+                                   refresh=state.refresh)
     except LearnFailed as e:
         state.save(status="attention", message=f"Stopped working ({'; '.join(broken)}) and re-learning failed: {e}")
         return None
@@ -1236,8 +1316,8 @@ def _to_scan_output(site, projects, fields):
 
 
 if __name__ == "__main__":
-    # Usage: python site_agent.py learn <division_id> <site_id>
-    if len(sys.argv) != 4 or sys.argv[1] != "learn":
-        print("usage: python site_agent.py learn <division_id> <site_id>", file=sys.stderr)
+    # Usage: python site_agent.py learn|try <division_id> <site_id>
+    if len(sys.argv) != 4 or sys.argv[1] not in ("learn", "try"):
+        print("usage: python site_agent.py learn|try <division_id> <site_id>", file=sys.stderr)
         sys.exit(2)
-    run_learn(sys.argv[2], int(sys.argv[3]))
+    (run_learn if sys.argv[1] == "learn" else run_try)(sys.argv[2], int(sys.argv[3]))

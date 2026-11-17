@@ -92,6 +92,13 @@ tag in Sites opens what it found, with where each value came from:
 - ⊘ on a bid that shouldn't be there: it's left out from then on, and the AI
   suggests a rule for others like it ("Skip projects whose Status is Awarded").
 - Notes about the site, then **Re-learn**, and **Approve** when it looks right.
+- While it learns, every step shows (each page opened, tab clicked, recipe
+  tried and what it found), and **Tell it something** sends a message it
+  reads before its next step ("Wrong page — the bids are under
+  Advertisements"). Messages last for that run; notes last for every run.
+- **Edit recipe** opens the recipe as JSON (the AI's latest, or a starter)
+  with its format. **Try it** runs it on a few projects in the scan worker
+  and shows the result as a normal review to approve — no AI.
 
 Daily scans replay the approved recipe with no AI. If it stops working (finds
 nothing, or breaks a correction) the AI re-learns it on its own; if that

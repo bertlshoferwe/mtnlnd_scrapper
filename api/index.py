@@ -31,6 +31,8 @@ Routes:
   POST /api/<division_id>/sites/<site_id>/learn/remove   leave a bid out; replies with a suggested skip rule
   POST /api/<division_id>/sites/<site_id>/learn/rule     confirm that rule
   POST /api/<division_id>/sites/<site_id>/learn/approve  put the reviewed recipe live
+  POST /api/<division_id>/sites/<site_id>/learn/nudge    a message to the learner while it works (read on its next step)
+  GET/POST /api/<division_id>/sites/<site_id>/learn/recipe  the recipe to edit by hand (+ its format); POST saves it as the draft and tries it
   GET  /api/<division_id>/keywords           list keywords
   POST /api/<division_id>/keywords           add a keyword
   POST /api/<division_id>/keywords/upload     bulk-add keywords from an uploaded .pdf/.docx (one per line)
@@ -65,6 +67,7 @@ import io
 import difflib
 import json
 import re
+import time
 import requests
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
@@ -756,6 +759,82 @@ def api_learn_approve(division_id, site_id):
     learned.update(recipe=draft["recipe"], summary=draft.get("summary") or "", draft=None,
                    status="live", message=None, approved_at=datetime.now(timezone.utc).isoformat())
     return _save_learned(division_id, site_id, learned)
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/nudge", methods=["POST"])
+def api_learn_nudge(division_id, site_id):
+    """Steer the learner while it works. Body: {"text": "Wrong page — the bids are under …"}.
+    The learner saves its own state on every step, so this checks the
+    message stuck and adds it again if a learner save landed on top of it."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    text = re.sub(r"\s+", " ", str((request.get_json(force=True, silent=True) or {}).get("text") or "")).strip()[:1000]
+    if not text:
+        return jsonify({"error": "type a message"}), 400
+    if learned.get("status") != "learning":
+        return jsonify({"error": "it isn't learning right now — add this to the notes and Re-learn"}), 409
+    nudge = {"text": text, "at": datetime.now(timezone.utc).isoformat()}
+    for _ in range(3):
+        if any(n == nudge for n in learned.get("nudges") or []):
+            break
+        learned["nudges"] = list(learned.get("nudges") or []) + [nudge]
+        try:
+            supabase_store.save_site_learned(division_id, site_id, learned)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        time.sleep(0.6)
+        learned = dict((supabase_store.get_site(division_id, site_id) or {}).get("learned") or {})
+    return jsonify({"ok": True, "learned": learned})
+
+
+_recipe_format = []
+
+
+def _recipe_format_text():
+    """RECIPE_FORMAT from site_agent.py, read as text (importing it would pull in the browser)."""
+    if not _recipe_format:
+        try:
+            with open(os.path.join(_REPO_ROOT, "site_agent.py"), encoding="utf-8") as f:
+                m = re.search(r'RECIPE_FORMAT = r"""(.*?)"""', f.read(), re.S)
+            _recipe_format.append(m.group(1).strip() if m else "")
+        except OSError:
+            _recipe_format.append("")
+    return _recipe_format[0]
+
+
+@app.route("/api/<division_id>/sites/<int:site_id>/learn/recipe", methods=["GET", "POST"])
+def api_learn_recipe(division_id, site_id):
+    """GET: the recipe to start editing from (the draft, else the live one)
+    and the recipe format. POST body: {"recipe": {...} or "<json>", "summary"}
+    saves it as the draft and has the scan worker try it on a sample of
+    projects; the result comes back as a normal review."""
+    _, learned, err = _learned_site(division_id, site_id)
+    if err:
+        return err
+    if request.method == "GET":
+        return jsonify({"recipe": (learned.get("draft") or {}).get("recipe") or learned.get("recipe"),
+                        "format": _recipe_format_text()})
+    if learned.get("status") == "learning" and not learned.get("stale"):
+        return jsonify({"error": "it's learning right now — stop it first"}), 409
+    data = request.get_json(force=True, silent=True) or {}
+    recipe = data.get("recipe")
+    if isinstance(recipe, str):
+        try:
+            recipe = json.loads(recipe)
+        except ValueError as e:
+            return jsonify({"error": f"that isn't valid JSON: {e}"}), 400
+    if not isinstance(recipe, dict) or not isinstance(recipe.get("list"), dict):
+        return jsonify({"error": "a recipe is a JSON object with at least a \"list\" part"}), 400
+    learned["draft"] = {"recipe": recipe, "summary": str(data.get("summary") or "").strip()[:200] or "Written by hand"}
+    try:
+        supabase_store.save_site_learned(division_id, site_id, learned)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    _, err = _scanner_post("/learn-site", {"division_id": division_id, "site_id": site_id, "mode": "try"})
+    if err:
+        return err
+    return jsonify({"ok": True, "learned": learned})
 
 
 # ---------------------------------------------------------------------------
