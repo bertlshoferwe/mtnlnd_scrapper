@@ -940,8 +940,9 @@
 
   .bs-table { overflow-x: auto; }
   .bs-head, .bs-row {
-    display: grid; align-items: center; min-width: var(--bs-minw, 760px);
-    grid-template-columns: var(--bs-cols, 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 150px 52px);
+    display: grid; align-items: center; min-width: var(--bs-minw, 780px);
+    /* default widths keep the proportions 465 : 205 : 277 : 144 at any table width */
+    grid-template-columns: var(--bs-cols, 40px minmax(240px, 465fr) minmax(150px, 205fr) minmax(170px, 277fr) minmax(120px, 144fr) 52px);
   }
   .bs-head {
     background: var(--surface-2); border-bottom: 1px solid var(--border);
