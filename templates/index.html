@@ -858,6 +858,16 @@
     border: 1px dashed rgba(255,255,255,.32); border-radius: 999px; color: var(--masthead-muted);
   }
   .mh-divisions .tab-add:hover { color: #ffffff; border-color: #ffffff; }
+  .mh-find { display: flex; align-items: center; gap: 6px; }
+  .mh-find-btn { padding: 7px 10px; position: relative; }
+  .mh-find-btn svg { width: 16px; height: 16px; }
+  .mh-find.has-q .mh-find-btn::after {   /* a search is in */
+    content: ""; position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #ffffff;
+  }
+  .mh-find:not(.open) .mh-search { display: none; }
+  .mh-find .mh-search { width: 340px; animation: mh-find-in .16s ease; }
+  @keyframes mh-find-in { from { width: 120px; opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .mh-find .mh-search { animation: none; } }
   .mh-search {
     flex: 1 1 240px; max-width: 460px; display: flex; align-items: center; gap: 8px;
     background: var(--surface); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; color: var(--muted);
@@ -1142,11 +1152,12 @@
     /* Phones: title, division and the menu on one line; search; then scan status and Run now */
     .masthead-inner { gap: 10px; padding: 10px 10px 12px 14px; }
     .masthead h1 { order: 1; }
-    .mh-divisions { order: 2; flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .mh-divisions { order: 2; flex: 1 1 0; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .mh-divisions::-webkit-scrollbar { display: none; }
     .mh-board { order: 3; margin-left: 0; }
     .mh-menu-btn { order: 3; }
-    .mh-search { order: 4; flex-basis: 100%; max-width: none; }
+    .mh-find { order: 3; }
+    .mh-find .mh-search { position: absolute; left: 10px; right: 10px; top: 54px; width: auto; max-width: none; z-index: 61; box-shadow: var(--shadow-md); animation: none; }
     .mh-search input { padding: 10px 0; }
     .mh-strip { padding: 0 14px 10px; }
     .mh-status #runNowBtn { margin-left: auto; }
@@ -1182,14 +1193,17 @@
   <div class="masthead-inner">
     <h1 id="mastheadTitle">Bid Scout</h1>
     <div class="tabs mh-divisions" id="divisionTabs"></div>
-    <label class="mh-search">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <span class="sr-only">Search projects</span>
-      <input type="search" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" autocomplete="off">
-    </label>
     <a class="theme-toggle mh-board" id="bidBoardLink" href="/workflow/" target="bidboard"
        onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
        title="Track the projects this division is bidding on">Bid board</a>
+    <!-- search, behind a magnifying glass; stays open while a search is in -->
+    <div class="mh-find" id="mhFind">
+      <label class="mh-search">
+        <span class="sr-only">Search projects</span>
+        <input type="search" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" autocomplete="off">
+      </label>
+      <button type="button" class="theme-toggle mh-find-btn" id="mhFindBtn" onclick="toggleFind()" aria-expanded="false" aria-controls="resultsSearch" title="Search" aria-label="Search projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    </div>
     <button type="button" class="theme-toggle mh-menu-btn" id="mhMenuBtn" onclick="toggleMastheadMenu()" aria-expanded="false" aria-controls="mhNav" aria-label="Menu">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
@@ -3536,6 +3550,7 @@ function applyFilterPrefs(divisionId, urlSite) {
   currentResultsFit = Array.isArray(saved.fit) ? saved.fit.filter(function(f) { return ['fit', 'unsure', 'not_fit'].indexOf(f) >= 0; }) : [];
   askKey = null;
   document.getElementById('resultsSearch').value = '';
+  if (document.getElementById('mhFind')) { document.getElementById('mhFind').classList.remove('open'); syncFind(); }
   document.getElementById('resultsStatusFilter').value = '';
   document.getElementById('keywordFilter').value = '';
   syncFilterUI();
@@ -5256,6 +5271,7 @@ function anyResultsFilter() {
 
 function clearAllFilters() {
   document.getElementById('resultsSearch').value = '';
+  syncFind();
   currentResultsSite = '';
   currentResultsKeyword = '';
   currentResultsBid = '';
@@ -5372,6 +5388,38 @@ function toggleFilterGroup(btn, closed) {
   try { shut = JSON.parse(localStorage.getItem(FILTER_GROUPS_KEY) || '[]'); } catch (e) { /* none remembered */ }
   document.querySelectorAll('.bf-title[data-group]').forEach(function(b) {
     if (shut.indexOf(b.dataset.group) >= 0) toggleFilterGroup(b, true);
+  });
+})();
+
+// Search sits behind the magnifying glass in the top bar. It stays open while there's a search
+// in (so it's always clear the list is searched); emptied and left, it closes again.
+function syncFind() {
+  const q = !!document.getElementById('resultsSearch').value.trim();
+  const f = document.getElementById('mhFind');
+  f.classList.toggle('has-q', q);
+  if (q) f.classList.add('open');
+  document.getElementById('mhFindBtn').setAttribute('aria-expanded', f.classList.contains('open') ? 'true' : 'false');
+}
+function toggleFind(open) {
+  const f = document.getElementById('mhFind'), input = document.getElementById('resultsSearch');
+  if (open == null) open = !f.classList.contains('open') || !!input.value.trim();
+  f.classList.toggle('open', open);
+  syncFind();
+  if (open) input.focus();
+}
+(function() {
+  const input = document.getElementById('resultsSearch');
+  input.addEventListener('input', syncFind);
+  input.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    if (input.value) { input.value = ''; input.dispatchEvent(new Event('input')); }
+    else { toggleFind(false); document.getElementById('mhFindBtn').focus(); }
+  });
+  input.addEventListener('blur', function() {
+    setTimeout(function() {
+      if (!input.value.trim() && document.activeElement !== document.getElementById('mhFindBtn')) toggleFind(false);
+    }, 120);
   });
 })();
 
