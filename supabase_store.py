@@ -2844,7 +2844,7 @@ def get_results_grouped(division_id, search=None, status=None, site=None, keywor
     if page_size is None:   # every project, for server-side lookups (duplicate picker)
         page, page_size = 1, max(1, len(projects))
     else:
-        page_size = max(1, min(page_size, 50))
+        page_size = max(1, min(page_size, 100))   # the dashboard's Per page goes to 100
     start = (page - 1) * page_size
     return (projects[start:start + page_size], total, site_tabs, updated_total, new_total,
             view_counts, fit_counts)

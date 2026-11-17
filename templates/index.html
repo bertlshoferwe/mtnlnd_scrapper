@@ -598,16 +598,6 @@
      they auto-zoom any focused text input below that size. */
   #resultsSearch { font-size: 16px; }
 
-  .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-  .pager button {
-    min-width: 32px; height: 32px; padding: 0 8px;
-    background: transparent; border: 1px solid var(--border-strong); color: var(--muted);
-    border-radius: 7px; font-size: 13px; font-weight: 600;
-  }
-  .pager button:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
-  .pager button.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
-  .pager button:disabled { opacity: .4; cursor: default; }
-  .pager .pager-gap { min-width: 18px; text-align: center; color: var(--muted); align-self: center; font-size: 13px; }
   .project-list { list-style: none; margin: 0; padding: 0; }
   .f-new-tag {
     font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
@@ -813,9 +803,6 @@
     #pdfPager button { min-width: 38px; min-height: 38px; font-size: 20px; }
     #pdfPageInput { width: 3em; padding: 8px 2px; font-size: 15px; }
 
-    .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
-    .pager { justify-content: center; }
-    .pager button { min-width: 36px; height: 36px; }
   }
 
   /* ---- The results page: top bar, filter panel on the left, table of projects ---- */
@@ -1045,8 +1032,12 @@
   .bs-toast[hidden] { display: none; }
   .bs-toast button { background: none; border: 0; color: #a9b6e6; font: inherit; font-weight: 700; cursor: pointer; padding: 4px; white-space: nowrap; }
 
-  .results-pagerbar { justify-content: center; padding: 10px 14px; border-top: 1px solid var(--border); }
-  .results-pagerbar:has(.pager:empty) { display: none; }
+  /* more projects load as you near the bottom of the list */
+  .bs-more { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 13px; color: var(--muted); }
+  .bs-more[hidden] { display: none; }
+  .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: bs-spin .8s linear infinite; flex-shrink: 0; }
+  @keyframes bs-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
   .bf-paging .status-line { display: block; margin: 0 0 6px; font-size: 12.5px; }
   .bf-paging .status-line:empty { display: none; }
   .bf-perpage { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
@@ -1105,7 +1096,6 @@
     .bs-table { overflow: visible; }
     #projectList { display: flex; flex-direction: column; gap: 10px; }
     .bs-item, .bs-item:last-child { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .results-pagerbar { border-top: 0; }
     .bs-row { display: flex; flex-wrap: wrap; min-width: 0; padding: 10px 8px 10px 12px; gap: 2px 12px; align-items: flex-start; }
     .bs-row > .c-name { order: 1; flex: 1 1 0; min-width: 0; padding: 0; }
     .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-fit { order: 4; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
@@ -1247,9 +1237,7 @@
         <div class="empty" id="resultsEmpty" style="display:none;">No results yet &mdash; run a scan to see projects here.</div>
       </div>
 
-      <div class="row results-pagerbar">
-        <div class="pager" id="resultsPager"></div>
-      </div>
+      <div class="bs-more" id="resultsMore" hidden role="status"><span class="spin" aria-hidden="true"></span>Loading more…</div>
     </section>
   </div>
 
@@ -3555,7 +3543,7 @@ async function loadResultsInfo(opts) {
     emptyEl.style.display = 'block';
     document.getElementById('resultsPageInfo').textContent = '';
     document.getElementById('resultsShown').textContent = '';
-    document.getElementById('resultsPager').innerHTML = '';
+    document.getElementById('resultsMore').hidden = true;
     clearResultsCounts('0');
     return;
   }
@@ -3692,14 +3680,14 @@ function pickKeyword(kw) {
   syncFilterUI();
 }
 
-let projectsLoadSeq = 0;
-async function loadProjects(opts) {
-  if (!currentDivision) return;
-  const seq = ++projectsLoadSeq;
-  if (!(opts && opts.quiet)) setListLoading(true);
+// The list loads a batch (Per page) at a time: more come as you scroll near
+// the bottom (loadMoreProjects). resultsPage is how many batches are showing,
+// and a reload — a filter change resets it to 1 first; a background refresh
+// or a decision doesn't — brings back all of them, so you keep your place.
+function resultsUrl(page) {
   const search = document.getElementById('resultsSearch').value.trim();
   const status = document.getElementById('resultsStatusFilter').value;
-  const params = new URLSearchParams({ page: resultsPage, page_size: resultsPageSize });
+  const params = new URLSearchParams({ page: page, page_size: resultsPageSize });
   if (search) params.set('search', search);
   if (status) params.set('status', status);
   if (currentResultsSite) params.set('site', currentResultsSite);
@@ -3712,17 +3700,33 @@ async function loadProjects(opts) {
   params.set('view', currentResultsView);
   if (currentResultsSort && currentResultsSort !== 'bid') params.set('sort', currentResultsSort);
   if (currentResultsDir === 'desc') params.set('dir', 'desc');
+  return '/api/' + currentDivision + '/results-grouped?' + params.toString();
+}
+
+let projectsLoadSeq = 0;
+async function loadProjects(opts) {
+  if (!currentDivision) return;
+  const seq = ++projectsLoadSeq;
+  if (!(opts && opts.quiet)) setListLoading(true);
+  const search = document.getElementById('resultsSearch').value.trim();
   saveFilterPrefs();
 
   const div = currentDivision;
-  let data;
+  const pages = [];
+  for (let n = 1; n <= Math.max(1, resultsPage); n++) pages.push(resultsUrl(n));
+  let all;
   try {
-    data = await api('/api/' + div + '/results-grouped?' + params.toString());
+    all = await Promise.all(pages.map(function(u) { return api(u); }));
   } finally {
     if (seq === projectsLoadSeq) setListLoading(false);
   }
   if (div !== currentDivision || seq !== projectsLoadSeq) return;  // switched, or a newer load started
-  projectsData = data.projects || [];
+  const data = all[0];
+  const seen = {};
+  projectsData = [];
+  all.forEach(function(d) {
+    (d.projects || []).forEach(function(p) { if (!seen[p.key]) { seen[p.key] = 1; projectsData.push(p); } });
+  });
   resultsTotal = data.total || 0;
   renderUpdatesBadge(data.updated_total || 0);
   renderNewBadge(data.new_total || 0);
@@ -3753,16 +3757,70 @@ async function loadProjects(opts) {
 
   document.getElementById('resultsShown').textContent =
     resultsTotal ? resultsTotal + (resultsTotal === 1 ? ' project' : ' projects') : '';
-  const pageInfo = document.getElementById('resultsPageInfo');
-  if (resultsTotal === 0) {
-    pageInfo.textContent = '';
-  } else {
-    const start = (resultsPage - 1) * resultsPageSize + 1;
-    const end = Math.min(resultsPage * resultsPageSize, resultsTotal);
-    pageInfo.textContent = 'Showing ' + start + '–' + end + ' of ' + resultsTotal + ' project' + (resultsTotal === 1 ? '' : 's');
+  // a different list (filters, sort, tab, division) starts at the top; a refresh keeps your place
+  const listKey = resultsUrl(1);
+  if (listKey !== lastListKey) {
+    lastListKey = listKey;
+    document.querySelector('.bs-table').scrollTop = 0;
   }
-  renderPager();
+  syncMoreUI();
+  requestAnimationFrame(maybeLoadMore);
 }
+let lastListKey = '';
+
+let moreLoading = false;
+async function loadMoreProjects() {
+  if (moreLoading || !currentDivision || projectsData.length >= resultsTotal) return;
+  const seq = projectsLoadSeq, div = currentDivision, next = resultsPage + 1;
+  moreLoading = true;
+  syncMoreUI();
+  try {
+    const d = await api(resultsUrl(next));
+    if (seq !== projectsLoadSeq || div !== currentDivision) return;   // the list was reloaded meanwhile
+    resultsPage = next;
+    resultsTotal = d.total || resultsTotal;
+    const have = {};
+    projectsData.forEach(function(p) { have[p.key] = 1; });
+    const add = (d.projects || []).filter(function(p) { return !have[p.key]; });
+    const start = projectsData.length;
+    projectsData = projectsData.concat(add);
+    document.getElementById('projectList').insertAdjacentHTML('beforeend',
+      add.map(function(p, k) { return projectRowHtml(p, start + k); }).join(''));
+    if (!add.length) resultsTotal = projectsData.length;   // nothing new came back: stop asking
+  } catch (e) {
+    /* tried again on the next scroll */
+  } finally {
+    moreLoading = false;
+    syncMoreUI();
+    requestAnimationFrame(maybeLoadMore);
+  }
+}
+
+function syncMoreUI() {
+  document.getElementById('resultsMore').hidden = !moreLoading;
+  document.getElementById('resultsPageInfo').textContent = resultsTotal
+    ? 'Showing ' + projectsData.length + ' of ' + resultsTotal + ' project' + (resultsTotal === 1 ? '' : 's') : '';
+}
+
+// Near the bottom of the list — the table's own scroll on a wide screen, the
+// page on a phone — or the list doesn't fill the space yet: load the next batch.
+function maybeLoadMore() {
+  if (moreLoading || projectsData.length >= resultsTotal) return;
+  if (document.getElementById('bsResults').classList.contains('is-loading')) return;
+  const box = document.querySelector('.bs-table');
+  const left = window.matchMedia('(min-width: 901px)').matches
+    ? box.scrollHeight - box.scrollTop - box.clientHeight
+    : document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+  if (left < 500) loadMoreProjects();
+}
+let moreTick = false;
+function onListScroll() {
+  if (moreTick) return;
+  moreTick = true;
+  requestAnimationFrame(function() { moreTick = false; maybeLoadMore(); });
+}
+document.querySelector('.bs-table').addEventListener('scroll', onListScroll, { passive: true });
+window.addEventListener('scroll', onListScroll, { passive: true });
 
 // ---- One row per project: the columns, then (opened) the quick look underneath ----
 
@@ -4003,50 +4061,6 @@ document.addEventListener('mousedown', function(e) {
 window.addEventListener('resize', function() { closeRowMenu(); });
 document.addEventListener('scroll', function() { closeRowMenu(); }, true);
 
-function renderPager() {
-  const pager = document.getElementById('resultsPager');
-  pager.innerHTML = '';
-  const totalPages = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
-  if (resultsTotal === 0 || totalPages <= 1) return;
-
-  const cur = resultsPage;
-  const addBtn = function(label, page, opts) {
-    opts = opts || {};
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (opts.active) { b.className = 'active'; b.setAttribute('aria-current', 'page'); }
-    if (opts.disabled) b.disabled = true;
-    else b.onclick = function() { goToResultsPage(page); };
-    if (opts.aria) b.setAttribute('aria-label', opts.aria);
-    pager.appendChild(b);
-  };
-  const addGap = function() {
-    const s = document.createElement('span');
-    s.className = 'pager-gap';
-    s.textContent = '…';
-    pager.appendChild(s);
-  };
-
-  addBtn('‹', cur - 1, { disabled: cur <= 1, aria: 'Previous page' });
-
-  let prev = 0;
-  for (let p = 1; p <= totalPages; p++) {
-    if (p !== 1 && p !== totalPages && (p < cur - 1 || p > cur + 1)) continue;
-    if (p - prev > 1) addGap();
-    addBtn(String(p), p, { active: p === cur });
-    prev = p;
-  }
-
-  addBtn('›', cur + 1, { disabled: cur >= totalPages, aria: 'Next page' });
-}
-
-function goToResultsPage(page) {
-  const totalPages = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
-  page = Math.min(Math.max(1, page), totalPages);
-  if (page === resultsPage) return;
-  resultsPage = page;
-  loadProjects();
-}
 
 function parseLocations(str) {
   // "MSE: p.30, p.74 | Silt fence: p.9" -> [{keyword, pages}]
