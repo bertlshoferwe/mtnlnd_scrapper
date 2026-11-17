@@ -867,7 +867,21 @@
   .bf-heading { font-weight: 750; font-size: 14px; }
   .bf-group { border-top: 1px solid var(--border); padding: 9px 0; }
   .bf-group[hidden] { display: none; }
-  .bf-title { font-size: 11px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .bf-title {
+    display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; padding: 2px 0; margin-bottom: 4px;
+    font: inherit; font-size: 11px; font-weight: 750; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    text-align: left; cursor: pointer;
+  }
+  .bf-title:hover { color: var(--text); }
+  .bf-title-val {
+    flex: 1; min-width: 0; text-align: right; text-transform: none; letter-spacing: 0; font-weight: 600;
+    color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bf-chev { width: 14px; height: 14px; flex-shrink: 0; transition: transform .15s; }
+  .bf-group.collapsed .bf-chev { transform: rotate(-90deg); }
+  .bf-group.collapsed .bf-title { margin-bottom: 0; }
+  .bf-group.collapsed .bf-body { display: none; }
+  .bf-group:not(.collapsed) .bf-title-val { visibility: hidden; }
   .bf-opt { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13.5px; color: var(--text); cursor: pointer; }
   .bf-opt input { width: auto; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
   .bf-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1094,30 +1108,34 @@
         <button type="button" class="linkbtn" id="clearFiltersBtn" onclick="clearAllFilters()" hidden>Clear all</button>
       </div>
       <div class="bf-group">
-        <div class="bf-title">Show</div>
+        <button type="button" class="bf-title" data-group="show" aria-expanded="true" onclick="toggleFilterGroup(this)"><span>Show</span><span class="bf-title-val" id="fVal_show"></span><svg class="bf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="bf-body">
         <label class="bf-opt"><input type="checkbox" id="fNew" onchange="toggleNewFilter()"><span class="bf-label">New projects only</span><span class="bf-count" id="newCount"></span></label>
         <label class="bf-opt"><input type="checkbox" id="fUpdated" onchange="toggleUpdatedFilter()"><span class="bf-label">New documents only</span><span class="bf-count" id="updatedCount"></span></label>
         <label class="bf-opt"><input type="checkbox" id="fClosed" onchange="toggleClosedFilter()"><span class="bf-label">Include closed projects</span></label>
+        </div>
       </div>
       <div class="bf-group">
-        <div class="bf-title">Bid date</div>
+        <button type="button" class="bf-title" data-group="bid" aria-expanded="true" onclick="toggleFilterGroup(this)"><span>Bid date</span><span class="bf-title-val" id="fVal_bid"></span><svg class="bf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="bf-body">
         <label class="bf-opt"><input type="radio" name="fBid" value="" onchange="pickBid(this)"><span class="bf-label">Any bid date</span></label>
         <label class="bf-opt"><input type="radio" name="fBid" value="7" onchange="pickBid(this)"><span class="bf-label">Opening within 7 days</span></label>
         <label class="bf-opt"><input type="radio" name="fBid" value="30" onchange="pickBid(this)"><span class="bf-label">Opening within 30 days</span></label>
         <label class="bf-opt"><input type="radio" name="fBid" value="past" onchange="pickBid(this)"><span class="bf-label">Already opened</span></label>
         <label class="bf-opt"><input type="radio" name="fBid" value="none" onchange="pickBid(this)"><span class="bf-label">No bid date</span></label>
+        </div>
       </div>
       <div class="bf-group" id="fSiteGroup" hidden>
-        <div class="bf-title">Site</div>
-        <div id="fSiteOptions"></div>
+        <button type="button" class="bf-title" data-group="site" aria-expanded="true" onclick="toggleFilterGroup(this)"><span>Site</span><span class="bf-title-val" id="fVal_site"></span><svg class="bf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="bf-body"><div id="fSiteOptions"></div></div>
       </div>
       <div class="bf-group" id="fFitGroup" hidden>
-        <div class="bf-title">Suggestion</div>
-        <div id="fFitOptions"></div>
+        <button type="button" class="bf-title" data-group="fit" aria-expanded="true" onclick="toggleFilterGroup(this)"><span>Suggestion</span><span class="bf-title-val" id="fVal_fit"></span><svg class="bf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="bf-body"><div id="fFitOptions"></div></div>
       </div>
       <div class="bf-group" id="fKeywordGroup" hidden>
-        <div class="bf-title">Keyword</div>
-        <div class="bf-chips" id="fKeywordOptions"></div>
+        <button type="button" class="bf-title" data-group="kw" aria-expanded="true" onclick="toggleFilterGroup(this)"><span>Keyword</span><span class="bf-title-val" id="fVal_kw"></span><svg class="bf-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="bf-body"><div class="bf-chips" id="fKeywordOptions"></div></div>
       </div>
       <div class="bf-group bf-paging">
         <span class="status-line" id="resultsPageInfo"></span>
@@ -4960,6 +4978,28 @@ function clearAllFilters() {
   loadProjects();
 }
 
+// Each filter section folds up by its heading; which ones are folded is
+// remembered per browser. A folded section shows its current choice in the heading.
+const FILTER_GROUPS_KEY = 'bidscout_filter_groups_closed';
+function toggleFilterGroup(btn, closed) {
+  const g = btn.closest('.bf-group');
+  if (closed == null) closed = !g.classList.contains('collapsed');
+  g.classList.toggle('collapsed', closed);
+  btn.setAttribute('aria-expanded', closed ? 'false' : 'true');
+  if (arguments.length > 1) return;
+  try {
+    const shut = Array.from(document.querySelectorAll('.bf-group.collapsed .bf-title')).map(function(b) { return b.dataset.group; });
+    localStorage.setItem(FILTER_GROUPS_KEY, JSON.stringify(shut));
+  } catch (e) { /* per-viewer convenience only */ }
+}
+(function() {
+  let shut = [];
+  try { shut = JSON.parse(localStorage.getItem(FILTER_GROUPS_KEY) || '[]'); } catch (e) { /* none remembered */ }
+  document.querySelectorAll('.bf-title[data-group]').forEach(function(b) {
+    if (shut.indexOf(b.dataset.group) >= 0) toggleFilterGroup(b, true);
+  });
+})();
+
 // Phones: the filter panel folds behind the Filters button.
 function toggleFiltersPanel() {
   const on = document.getElementById('bsLayout').classList.toggle('filters-open');
@@ -5063,6 +5103,16 @@ function syncFilterUI() {
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  const bidLabels = { '7': 'Within 7 days', '30': 'Within 30 days', past: 'Already opened', none: 'No bid date' };
+  const fitLabels = { fit: 'Likely fit', unsure: 'Not sure', not_fit: 'Likely not a fit' };
+  document.getElementById('fVal_show').textContent =
+    [currentResultsNew && 'New projects', currentResultsUpdated && 'New documents', currentResultsClosed && 'Closed'].filter(Boolean).join(', ');
+  document.getElementById('fVal_bid').textContent = bidLabels[currentResultsBid] || '';
+  document.getElementById('fVal_site').textContent = currentResultsSite;
+  document.getElementById('fVal_fit').textContent = currentResultsView === 'review'
+    ? currentResultsFit.map(function(f) { return fitLabels[f]; }).join(', ') : '';
+  document.getElementById('fVal_kw').textContent = currentResultsKeyword;
+
   const any = anyResultsFilter();
   document.getElementById('clearFiltersBtn').hidden = !any;
   const n = [currentResultsSite, currentResultsKeyword, currentResultsBid, currentResultsClosed, currentResultsUpdated, currentResultsNew,
