@@ -988,7 +988,10 @@
     text-align: left; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .bs-name:hover { color: var(--accent); text-decoration: underline; }
-  .bs-sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* second line: the site, then the tags (NEW, +3 new files, …) */
+  .bs-sub { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .bs-sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bs-sub .bs-badge { font-size: 10px; padding: 1px 7px; }
   .bs-badge { flex-shrink: 0; font-size: 10.5px; font-weight: 750; letter-spacing: .03em; border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
   .bs-badge.new { background: var(--accent-soft); color: var(--accent-soft-text); }
   .bs-badge.closed { border: 1px solid var(--border-strong); color: var(--muted); }
@@ -1125,7 +1128,8 @@
     .bs-row > .c-bid { flex-basis: 100%; display: flex; gap: 8px; }
     .bs-row > .c-act { order: 2; flex: 0 0 auto; padding: 0; margin: -8px -8px 0 0; }
     .bs-more-btn { width: 44px; height: 44px; }
-    .bs-sub { white-space: normal; }
+    .bs-sub { flex-wrap: wrap; }
+    .bs-sub-text { white-space: normal; }
     .bs-name { white-space: normal; }
     .bs-ask { padding: 2px 12px 12px; }
     .bs-peek { padding: 4px 12px 14px; }
@@ -3849,8 +3853,8 @@ function projectRowHtml(p, i) {
   let html = '<li class="' + cls.join(' ') + '" data-i="' + i + '">' +
     '<div class="bs-row">' +
       '<button type="button" class="bs-chev" data-act="peek" aria-expanded="' + open + '" aria-label="' + (open ? 'Hide' : 'Show') + ' matching files for ' + escapeHtml(p.project) + '">' + ICON_ROW_CHEVRON + '</button>' +
-      '<div class="bs-cell c-name"><div class="bs-name-line"><button type="button" class="bs-name" data-act="open" title="Open project">' + escapeHtml(p.project) + '</button>' + badges + '</div>' +
-        '<div class="bs-sub">' + escapeHtml(sub.filter(Boolean).join(' · ')) + '</div></div>' +
+      '<div class="bs-cell c-name"><div class="bs-name-line"><button type="button" class="bs-name" data-act="open" title="Open project">' + escapeHtml(p.project) + '</button></div>' +
+        '<div class="bs-sub"><span class="bs-sub-text">' + escapeHtml(sub.filter(Boolean).join(' · ')) + '</span>' + badges + '</div></div>' +
       '<div class="bs-cell c-bid">' + bid + '</div>' +
       '<div class="bs-cell c-kw bs-kw-cell">' + kw + '</div>' +
       '<div class="bs-cell c-fit">' + status + '</div>' +
