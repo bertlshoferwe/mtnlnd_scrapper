@@ -126,16 +126,12 @@
     font-size: 17px; font-weight: 800; letter-spacing: .01em; line-height: 1.25;
     text-transform: none; margin: 0;
   }
-  .masthead .subtitle {
-    font-size: 12px; line-height: 1.35; margin-top: 1px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  
   .wrap { max-width: 880px; margin: 0 auto; padding: 26px 20px 80px; }
   h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 5px; text-transform: uppercase; }
   .masthead h1 { color: var(--masthead-text); }
   #mastheadTitle { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-  .subtitle { color: var(--muted); font-size: 14px; margin: 0; max-width: 64ch; }
-  .masthead .subtitle { color: var(--masthead-muted); }
+
   .theme-toggle {
     flex-shrink: 0;
     display: inline-flex; align-items: center; gap: 6px;
@@ -233,14 +229,7 @@
   .set-input input.set-text { width: 96px; text-transform: uppercase; }
   .set-stats { margin-top: 12px; font-size: 12.5px; }
   /* AI fit suggestions */
-  .p-fit {
-    display: inline-block; margin-left: 8px; vertical-align: 1px;
-    font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: none;
-    padding: 1px 7px; border-radius: 999px; white-space: nowrap;
-  }
-  .p-fit.fit { background: var(--success-soft); color: var(--success); }
-  .p-fit.not_fit { background: var(--danger-soft); color: var(--danger); }
-  .p-fit.unsure { background: var(--surface-2); color: var(--muted); }
+
   .fit-suggestion {
     margin: -6px 0 14px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
     background: var(--surface-2); border-left: 3px solid var(--muted);
@@ -516,30 +505,12 @@
   .tab-menu button.danger { color: var(--danger); }
   .tab-menu button.danger:hover { background: var(--danger-soft); }
 
-  /* Summary buttons that open modals */
-  .summary-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; align-items: stretch; }
-  .summary-card {
-    flex: 1; min-width: 200px;
-    display: flex; flex-direction: column; gap: 6px;
-    text-align: left; font-family: inherit;
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 18px 20px; cursor: pointer;
-    transition: border-color .12s, box-shadow .12s;
-  }
-  .summary-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
-  .summary-card.status-card { cursor: default; }
-  .summary-card.status-card:hover { border-color: var(--border); box-shadow: none; }
-  .summary-card #runNowBtn { margin-top: auto; }
-  .summary-card #statusDetail:empty { display: none; }
+  /* Scan progress (the strip under the top bar) */
+
   .progress { height: 5px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin: 8px 0 2px; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 999px; width: 0%; transition: width .4s ease; }
   .progress-fill.indeterminate { width: 35% !important; animation: indet 1.3s ease-in-out infinite; }
   @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
-  .summary-card .summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .summary-card .summary-title { font-size: 15px; font-weight: 650; color: var(--text); }
-  .summary-card .summary-count { font-size: 22px; font-weight: 650; color: var(--text); line-height: 1; }
-  .summary-card .summary-sub { font-size: 12.5px; color: var(--muted); }
-  .summary-card .summary-manage { font-size: 12.5px; font-weight: 600; color: var(--accent); margin-top: 2px; }
 
   /* Modals */
   .modal-overlay {
@@ -588,12 +559,6 @@
   .kw-cleanup-group .chip button { display: none; }
   .kw-cleanup-suggested { width: 100%; }
 
-  .stat-tile { background: var(--surface-2); border-radius: var(--radius-sm); padding: 11px 16px; flex: 1; min-width: 150px; }
-  .stat-tile .stat-label { font-size: 12px; color: var(--muted); }
-  .stat-tile .stat-value { font-size: 22px; font-weight: 700; line-height: 1.15; }
-  .stat-tile .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
-  .stat-tile.stat-tile-primary { background: var(--accent-soft); }
-  .stat-tile.stat-tile-primary .stat-value { color: var(--accent-soft-text); }
   .site-tabs {
     display: flex; gap: 2px; margin-bottom: 12px;
     border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden;
@@ -629,89 +594,10 @@
     color: var(--accent-contrast); background: var(--accent); border-color: var(--accent);
   }
   .view-tab.active .vt-count { opacity: .8; }
-  /* Unlabeled stats toggle, parked at the far end of the tab bar — not a
-     feature anyone needs to find, just there for whoever already knows. */
-  .stats-peek {
-    margin-left: auto; align-self: center;
-    width: 10px; height: 10px; padding: 0;
-    border: none; border-radius: 50%; background: var(--muted);
-    opacity: .1; cursor: pointer; transition: opacity .15s;
-  }
-  .stats-peek:hover { opacity: .4; }
-  .stats-peek.active { opacity: .6; }
-
-  /* Results: one row per project. The status filter lives in the filter-menu
-     (every width) — <select> is just a hidden state holder, never shown
-     directly. Search is its own anchored dropdown, same treatment as the
-     filter/sort menus. Source-site switching is the tab row. */
-  .results-toolbar { display: none; }
-
-  .search-menu { width: 300px; min-width: 0; }
   /* >=16px keeps mobile Safari/Chrome from zooming the page in on focus —
      they auto-zoom any focused text input below that size. */
   #resultsSearch { font-size: 16px; }
 
-  /* Results header: search + filter + download, all icon buttons next to the heading. */
-  .results-head-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-  #searchToggleBtn, #filterToggleBtn, #sortToggleBtn { display: inline-flex; }
-  #searchToggleBtn.active, #filterToggleBtn.active, #sortToggleBtn.active {
-    color: var(--accent); border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft), 0 0 8px 1px var(--accent);
-  }
-  .filter-wrap { position: relative; }
-  .filter-menu {
-    display: none;
-    position: absolute; top: 100%; right: 0; margin-top: 6px;
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    box-shadow: var(--shadow-md); padding: 4px; z-index: 30;
-    min-width: 190px; max-width: calc(100vw - 24px); max-height: 62vh; overflow-y: auto;
-  }
-  .filter-menu.open { display: block; }
-  .fm-group { border-top: 1px solid var(--border); }
-  .fm-group:first-child { border-top: none; }
-  .fm-head {
-    display: flex; align-items: center; gap: 6px; width: 100%;
-    background: transparent; border: none; cursor: pointer;
-    padding: 8px 10px; font-family: inherit;
-    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--muted);
-  }
-  .fm-head:hover { color: var(--text); }
-  .fm-head-label { flex-shrink: 0; }
-  .fm-head-val {
-    flex: 1; min-width: 0; text-align: left;
-    text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; color: var(--accent);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .fm-head-val:empty { display: none; }
-  .fm-chev { font-size: 9px; transition: transform .12s; flex-shrink: 0; }
-  .fm-group.open .fm-chev { transform: rotate(90deg); }
-  .fm-body { display: none; padding-bottom: 4px; }
-  .fm-group.open > .fm-body { display: block; }
-  .fm-body button {
-    display: block; width: 100%; text-align: left;
-    background: transparent; color: var(--text); border: none; font-family: inherit;
-    padding: 8px 10px; font-size: 13px; font-weight: 500; border-radius: 5px; cursor: pointer;
-  }
-  .fm-body button:hover { background: var(--bg); }
-  .fm-body button.sel { color: var(--accent); font-weight: 650; }
-  .fm-body button .rtab-count { opacity: .55; margin-left: 5px; font-weight: 400; }
-  .fm-body button.fm-toggle {
-    display: flex; align-items: center; gap: 9px; width: 100%;
-    background: transparent; border: none; border-top: 1px solid var(--border);
-    cursor: pointer; font-family: inherit; text-align: left; border-radius: 0;
-    margin-top: 4px; padding: 10px; font-size: 13px; font-weight: 500; color: var(--text);
-  }
-  .fm-body button.fm-toggle:hover { background: var(--bg); }
-  .fm-check {
-    width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px;
-    border: 1px solid var(--border-strong); color: transparent;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .fm-check svg { width: 11px; height: 11px; }
-  .fm-toggle.on .fm-check { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
-  .fm-toggle .fm-check svg { display: block; }
-  .fm-toggle:not(.on) .fm-check svg { visibility: hidden; }
   .pager { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .pager button {
     min-width: 32px; height: 32px; padding: 0 8px;
@@ -723,51 +609,6 @@
   .pager button:disabled { opacity: .4; cursor: default; }
   .pager .pager-gap { min-width: 18px; text-align: center; color: var(--muted); align-self: center; font-size: 13px; }
   .project-list { list-style: none; margin: 0; padding: 0; }
-  .project-list li {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 6px; border-bottom: 1px solid var(--border);
-    cursor: pointer; border-radius: 6px;
-  }
-  .project-list li:last-child { border-bottom: none; }
-  .project-list li:hover { background: var(--surface-2); }
-  .project-list .p-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; }
-  .project-list .p-name .p-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
-  /* Fixed-width trailing columns — New/+N badge and keyword pill —
-     so each lines up under the row above it instead of shifting with the
-     length of its own text. */
-  .project-list .p-meta { display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; }
-  .project-list .p-badge-slot { width: 70px; display: flex; justify-content: flex-end; }
-  .project-list .p-badge-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
-  .project-list .p-status-slot { width: 110px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-  .project-list .p-status-slot .p-fit { margin-left: 0; }
-  .project-list .p-status-slot .pill { width: 100%; box-sizing: border-box; text-align: center; }
-  .project-list .p-badges { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 16px; }
-  .project-list .p-check { color: var(--success); display: inline-flex; }
-  .project-list .p-check svg { width: 16px; height: 16px; }
-  .project-list li.p-done .p-name { opacity: .5; }
-  .project-list li.p-done .pill { opacity: .55; }
-  .project-list li.p-closed .p-name { opacity: .45; }
-  .project-list li.p-overdue .p-name { opacity: .5; }
-  .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
-  .pill.match { background: var(--accent); color: var(--accent-contrast); }
-  .pill.nomatch { background: var(--surface-2); color: var(--muted); }
-  .pill.fail { background: var(--danger-soft); color: var(--danger); }
-  .pill.closed { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); font-weight: 600; }
-  .pill.updated { background: var(--warning-soft); border: 1px solid var(--warning); color: var(--warning); }
-  .pill.firstscan { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
-  .project-list li.p-updated { box-shadow: inset 3px 0 0 var(--warning); }
-  .project-list li.p-updated.p-done .p-name,
-  .project-list li.p-updated.p-done .pill { opacity: 1; }
-  .project-list li.p-reopened .p-check { color: var(--warning); }
-  .updates-badge {
-    background: var(--warning-soft); border: 1px solid var(--warning); color: var(--warning);
-    font-family: inherit; font-size: 12px; font-weight: 700; padding: 3px 10px;
-    border-radius: 999px; cursor: pointer; white-space: nowrap;
-  }
-  .updates-badge:hover { filter: brightness(1.06); }
-  .updates-badge.on { background: var(--warning); color: #fff; }
-  .updates-badge.new-badge { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
-  .updates-badge.new-badge.on { background: var(--success); color: #fff; }
   .file-row.f-new {
     background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning);
     border-radius: 4px; padding-left: 10px;
@@ -917,25 +758,14 @@
   .kw-table .kt-page-link:hover { text-decoration: underline; }
 
   @media (max-width: 640px) {
-    /* Rows stack on phones, so an empty New slot would just leave a gap. */
-    .project-list .p-badge-slot:empty { display: none; }
     .masthead { margin: 10px 10px 0; }
     .masthead-inner { padding: 8px 8px 8px 14px; }
-    .masthead .subtitle { display: none; }
+    
     .wrap { padding: 16px 13px 44px; }
     h1 { font-size: 19px; }
-    .subtitle { font-size: 12.5px; }
 
     .card { padding: 15px 14px; margin-bottom: 15px; }
     .tabs { margin-bottom: 16px; }
-
-    /* Status full width on its own row; Sites + Keywords share the next row */
-    .summary-grid { gap: 10px; margin-bottom: 15px; }
-    .summary-card { flex: 1 1 calc(50% - 5px); min-width: 0; padding: 14px; }
-    .summary-card.status-card { flex-basis: 100%; }
-    .summary-card .summary-title { font-size: 14px; }
-    .summary-card .summary-count { font-size: 19px; }
-    .summary-card .summary-sub { font-size: 12px; }
 
     /* Modals go full-screen — no wasted margin, close button always reachable */
     .modal-overlay { padding: 0; align-items: stretch; }
@@ -945,14 +775,6 @@
     }
     .modal-header { padding: 16px 16px 12px; }
     .modal-body { padding: 14px 16px 22px; }
-
-    /* The search dropdown is anchored to its button (see keepMenuOnScreen),
-       not a modal, so it's already a small floating bar on every width —
-       nothing to override here for mobile. */
-    .search-menu { min-width: 0; width: calc(100vw - 24px); max-width: 320px; }
-
-    .stat-tile { min-width: 130px; padding: 10px 12px; }
-    .stat-tile .stat-value { font-size: 19px; }
 
     /* Stack label-over-field in the site form's advanced section */
     .adv-fields .row { flex-direction: column; align-items: stretch; gap: 4px; }
@@ -983,12 +805,6 @@
     #pdfPager { gap: 8px; padding: 6px 10px; }
     #pdfPager button { min-width: 38px; min-height: 38px; font-size: 20px; }
     #pdfPageInput { width: 3em; padding: 8px 2px; font-size: 15px; }
-
-    /* Project cards: name, then site/bid date, then file count + tags, each
-       on their own line — squeezing them onto one row (the desktop layout)
-       left almost no width for the name and wrapped it mid-word. */
-    .project-list li { flex-wrap: wrap; align-items: flex-start; row-gap: 6px; }
-    .project-list .p-name { flex-basis: 100%; }
 
     .results-pagerbar { flex-direction: column; align-items: stretch; gap: 8px; }
     .pager { justify-content: center; }
@@ -1078,6 +894,7 @@
   .bs-bar .view-tab.active { background: transparent; color: var(--text); border-bottom-color: var(--accent); font-weight: 700; }
   .bs-bar .view-tab .vt-count { background: var(--surface-2); color: var(--muted); opacity: 1; border-radius: 999px; padding: 1px 7px; }
   .bs-bar .view-tab.active .vt-count { background: var(--accent); color: var(--accent-contrast); }
+  .bs-bar .view-tab .vt-count:empty { display: none; }
   .bs-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 0; }
   .bs-bar-right .status-line { margin: 0; font-size: 13px; }
   .bs-export, .bs-filters-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 13px; padding: 6px 10px; }
@@ -1100,12 +917,9 @@
   }
   .bs-sort:hover, .bs-sort.active { color: var(--text); }
   .bs-arrow { font-size: 12px; }
-  .project-list li.bs-item {
-    display: block; padding: 0; gap: 0; border-radius: 0; cursor: default;
-    border-bottom: 1px solid var(--border);
-  }
-  .project-list li.bs-item:hover { background: transparent; }
-  .project-list li.bs-item:last-child { border-bottom: none; }
+  .bs-item { border-bottom: 1px solid var(--border); }
+  .bs-item:last-child { border-bottom: none; }
+  .bs-item.p-closed .c-name, .bs-item.p-overdue .c-name { opacity: .5; }
   .bs-row { min-height: 56px; cursor: pointer; }
   .bs-row:hover, .bs-item.is-open > .bs-row { background: var(--surface-2); }
   .bs-cell { padding: 8px 10px; min-width: 0; font-size: 13.5px; }
