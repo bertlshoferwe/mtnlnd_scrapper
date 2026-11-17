@@ -2934,8 +2934,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(tmf&&tms.length)team='<span class="qcwho qcteam" title="'+esc(tmf.name||"Team")+(tmn?": "+esc(tmn):"")+'">'+(q.team?(teamIcon(q.team)||"")+'<span class="qcd">'+esc(tmn)+'</span>':'<span class="qci"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></svg></span>')+
       '<select data-qcteam aria-label="'+esc(tmf.name||"Team")+'">'+opt("","No team",q.team||"")+tms.map(function(x){return opt(x.id,x.name,q.team||"")}).join("")+'</select></span>';
     var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?ic("enter",15):'Create '+ic("enter",14))+'</button>';
-    if(kind==="row")return '<div class="qc qcrow">'+type+'<input data-qct placeholder="What needs to be done?" maxlength="140" value="'+esc(q.title)+'" aria-label="Summary">'+due+person+team+go+'</div>';
-    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="What needs to be done?" maxlength="140" aria-label="Summary">'+esc(q.title)+'</textarea><div class="qcb">'+type+due+person+team+'<span class="sp"></span>'+go+'</div></div>';
+    if(kind==="row")return '<div class="qc qcrow">'+type+'<input data-qct placeholder="Enter project name" maxlength="140" value="'+esc(q.title)+'" aria-label="Project name">'+due+person+team+go+'</div>';
+    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="Enter project name" maxlength="140" aria-label="Project name">'+esc(q.title)+'</textarea><div class="qcb">'+type+due+person+team+'<span class="sp"></span>'+go+'</div></div>';
   }
   function openQC(where,key,extra){
     ui.calPop=null;
@@ -2953,7 +2953,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],fields={};
     if(tmf&&q.team)fields[tmf.id]=q.team;
     var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due,fields:fields});
-    q.title="";render();focusQC();toast(ikey(is)+" created");
+    // the new bid opens right away, like one made in the Create window
+    ui.qc=null;render();openIssue(is.id);
     offerBsLink(is);
   }
   function setCalMode(cmode){
