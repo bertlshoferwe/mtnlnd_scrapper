@@ -940,14 +940,28 @@
 
   .bs-table { overflow-x: auto; }
   .bs-head, .bs-row {
-    display: grid; align-items: center; min-width: 760px;
-    grid-template-columns: 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 150px 52px;
+    display: grid; align-items: center; min-width: var(--bs-minw, 760px);
+    grid-template-columns: var(--bs-cols, 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 150px 52px);
   }
   .bs-head {
     background: var(--surface-2); border-bottom: 1px solid var(--border);
     font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
   }
   .bs-head > span, .bs-sort { padding: 9px 10px; }
+  .bs-sort, .bs-colcell { position: relative; align-self: stretch; }
+  /* Drag a header's right edge to resize its column */
+  .bs-resize {
+    position: absolute; top: 0; bottom: 0; right: -5px; width: 10px; z-index: 3;
+    cursor: col-resize; touch-action: none;
+  }
+  .bs-resize::after {
+    content: ""; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 2px; border-radius: 2px;
+    background: var(--border-strong); opacity: 0; transition: opacity .12s;
+  }
+  .bs-head:hover .bs-resize::after { opacity: .6; }
+  .bs-resize:hover::after, .bs-resize:focus-visible::after, .bs-resizing .bs-resize::after { opacity: 1; background: var(--accent); }
+  .bs-resize:focus-visible { outline: none; }
+  .bs-resizing, .bs-resizing * { cursor: col-resize !important; user-select: none; }
   .bs-sort {
     background: none; border: 0; text-align: left; font: inherit; color: inherit;
     text-transform: inherit; letter-spacing: inherit; cursor: pointer; display: flex; align-items: center; gap: 4px;
@@ -1237,10 +1251,10 @@
       <div class="bs-table">
         <div class="bs-head">
           <span></span>
-          <button type="button" class="bs-sort" data-sort="name" onclick="pickSort(this)">Project<span class="bs-arrow"></span></button>
-          <button type="button" class="bs-sort" data-sort="bid" onclick="pickSort(this)">Bid date<span class="bs-arrow"></span></button>
-          <button type="button" class="bs-sort" data-sort="keywords" onclick="pickSort(this)">Keywords<span class="bs-arrow"></span></button>
-          <span id="bsColStatus">Suggestion</span>
+          <button type="button" class="bs-sort" data-sort="name" onclick="pickSort(this)">Project<span class="bs-arrow"></span><span class="bs-resize" data-col="name" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Project column (arrow keys; double-click resets all)"></span></button>
+          <button type="button" class="bs-sort" data-sort="bid" onclick="pickSort(this)">Bid date<span class="bs-arrow"></span><span class="bs-resize" data-col="bid" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Bid date column (arrow keys; double-click resets all)"></span></button>
+          <button type="button" class="bs-sort" data-sort="keywords" onclick="pickSort(this)">Keywords<span class="bs-arrow"></span><span class="bs-resize" data-col="kw" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Keywords column (arrow keys; double-click resets all)"></span></button>
+          <span class="bs-colcell"><span id="bsColStatus">Suggestion</span><span class="bs-resize" data-col="fit" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the fourth column (arrow keys; double-click resets all)"></span></span>
           <span class="bs-col-act"></span>
         </div>
         <ul class="project-list" id="projectList"></ul>
@@ -5143,6 +5157,75 @@ function clearAllFilters() {
   syncFilterUI();
   loadProjects();
 }
+
+// Resizable columns: drag a header's right edge (or focus it and use the
+// arrow keys); double-click resets. Widths are remembered per browser. The
+// fourth column (Suggestion / Added / Why) also takes any space left over.
+const COL_WIDTHS_KEY = 'bidscout_col_widths';
+const COL_MIN = { name: 180, bid: 110, kw: 120, fit: 90 };
+const COL_ORDER = ['name', 'bid', 'kw', 'fit'];
+let colWidths = null;
+try { colWidths = JSON.parse(localStorage.getItem(COL_WIDTHS_KEY) || 'null'); } catch (e) { /* defaults */ }
+function applyColWidths() {
+  const t = document.querySelector('.bs-table');
+  if (!colWidths) { t.style.removeProperty('--bs-cols'); t.style.removeProperty('--bs-minw'); return; }
+  const w = colWidths;
+  t.style.setProperty('--bs-cols', '40px ' + w.name + 'px ' + w.bid + 'px ' + w.kw + 'px minmax(' + w.fit + 'px, 1fr) 52px');
+  t.style.setProperty('--bs-minw', (92 + w.name + w.bid + w.kw + w.fit) + 'px');
+}
+function measureColWidths() {
+  const cells = document.querySelectorAll('.bs-head > *');   // chevron, name, bid, kw, fit, actions
+  const out = {};
+  COL_ORDER.forEach(function(c, k) { out[c] = Math.round(cells[k + 1].getBoundingClientRect().width); });
+  return out;
+}
+function setColWidth(col, w) {
+  if (!colWidths) colWidths = measureColWidths();
+  colWidths[col] = Math.max(COL_MIN[col], Math.round(w));
+  applyColWidths();
+}
+function saveColWidths() {
+  try {
+    if (colWidths) localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths));
+    else localStorage.removeItem(COL_WIDTHS_KEY);
+  } catch (e) { /* per-viewer convenience only */ }
+}
+document.querySelectorAll('.bs-resize').forEach(function(h) {
+  const col = h.dataset.col;
+  // a click or double-click here must not sort by the column
+  h.addEventListener('click', function(e) { e.stopPropagation(); e.preventDefault(); });
+  h.addEventListener('dblclick', function(e) {
+    e.stopPropagation(); e.preventDefault();
+    colWidths = null; applyColWidths(); saveColWidths();
+  });
+  h.addEventListener('pointerdown', function(e) {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    if (!colWidths) colWidths = measureColWidths();
+    const startX = e.clientX, startW = colWidths[col];
+    h.setPointerCapture(e.pointerId);
+    document.body.classList.add('bs-resizing');
+    function move(ev) { setColWidth(col, startW + ev.clientX - startX); }
+    function up() {
+      h.removeEventListener('pointermove', move);
+      h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      document.body.classList.remove('bs-resizing');
+      saveColWidths();
+    }
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+    h.addEventListener('pointercancel', up);
+  });
+  h.addEventListener('keydown', function(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault(); e.stopPropagation();
+    if (!colWidths) colWidths = measureColWidths();
+    setColWidth(col, colWidths[col] + (e.key === 'ArrowRight' ? 16 : -16));
+    saveColWidths();
+  });
+});
+applyColWidths();
 
 // Phones: Sites, Keywords, Bid board and the theme switch sit behind the menu button.
 function toggleMastheadMenu(open) {
