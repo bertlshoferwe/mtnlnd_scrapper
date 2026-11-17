@@ -829,16 +829,27 @@
     background: var(--surface); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; color: var(--muted);
   }
   .masthead { position: relative; }
-  .mh-menu-btn { display: none; padding: 7px 10px; }
+  /* Bid board, then the menu button (Sites, Keywords, theme in a panel under it) */
+  .mh-board { margin-left: auto; }
+  .mh-menu-btn { display: inline-flex; padding: 7px 10px; }
+  .masthead-actions {
+    display: none; position: absolute; top: 54px; right: 10px; z-index: 60;
+    flex-direction: column; align-items: stretch; gap: 4px; min-width: 200px; padding: 6px;
+    background: var(--masthead-bg); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; box-shadow: var(--shadow-md);
+  }
+  .masthead-actions.open { display: flex; }
+  .masthead-actions .theme-toggle { justify-content: space-between; border-radius: 8px; padding: 10px 12px; font-size: 13.5px; }
   .mh-search svg { width: 16px; height: 16px; flex-shrink: 0; }
   .mh-search input {
     flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
     padding: 8px 0; font-size: 14px; color: var(--text); font-family: inherit;
   }
   .mh-search:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
-  .mh-status { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; font-size: 12.5px; color: var(--masthead-muted); }
+  .mh-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-width: 0; font-size: 12.5px; color: var(--masthead-muted); }
   .mh-status .status-dot { margin-right: 0; flex-shrink: 0; }
-  .mh-status #statusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .mh-status #statusText { white-space: nowrap; color: var(--masthead-text); }
+  .mh-status #statusDetail { flex: 1 1 200px; min-width: 0; margin: 0; }
+  .mh-status #statusDetail:not(:empty)::before { content: "·"; margin-right: 8px; }
   .mh-btn {
     background: #ffffff; color: #202c54; border: 0; border-radius: 999px;
     padding: 6px 12px; font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap;
@@ -847,10 +858,8 @@
   .mh-btn-danger { background: var(--danger); color: #ffffff; }
   .mh-count { opacity: .7; font-weight: 500; margin-left: 3px; }
   .mh-strip { padding: 0 18px 10px; }
-  .mh-strip .status-line { color: var(--masthead-muted); margin: 0 0 4px; font-size: 12.5px; }
-  .mh-strip .status-line:empty { display: none; }
-  .mh-strip:has(#statusDetail:empty):has(#scanProgress[style*="none"]) { display: none; }
-  .mh-strip .progress { background: rgba(255,255,255,.15); margin: 4px 0 0; }
+  .mh-strip .status-line { color: var(--masthead-muted); font-size: 12.5px; }
+  .mh-strip .progress { background: rgba(255,255,255,.15); margin: 8px 0 0; }
   .mh-strip .progress-fill { background: #ffffff; }
 
   .bs-layout { display: flex; align-items: flex-start; gap: 16px; }
@@ -1062,7 +1071,6 @@
     .bs-filters { display: none; position: static; max-height: none; flex-basis: auto; }
     .bs-layout.filters-open .bs-filters { display: block; }
     .bs-filters-btn { display: inline-flex; }
-    .mh-status { margin-left: 0; }
   }
   /* Phones: each project becomes a card */
   @media (max-width: 700px) {
@@ -1072,20 +1080,16 @@
     .masthead h1 { order: 1; }
     .mh-divisions { order: 2; flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .mh-divisions::-webkit-scrollbar { display: none; }
-    .mh-menu-btn { display: inline-flex; order: 3; }
+    .mh-board { order: 3; margin-left: 0; }
+    .mh-menu-btn { order: 3; }
     .mh-search { order: 4; flex-basis: 100%; max-width: none; }
     .mh-search input { padding: 10px 0; }
-    .mh-status { order: 5; flex-basis: 100%; }
-    .mh-status #statusText { flex: 1; max-width: none; }
     .mh-strip { padding: 0 14px 10px; }
-    /* The menu: Sites, Keywords, Bid board, theme — a panel under the menu button */
-    .masthead-actions {
-      display: none; position: absolute; top: 52px; right: 10px; z-index: 60;
-      flex-direction: column; align-items: stretch; gap: 4px; min-width: 200px; padding: 6px;
-      background: var(--masthead-bg); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; box-shadow: var(--shadow-md);
-    }
-    .masthead-actions.open { display: flex; }
-    .masthead-actions .theme-toggle { justify-content: space-between; border-radius: 8px; padding: 11px 12px; font-size: 14px; }
+    .mh-status #runNowBtn { margin-left: auto; }
+    .mh-status #statusDetail { order: 5; flex-basis: 100%; }
+    .mh-status #statusDetail::before { display: none; }
+    .masthead-actions { top: 52px; }
+    .masthead-actions .theme-toggle { padding: 11px 12px; font-size: 14px; }
     .bs-bar { padding: 0 8px; }
     .bs-bar .view-tab { padding: 12px 7px 10px; font-size: 13.5px; }
     .bs-bar-right .status-line { display: none; }
@@ -1119,28 +1123,28 @@
       <span class="sr-only">Search projects</span>
       <input type="search" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" autocomplete="off">
     </label>
-    <div class="mh-status">
-      <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
-      <button class="mh-btn" id="runNowBtn" onclick="runNow()">Run now</button>
-      <button class="mh-btn mh-btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
-    </div>
+    <a class="theme-toggle mh-board" id="bidBoardLink" href="/workflow/" target="bidboard"
+       onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
+       title="Track the projects this division is bidding on">Bid board</a>
     <button type="button" class="theme-toggle mh-menu-btn" id="mhMenuBtn" onclick="toggleMastheadMenu()" aria-expanded="false" aria-controls="mhNav" aria-label="Menu">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
-    <nav class="masthead-actions" id="mhNav" aria-label="Settings and the bid board">
+    <nav class="masthead-actions" id="mhNav" aria-label="Sites, keywords and theme">
       <button class="theme-toggle" onclick="openModal('sites')" title="Web pages scanned daily">Sites <span class="mh-count" id="sitesCount">&ndash;</span></button>
       <button class="theme-toggle" onclick="openModal('keywords')" title="Words and phrases used to judge whether a plan is worth pursuing">Keywords <span class="mh-count" id="keywordsCount">&ndash;</span></button>
-      <a class="theme-toggle" id="bidBoardLink" href="/workflow/" target="bidboard"
-         onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
-         title="Track the projects this division is bidding on">Bid board</a>
       <button class="theme-toggle" id="themeToggle" onclick="cycleTheme()" title="Switch light / dark / auto">
         <span id="themeToggleIcon" style="display:inline-flex"></span><span id="themeToggleLabel">Auto</span>
       </button>
     </nav>
   </div>
-  <!-- While a scan runs (or just after one): what it's doing, and how far along -->
+  <!-- The scan: its status and details on one line with Run now, and how far along while one runs -->
   <div class="mh-strip">
-    <div class="status-line" id="statusDetail"></div>
+    <div class="mh-status">
+      <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
+      <span class="status-line" id="statusDetail"></span>
+      <button class="mh-btn" id="runNowBtn" onclick="runNow()">Run now</button>
+      <button class="mh-btn mh-btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
+    </div>
     <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
   </div>
 </header>
@@ -5222,7 +5226,7 @@ document.querySelectorAll('.bs-resize').forEach(function(h) {
 });
 applyColWidths();
 
-// Phones: Sites, Keywords, Bid board and the theme switch sit behind the menu button.
+// Sites, Keywords and the theme switch sit behind the menu button.
 function toggleMastheadMenu(open) {
   const nav = document.getElementById('mhNav');
   if (open == null) open = !nav.classList.contains('open');
