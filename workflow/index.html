@@ -431,7 +431,12 @@ td.over{color:var(--high);font-weight:600}
 .qcdue .qci{width:auto}
 .qcd{font-size:12px;font-weight:600;color:var(--ink);padding:0 2px;white-space:nowrap}
 /* due date + time picker */
-.dtp{position:fixed;z-index:200;width:300px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(16,22,46,.22);padding:12px;color:var(--ink)}
+.dtbtn{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;border:1px solid transparent;background:none;border-radius:6px;padding:4px 8px;margin-left:-8px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer}
+.dtbtn svg{color:var(--muted);flex:none}
+.dtbtn:hover:not(:disabled){border-color:var(--line);background:var(--chip)}
+.dtbtn.empty{color:var(--muted)}
+.dtbtn:disabled{cursor:default}
+.dtp{position:fixed;z-index:1000;width:300px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(16,22,46,.22);padding:12px;color:var(--ink)}
 .dtp[hidden]{display:none}
 .dtp-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
 .dtp-head select{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:14px;color:var(--ink)}
@@ -2950,7 +2955,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var q=ui.qc,pp=proj(),who=q.assignee;
     // one button for the due date and time; it opens the picker (dtpOpen)
     var dl=q.due?shortDate(q.due)+(q.dueTime?" · "+fmtTime(q.dueTime):""):"";
-    var due='<span class="qcdue"><button class="qci" data-dtpopen type="button" aria-haspopup="dialog" aria-expanded="'+(!!ui.dtp)+'" title="Due date and time" aria-label="Due date and time'+(dl?": "+esc(dl):"")+'">'+(dl?'<span class="qcd">'+esc(dl)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button></span>';
+    var due='<span class="qcdue"><button class="qci" data-dtpopen="qc" type="button" aria-haspopup="dialog" aria-expanded="'+(!!ui.dtp)+'" title="Due date and time" aria-label="Due date and time'+(dl?": "+esc(dl):"")+'">'+(dl?'<span class="qcd">'+esc(dl)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button></span>';
     var person='<span class="qcwho" title="Assignee">'+(who?nameAv(nameOf(who)):'<span class="qci"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'+'</span>')+'<select data-qcwho aria-label="Assignee">'+teamOptions(who)+'</select></span>';
     // the space's Team field, when it has one and the division has teams
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],tms=divTeams(curDiv()),tmn=tmf&&q.team?cfShow(tmf,q.team):"",team="";
@@ -2967,23 +2972,44 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   function closeQC(){dtpClose();if(ui.qc){ui.qc=null;render()}}
 
-  /* Due date + time picker for quick create: month and year pickers with arrows, the month's days,
-     then the picked day written out and a time box. Floats over the page (fixed), and handles its
-     own clicks so the board doesn't take a click in it for a click outside the box. */
+  /* Due date + time picker — for quick create (data-dtpopen="qc") and a bid's Due date
+     (data-dtpopen="<bid id>"): month and year pickers with arrows, the month's days, then the
+     picked day written out and a time box. Floats over the page (fixed), and handles its own
+     clicks so the board doesn't take a click in it for a click outside. */
+  function dtpGet(){
+    var t=ui.dtp&&ui.dtp.target;
+    if(t==="qc")return ui.qc?{due:ui.qc.due||"",time:ui.qc.dueTime||""}:null;
+    var is=t&&byId(t);return is?{due:is.due||"",time:is.dueTime||""}:null;
+  }
+  function dtpSet(due,time){
+    var t=ui.dtp&&ui.dtp.target;
+    if(t==="qc"){if(!ui.qc)return;ui.qc.due=due;ui.qc.dueTime=due?time:"";render();return}
+    var is=byId(t);if(!is)return;
+    setField(is,"due",due);
+    if(HAS_DUETIME&&due)setField(is,"dueTime",time);
+    if(ui.issueId===is.id)$("i-side").innerHTML=issueSideHTML(is);
+  }
+  function dtpOpener(){return ui.dtp&&document.querySelector('[data-dtpopen="'+ui.dtp.target+'"]')}
   function dtpOpen(btn){
-    if(!ui.qc)return;
-    ui.dtp={month:(ui.qc.due||today()).slice(0,7)};
+    var target=btn.getAttribute("data-dtpopen");
+    if(target==="qc"&&!ui.qc)return;
+    ui.dtp={target:target,month:""};
+    var cur=dtpGet();if(!cur){ui.dtp=null;return}
+    ui.dtp.month=(cur.due||today()).slice(0,7);
     btn.setAttribute("aria-expanded","true");
     renderDtp();placeDtp();
+    btn=btn||dtpOpener();
     var f=document.querySelector("#dtPop .dtp-day.on")||document.querySelector("#dtPop .dtp-day.today")||document.querySelector("#dtPop .dtp-day");if(f)f.focus();
   }
   function dtpClose(){
-    if(!ui.dtp)return;ui.dtp=null;
+    if(!ui.dtp)return;
+    var b=dtpOpener();ui.dtp=null;
     var el=document.getElementById("dtPop");if(el)el.hidden=true;
-    var b=document.querySelector("[data-dtpopen]");if(b)b.setAttribute("aria-expanded","false");
+    if(b)b.setAttribute("aria-expanded","false");
   }
+  function dtpDone(){var qc=ui.dtp&&ui.dtp.target==="qc",b=dtpOpener();dtpClose();if(qc)focusQC();else if(b)b.focus()}
   function placeDtp(){
-    var el=document.getElementById("dtPop"),b=document.querySelector("[data-dtpopen]");if(!el||!b)return;
+    var el=document.getElementById("dtPop"),b=dtpOpener();if(!el||!b)return;
     // measured in screen pixels, then divided by the page zoom (80% on computers) to place it
     var Z=parseFloat(getComputedStyle(document.body).zoom)||1,r=b.getBoundingClientRect();
     el.hidden=false;
@@ -2991,7 +3017,6 @@ img.who{object-fit:cover;background:var(--chip)}
     if(y+h>window.innerHeight-8)y=Math.max(8,r.top-h-6);
     el.style.left=(x/Z)+"px";el.style.top=(y/Z)+"px";
   }
-  function dtpRefresh(){render();renderDtp();placeDtp()}
   function renderDtp(){
     var el=document.getElementById("dtPop");
     if(!el){
@@ -3000,27 +3025,27 @@ img.who{object-fit:cover;background:var(--chip)}
       document.body.appendChild(el);
       el.addEventListener("click",function(e){
         e.stopPropagation();
-        var t=e.target,q=ui.qc,x;if(!q||!ui.dtp)return;
+        var t=e.target,cur=dtpGet(),x;if(!cur)return;
         if((x=t.closest("[data-dtpnav]"))){var d=new Date(ui.dtp.month+"-01T00:00:00");d.setMonth(d.getMonth()+ +x.getAttribute("data-dtpnav"));ui.dtp.month=d.getFullYear()+"-"+pad(d.getMonth()+1);renderDtp();placeDtp();return}
-        if((x=t.closest("[data-dtpday]"))){q.due=x.getAttribute("data-dtpday");ui.dtp.month=q.due.slice(0,7);dtpRefresh();var ti=document.querySelector("#dtPop [data-dtptime]");if(ti)ti.focus();return}
-        if(t.closest("[data-dtpclear]")){q.due="";q.dueTime="";dtpClose();render();focusQC();return}
-        if(t.closest("[data-dtpdone]")){dtpClose();focusQC();return}
+        if((x=t.closest("[data-dtpday]"))){var day=x.getAttribute("data-dtpday");ui.dtp.month=day.slice(0,7);dtpSet(day,cur.time);renderDtp();placeDtp();var ti=document.querySelector("#dtPop [data-dtptime]");if(ti)ti.focus();return}
+        if(t.closest("[data-dtpclear]")){dtpSet("","");dtpDone();return}
+        if(t.closest("[data-dtpdone]")){dtpDone();return}
       });
       el.addEventListener("change",function(e){
         e.stopPropagation();
-        var t=e.target,q=ui.qc;if(!q||!ui.dtp)return;
-        if(t.hasAttribute("data-dtptime")){q.dueTime=t.value;render();placeDtp();return}
+        var t=e.target,cur=dtpGet();if(!cur)return;
+        if(t.hasAttribute("data-dtptime")){dtpSet(cur.due,t.value);renderDtp();placeDtp();return}
         if(t.hasAttribute("data-dtpmonth")||t.hasAttribute("data-dtpyear")){
           ui.dtp.month=el.querySelector("[data-dtpyear]").value+"-"+pad(+el.querySelector("[data-dtpmonth]").value+1);renderDtp();placeDtp();
         }
       });
       el.addEventListener("keydown",function(e){
-        if(e.key==="Escape"){e.preventDefault();e.stopPropagation();dtpClose();var b=document.querySelector("[data-dtpopen]");if(b)b.focus();return}
-        if(e.key==="Enter"&&e.target.hasAttribute("data-dtptime")){e.preventDefault();e.stopPropagation();ui.qc.dueTime=e.target.value;dtpClose();render();focusQC();return}
+        if(e.key==="Escape"){e.preventDefault();e.stopPropagation();var b=dtpOpener();dtpClose();if(b)b.focus();return}
+        if(e.key==="Enter"&&e.target.hasAttribute("data-dtptime")){e.preventDefault();e.stopPropagation();var c2=dtpGet();if(c2)dtpSet(c2.due,e.target.value);dtpDone();return}
         e.stopPropagation();
       });
     }
-    var q=ui.qc,ym=ui.dtp.month.split("-"),y=+ym[0],m=+ym[1]-1,sel=q.due||"",T=today();
+    var cur=dtpGet()||{due:"",time:""},ym=ui.dtp.month.split("-"),y=+ym[0],m=+ym[1]-1,sel=cur.due,T=today();
     var start=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate(),cells="";
     for(var k=0;k<start;k++)cells+='<span></span>';
     for(var d=1;d<=days;d++){
@@ -3035,7 +3060,7 @@ img.who{object-fit:cover;background:var(--chip)}
       '<button type="button" class="dtp-nav" data-dtpnav="1" aria-label="Next month">'+ic("chevR",18)+'</button></div>'+
       '<div class="dtp-grid"><span class="dtp-dow">Su</span><span class="dtp-dow">Mo</span><span class="dtp-dow">Tu</span><span class="dtp-dow">We</span><span class="dtp-dow">Th</span><span class="dtp-dow">Fr</span><span class="dtp-dow">Sa</span>'+cells+'</div>'+
       '<div class="dtp-foot"><div class="dtp-big">'+(sd?'<b>'+sd.getDate()+'</b><span>'+MONTHNAMES[sd.getMonth()]+' '+sd.getFullYear()+'<br><small>'+sd.toLocaleDateString(undefined,{weekday:"long"})+'</small></span>':'<span class="dtp-none">Pick a day</span>')+'</div>'+
-      (HAS_DUETIME?'<label class="dtp-time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="sr">Due time</span><input type="time" data-dtptime value="'+esc(q.dueTime||"")+'"'+(sel?'':' disabled')+'></label>':'')+'</div>'+
+      (HAS_DUETIME?'<label class="dtp-time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="sr">Due time</span><input type="time" data-dtptime value="'+esc(cur.time)+'"'+(sel?'':' disabled')+'></label>':'')+'</div>'+
       '<div class="dtp-acts"><button type="button" class="btn small" data-dtpclear>Clear</button><button type="button" class="btn small primary" data-dtpdone>Done</button></div>';
   }
   function focusQC(){
@@ -3977,7 +4002,7 @@ img.who{object-fit:cover;background:var(--chip)}
 
   /* ---------- overlays ---------- */
   function openOv(id){$(id).classList.add("open")}
-  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere();syncUrl()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){if(ui.ask&&ui.ask.quote)quoteDrop(ui.ask.quote);ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
+  function closeOv(id){$(id).classList.remove("open");if(id==="ov-issue"){dtpClose();ui.issueId=null;ui.armI=false;ui.imenu=false;saveHere();syncUrl()}if(id==="ov-person"){ui.editPerson=null;ui.armPer=null}if(id==="ov-ask"){if(ui.ask&&ui.ask.quote)quoteDrop(ui.ask.quote);ui.ask=null;render();askRefreshBid()}if(id==="ov-handoff"){ui.handoff=null;setTimeout(nextHandoff,300)}if(id==="ov-auto"){ui.editRule=null;ui.armR=false}if(id==="ov-tpl"){ui.editTpl=null;ui.armDT=null;render()}if(id==="ov-team"){ui.editTeam=null;ui.armTm=null;ui.draftTeam=null}if(id==="ov-settings"){ui.armD=false;ui.armDT=null;ui.editTpl=null;renderSide()}}
   function openDay(s){
     var list=proj().issues.filter(function(i){return i.due===s&&visible(i)});
     $("dayTitle").textContent=parse(s).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
@@ -4578,8 +4603,8 @@ img.who{object-fit:cover;background:var(--chip)}
       (isSub||!canAct()?'':'<button class="icon addsub" data-addsub title="Add subtask" aria-label="Add subtask">'+ic("plus",18)+'</button>')+'</div>';
     var lab={due:"Due date",assignee:"Assignee",reporter:"Reporter",priority:"Priority",type:"Type",labels:"Labels",parent:"Parent"};
     var ctlF={
-      due:'<span class="dt"><input id="i-due" class="bare'+(is.due?'':' empty')+'" type="date" data-f="due" value="'+esc(is.due)+'" aria-label="Due date">'+
-        (HAS_DUETIME&&is.due?'<input id="i-duet" class="bare'+(is.dueTime?'':' empty')+'" type="time" data-f="dueTime" value="'+esc(is.dueTime||"")+'" aria-label="Due time">':'')+'</span>',
+      due:(function(){var dl=is.due?fmtDay(is.due)+(is.dueTime?" · "+fmtTime(is.dueTime):""):"";
+        return '<button type="button" class="dtbtn'+(dl?'':' empty')+'" data-dtpopen="'+esc(is.id)+'" aria-haspopup="dialog" aria-expanded="'+(!!(ui.dtp&&ui.dtp.target===is.id))+'" aria-label="Due date and time'+(dl?": "+esc(dl):"")+'"'+(canAct()?'':' disabled')+'>'+(dl?esc(dl):'None')+'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>'})(),
       assignee:'<span class="pv">'+(is.assignee?nameAv(nameOf(is.assignee)):'')+'<select id="i-who" class="bare" data-f="assignee" aria-label="Assignee">'+teamOptions(is.assignee)+'</select></span>',
       reporter:'<span class="pv">'+(is.reporter?nameAv(nameOf(is.reporter)):'')+'<select id="i-rep" class="bare" data-f="reporter" aria-label="Reporter">'+teamOptions(is.reporter).replace('>Unassigned<','>None<')+'</select></span>',
       priority:'<span class="pv">'+prHTML(is.priority)+'<select id="i-pri" class="bare" data-f="priority" aria-label="Priority">'+PRI.map(function(x){return opt(x,x,is.priority)}).join("")+'</select></span>',
