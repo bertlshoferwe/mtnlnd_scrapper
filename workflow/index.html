@@ -460,6 +460,7 @@ td.over{color:var(--high);font-weight:600}
 .dtp-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .qcwho .who{width:22px;height:22px;font-size:9px;color:#fff}
+.qcpri .pr{display:inline-flex}
 .qcteam svg{flex:0 0 auto;width:15px;height:15px}
 .qcteam .qcd{max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .qcgo{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid var(--line2);background:var(--chip);color:var(--ink);border-radius:6px;padding:3px 10px;font-weight:600;font-size:13px}
@@ -2956,18 +2957,20 @@ img.who{object-fit:cover;background:var(--chip)}
     // one button for the due date and time; it opens the picker (dtpOpen)
     var dl=q.due?shortDate(q.due)+(q.dueTime?" · "+fmtTime(q.dueTime):""):"";
     var due='<span class="qcdue"><button class="qci" data-dtpopen="qc" type="button" aria-haspopup="dialog" aria-expanded="'+(!!ui.dtp)+'" title="Due date and time" aria-label="Due date and time'+(dl?": "+esc(dl):"")+'">'+(dl?'<span class="qcd">'+esc(dl)+'</span>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')+'</button></span>';
+    var pri=q.priority||"Medium";
+    var prio='<span class="qcwho qcpri" title="Priority: '+esc(pri)+'">'+prHTML(pri)+'<select data-qcpri aria-label="Priority">'+PRI.map(function(x){return opt(x,x,pri)}).join("")+'</select></span>';
     var person='<span class="qcwho" title="Assignee">'+(who?nameAv(nameOf(who)):'<span class="qci"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'+'</span>')+'<select data-qcwho aria-label="Assignee">'+teamOptions(who)+'</select></span>';
     // the space's Team field, when it has one and the division has teams
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],tms=divTeams(curDiv()),tmn=tmf&&q.team?cfShow(tmf,q.team):"",team="";
     if(tmf&&tms.length)team='<span class="qcwho qcteam" title="'+esc(tmf.name||"Team")+(tmn?": "+esc(tmn):"")+'">'+(q.team?(teamIcon(q.team)||"")+'<span class="qcd">'+esc(tmn)+'</span>':'<span class="qci"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></svg></span>')+
       '<select data-qcteam aria-label="'+esc(tmf.name||"Team")+'">'+opt("","No team",q.team||"")+tms.map(function(x){return opt(x.id,x.name,q.team||"")}).join("")+'</select></span>';
     var go='<button class="qcgo'+(kind==="card"?' ic':'')+'" data-qcgo title="Create (Enter)">'+(kind==="card"?ic("enter",15):'Create '+ic("enter",14))+'</button>';
-    if(kind==="row")return '<div class="qc qcrow"><input data-qct placeholder="Enter project name" maxlength="140" value="'+esc(q.title)+'" aria-label="Project name">'+due+person+team+go+'</div>';
-    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="Enter project name" maxlength="140" aria-label="Project name">'+esc(q.title)+'</textarea><div class="qcb">'+due+person+team+'<span class="sp"></span>'+go+'</div></div>';
+    if(kind==="row")return '<div class="qc qcrow"><input data-qct placeholder="Enter project name" maxlength="140" value="'+esc(q.title)+'" aria-label="Project name">'+due+prio+person+team+go+'</div>';
+    return '<div class="qc qccard"><textarea data-qct rows="2" placeholder="Enter project name" maxlength="140" aria-label="Project name">'+esc(q.title)+'</textarea><div class="qcb">'+due+prio+person+team+'<span class="sp"></span>'+go+'</div></div>';
   }
   function openQC(where,key,extra){
     ui.calPop=null;
-    ui.qc=Object.assign({where:where,key:key,type:"Task",title:"",due:"",assignee:"",team:"",status:""},extra||{});
+    ui.qc=Object.assign({where:where,key:key,type:"Task",title:"",due:"",assignee:"",team:"",status:"",priority:"Medium"},extra||{});
     render();
   }
   function closeQC(){dtpClose();if(ui.qc){ui.qc=null;render()}}
@@ -3072,7 +3075,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var title=(q.title||"").trim();if(!title){focusQC();return}
     var tmf=spaceFields(pp).filter(function(x){return x.type==="team"})[0],fields={};
     if(tmf&&q.team)fields[tmf.id]=q.team;
-    var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:"Medium",assignee:q.assignee,due:q.due,dueTime:q.dueTime||"",fields:fields});
+    var is=createIssue({type:q.type,title:title,status:q.status||pp.statuses[0].id,priority:q.priority||"Medium",assignee:q.assignee,due:q.due,dueTime:q.dueTime||"",fields:fields});
     // the new bid opens right away, like one made in the Create window
     ui.qc=null;render();openIssue(is.id);
     offerBsLink(is);
@@ -5634,6 +5637,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((v=el.getAttribute("data-cardpri"))){var cpi=byId(v);if(cpi)setField(cpi,"priority",el.value);return}
     if((v=el.getAttribute("data-cardwho"))){var cwi=byId(v);if(cwi)setField(cwi,"assignee",el.value);return}
     if(ui.qc&&el.hasAttribute("data-qcwho")){ui.qc.assignee=el.value;render();return}
+    if(ui.qc&&el.hasAttribute("data-qcpri")){ui.qc.priority=el.value;render();return}
     if(ui.qc&&el.hasAttribute("data-qcteam")){ui.qc.team=el.value;render();return}
     if(el.hasAttribute("data-spacefs")){
       var fsp=proj(),pick=D.config.fieldSets.filter(function(x){return x.id===el.value})[0];
