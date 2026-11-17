@@ -2800,7 +2800,7 @@ img.who{object-fit:cover;background:var(--chip)}
       if(fd.type==="money"||fd.type==="number")return '<td class="num">'+esc(cfShow(fd,fv))+'</td>';
       return '<td><span class="tr" title="'+esc(cfShow(fd,fv))+'">'+esc(cfShow(fd,fv))+'</span></td>';
     }
-    if(k==="title")return '<td class="wk"><span class="kc">'+tiHTML(is.type)+
+    if(k==="title")return '<td class="wk"><span class="kc">'+
       '<button class="lt" data-open="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+esc(is.title)+'</button></span></td>';
     if(k==="due")return '<td class="'+(overdue(is)?'over':'')+'">'+(is.due?fmtDay(is.due)+(is.dueTime?', '+fmtTime(is.dueTime):''):'<span class="none">None</span>')+'</td>';
     if(k==="assignee"){var an=is.assignee?nameOf(is.assignee):"";return '<td><span class="kc">'+nameAv(an)+'<span class="tr">'+(an?esc(an):'<span class="none">Unassigned</span>')+'</span></span></td>'}
@@ -2908,7 +2908,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function calChip(is){
     var done=isDone(is),an=is.assignee?nameOf(is.assignee):"";
     return '<button class="jc'+(done?' fin':an?' asg':'')+(overdue(is)?' over':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+
-      tiHTML(is.type)+'<span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
+      '<span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
   }
   var MONTHNAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
   function closeCalPop(){ui.calPop=null;var pe=document.querySelector(".jpop");if(pe)pe.remove()}
