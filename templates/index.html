@@ -938,8 +938,8 @@
 
   .bs-table { overflow-x: auto; }
   .bs-head, .bs-row {
-    display: grid; align-items: center; min-width: 880px;
-    grid-template-columns: 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 140px 196px;
+    display: grid; align-items: center; min-width: 760px;
+    grid-template-columns: 40px minmax(260px, 2.6fr) 150px minmax(200px, 1.6fr) 150px 52px;
   }
   .bs-head {
     background: var(--surface-2); border-bottom: 1px solid var(--border);
@@ -991,8 +991,24 @@
   .bs-fit.unsure { color: var(--muted); }
   .bs-fit.not_fit { color: var(--warning); }
   .bs-why { font-size: 13px; color: var(--muted); }
-  .c-act { display: flex; justify-content: flex-end; gap: 6px; }
-  .c-act button { font-size: 13px; padding: 7px 10px; white-space: nowrap; }
+  .c-act { display: flex; justify-content: flex-end; padding-left: 0; }
+  .bs-more-btn {
+    width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid transparent; border-radius: 8px; color: var(--muted); cursor: pointer;
+  }
+  .bs-more-btn svg { width: 18px; height: 18px; }
+  .bs-more-btn:hover, .bs-more-btn[aria-expanded="true"] { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
+  .bs-more-btn:disabled { opacity: .5; cursor: progress; }
+  .bs-rowmenu {
+    position: fixed; z-index: 95; min-width: 180px; padding: 4px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md);
+  }
+  .bs-rowmenu[hidden] { display: none; }
+  .bs-rowmenu button {
+    display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px;
+    padding: 8px 12px; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--text); cursor: pointer;
+  }
+  .bs-rowmenu button:hover, .bs-rowmenu button:focus-visible { background: var(--surface-2); outline: none; }
   .bs-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 14px 12px 50px; }
   .bs-ask-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
   .bs-reason {
@@ -1062,11 +1078,12 @@
     .bs-bar-right .status-line { display: none; }
     .bs-head { display: none; }
     .bs-row { display: flex; flex-wrap: wrap; min-width: 0; padding: 10px 8px 10px 12px; gap: 2px 12px; align-items: flex-start; }
-    .bs-row > .c-name { order: 1; flex: 1 1 calc(100% - 52px); padding: 0; }
-    .bs-row > .bs-chev { order: 2; width: 44px; height: 44px; margin: -8px -4px 0 0; }
-    .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-fit { order: 3; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
-    .bs-row > .c-act { order: 4; flex: 1 1 100%; padding: 8px 0 0; justify-content: stretch; }
-    .c-act button { flex: 1; min-height: 44px; }
+    .bs-row > .c-name { order: 1; flex: 1 1 0; min-width: 0; padding: 0; }
+    .bs-row > .bs-chev { order: 3; width: 44px; height: 44px; margin: -8px -4px 0 0; }
+    .bs-row > .c-bid, .bs-row > .c-kw, .bs-row > .c-fit { order: 4; padding: 4px 0 0; flex: 0 0 auto; font-size: 13px; }
+    .bs-row > .c-bid { flex-basis: 100%; display: flex; gap: 8px; }
+    .bs-row > .c-act { order: 2; flex: 0 0 auto; padding: 0; margin: -8px -8px 0 0; }
+    .bs-more-btn { width: 44px; height: 44px; }
     .bs-sub { white-space: normal; }
     .bs-name { white-space: normal; }
     .bs-ask { padding: 2px 12px 12px; }
@@ -1207,6 +1224,7 @@
     </section>
   </div>
 
+  <div class="bs-rowmenu" id="bsRowMenu" role="menu" hidden></div>
   <div class="bs-toast" id="bsToast" role="status" hidden><span id="bsToastText"></span><button type="button" id="bsToastBtn"></button></div>
 
 </div>
@@ -3532,10 +3550,20 @@ function setListLoading(on) {
   if (on && !list.querySelector('li.bs-item')) {
     document.getElementById('resultsEmpty').style.display = 'none';
     const cell = function(w) { return '<div class="bs-cell"><span class="bs-skel" style="width:' + w + '"></span></div>'; };
-    list.innerHTML = [72, 55, 80, 64, 48, 76, 60, 68].map(function(w) {
+    // as many placeholder rows as fill what's visible: the table's scroll box on a
+    // wide screen, the rest of the window on a phone (where the page scrolls)
+    const box = document.querySelector('.bs-table');
+    const head = document.querySelector('.bs-head');
+    const wide = window.matchMedia('(min-width: 901px)').matches;
+    const room = wide ? box.clientHeight - (head ? head.offsetHeight : 0)
+                      : window.innerHeight - box.getBoundingClientRect().top;
+    const rowH = window.matchMedia('(max-width: 700px)').matches ? 96 : 57;
+    const n = Math.min(60, Math.max(3, Math.ceil(room / rowH)));
+    const widths = [72, 55, 80, 64, 48, 76, 60, 68];
+    list.innerHTML = Array.from({ length: n }, function(_, k) { return widths[k % widths.length]; }).map(function(w) {
       return '<li class="bs-item bs-skel-row" aria-hidden="true"><div class="bs-row"><span></span>' +
         '<div class="bs-cell"><span class="bs-skel" style="width:' + w + '%"></span><span class="bs-skel bs-skel-sub"></span></div>' +
-        cell('70%') + cell('75%') + cell('65%') + cell('80%') + '</div></li>';
+        cell('70%') + cell('75%') + cell('65%') + '<span></span></div></li>';
     }).join('');
   }
 }
@@ -3710,6 +3738,7 @@ async function loadProjects(opts) {
 
 // ---- One row per project: the columns, then (opened) the quick look underneath ----
 
+const ICON_DOTS = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
 const ICON_ROW_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 
 function daysUntil(iso) {
@@ -3762,20 +3791,16 @@ function projectRowHtml(p, i) {
 
 
   let status = '<span class="bs-none">—</span>';
-  let act = '';
   if (p.bucket === 'review') {
     const lab = fitLabel(p.fit);
     if (lab) status = '<span class="bs-fit ' + lab.cls + '"' + (p.fit.explanation ? ' title="' + escapeHtml(p.fit.explanation) + '"' : '') + '><span class="bf-dot ' + lab.cls + '"></span>' + lab.text + '</span>';
-    act = '<button type="button" class="btn-primary" data-act="board">Add to Board</button>' +
-      '<button type="button" class="btn-ghost" data-act="notfit" aria-expanded="' + (askKey === p.key) + '">Not a fit</button>';
   } else if (p.bucket === 'jira') {
     if (p.decided_at) status = '<span class="bs-why">Added ' + new Date(p.decided_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) + '</span>';
-    act = '<button type="button" class="btn-ghost" data-act="openboard">Open in Bid Board</button>';
   } else {
     const why = p.decision === 'duplicate' ? 'Duplicate' : p.decision_reason;
     if (why) status = '<span class="bs-why" title="' + escapeHtml(p.decision_note || why) + '">' + escapeHtml(why) + '</span>';
-    if (!p.auto_not_fit) act = '<button type="button" class="btn-ghost" data-act="review">Back to review</button>';
   }
+  const act = '<button type="button" class="bs-more-btn" data-act="menu" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + escapeHtml(p.project) + '">' + ICON_DOTS + '</button>';
 
   let html = '<li class="' + cls.join(' ') + '" data-i="' + i + '">' +
     '<div class="bs-row">' +
@@ -3817,6 +3842,7 @@ function projectRowHtml(p, i) {
 function renderProjectRows() {
   if (peekKey && !projectsData.some(function(p) { return p.key === peekKey; })) peekKey = null;
   if (askKey && !projectsData.some(function(p) { return p.key === askKey && p.bucket === 'review'; })) askKey = null;
+  closeRowMenu();
   document.getElementById('projectList').innerHTML = projectsData.map(projectRowHtml).join('');
   document.getElementById('bsColStatus').textContent =
     ({ review: 'Suggestion', jira: 'Added', not_fit: 'Why' })[currentResultsView];
@@ -3899,6 +3925,11 @@ document.getElementById('projectList').addEventListener('click', function(e) {
   const el = e.target.closest('[data-act]');
   const act = el ? el.dataset.act : (e.target.closest('a, input, select, textarea') || !e.target.closest('.bs-row') ? null : 'peek');
   if (!act) return;
+  if (act === 'menu') { openRowMenu(i, el); return; }
+  rowAction(act, p, i, el);
+});
+
+function rowAction(act, p, i, el) {
   if (act === 'peek') { peekKey = peekKey === p.key ? null : p.key; renderProjectRows(); return; }
   if (act === 'open') { openProjectModal(i); return; }
   if (act === 'board') { rowAddToBoard(p, i, el); return; }
@@ -3907,7 +3938,65 @@ document.getElementById('projectList').addEventListener('click', function(e) {
   if (act === 'cancelask') { askKey = null; renderProjectRows(); return; }
   if (act === 'reason') { rowDecide(p, 'not_fit', el.dataset.reason, el); return; }
   if (act === 'review') { rowDecide(p, 'review', null, el); return; }
+}
+
+// The ⋯ menu on each row: what you can do with that project in this tab.
+// It floats over the page (fixed), so the scrolling table can't cut it off.
+let rowMenuFor = null;   // {i, btn}
+function openRowMenu(i, btn) {
+  const menu = document.getElementById('bsRowMenu');
+  if (rowMenuFor && rowMenuFor.btn === btn) { closeRowMenu(true); return; }
+  closeRowMenu();
+  const p = projectsData[i];
+  const items = [];
+  if (p.bucket === 'review') {
+    items.push(['board', 'Add to Board'], ['notfit', 'Not a fit…']);
+  } else if (p.bucket === 'jira') {
+    items.push(['openboard', 'Open in Bid Board']);
+  } else if (!p.auto_not_fit) {
+    items.push(['review', 'Back to review']);
+  }
+  items.push(['open', 'Open project']);
+  menu.innerHTML = items.map(function(it) {
+    return '<button type="button" role="menuitem" data-act="' + it[0] + '">' + it[1] + '</button>';
+  }).join('');
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
+  menu.style.top = (r.bottom + 4 + h > window.innerHeight - 8 ? r.top - h - 4 : r.bottom + 4) + 'px';
+  btn.setAttribute('aria-expanded', 'true');
+  rowMenuFor = { i: i, btn: btn };
+  menu.querySelector('button').focus();
+}
+function closeRowMenu(refocus) {
+  if (!rowMenuFor) return;
+  const btn = rowMenuFor.btn;
+  rowMenuFor = null;
+  document.getElementById('bsRowMenu').hidden = true;
+  btn.setAttribute('aria-expanded', 'false');
+  if (refocus && document.body.contains(btn)) btn.focus();
+}
+document.getElementById('bsRowMenu').addEventListener('click', function(e) {
+  const item = e.target.closest('[data-act]');
+  if (!item || !rowMenuFor) return;
+  const i = rowMenuFor.i, btn = rowMenuFor.btn, p = projectsData[i];
+  closeRowMenu();
+  if (p) rowAction(item.dataset.act, p, i, btn);
 });
+document.getElementById('bsRowMenu').addEventListener('keydown', function(e) {
+  const items = Array.from(this.querySelectorAll('button'));
+  const at = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.stopPropagation(); closeRowMenu(true); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Tab') closeRowMenu();
+});
+document.addEventListener('mousedown', function(e) {
+  if (rowMenuFor && !e.target.closest('#bsRowMenu') && e.target.closest('[data-act="menu"]') !== rowMenuFor.btn) closeRowMenu();
+});
+window.addEventListener('resize', function() { closeRowMenu(); });
+document.addEventListener('scroll', function() { closeRowMenu(); }, true);
 
 function renderPager() {
   const pager = document.getElementById('resultsPager');
