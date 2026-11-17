@@ -289,6 +289,15 @@ tr:hover .lpen,.lpen:focus-visible{opacity:1}
 .jl .dots:hover{background:var(--chip);color:var(--ink)}
 .jl .colsi{width:28px;height:28px;margin:0 auto}
 .jl th.th-rh,.jl td.rh{width:22px;min-width:22px;padding:0 0 0 4px;border-right:0}
+/* resizable columns: drag a header's right edge */
+.jl .colrs{position:absolute;top:0;bottom:0;right:0;width:9px;z-index:2;cursor:col-resize;touch-action:none}
+.jl .colrs::after{content:"";position:absolute;top:22%;bottom:22%;right:0;width:2px;border-radius:2px;background:var(--c1);opacity:0}
+.jl .colrs:hover::after,.jl .colrs:focus-visible::after,.lresizing .colrs::after{opacity:1}
+.jl .colrs:focus-visible{outline:none}
+.lresizing,.lresizing *{cursor:col-resize!important;user-select:none}
+.jl table.list.sized th,.jl table.list.sized td{overflow:hidden;text-overflow:ellipsis}
+.jl table.list.sized td.wk{max-width:none}
+.jl table.list.sized .tr{max-width:none}
 .jl .rgrip{display:grid;place-items:center;width:18px;height:26px;border-radius:4px;color:var(--muted);cursor:grab;opacity:0}
 .jl tr:hover .rgrip,.jl .rgrip:focus-visible{opacity:1}
 .jl .rgrip:hover{background:var(--chip);color:var(--ink)}
@@ -2858,9 +2867,13 @@ img.who{object-fit:cover;background:var(--chip)}
     }
     var grp=curGroup(p);GROUPBAR=groupBarHTML(p);
     var canDrag=ui.sort==="rank"&&canAct()&&!grp;
-    h+='<div class="tablewrap jl"><div class="tscroll"><table class="list"><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
+    // column widths: dragged ones are fixed (state.listW, per browser); untouched tables size to their content
+    var LW=state.listW,lwOf=function(k){return LW[k]||150};
+    var tstyle=LW?' style="table-layout:fixed;min-width:0;width:'+(66+order.reduce(function(a,k){return a+lwOf(k)},0))+'px"':'';
+    h+='<div class="tablewrap jl"><div class="tscroll"><table class="list'+(LW?' sized':'')+'"'+tstyle+'><thead><tr><th class="th-rh" aria-label="Reorder"></th>'+order.map(function(k){
       var on=ui.sort===k;
-      return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"><div class="thc"><span class="grip" aria-hidden="true">'+ic("grip",14)+'</span><button data-sort="'+k+'">'+esc(lcolName(k))+(on?(ui.dir>0?ic("arrowU",12):ic("arrowD",12)):'')+'</button></div></th>';
+      return '<th scope="col" draggable="true" data-lcol="'+k+'" class="th-'+k+'" aria-sort="'+(on?(ui.dir>0?'ascending':'descending'):'none')+'"'+(LW?' style="width:'+lwOf(k)+'px"':'')+'><div class="thc"><span class="grip" aria-hidden="true">'+ic("grip",14)+'</span><button data-sort="'+k+'">'+esc(lcolName(k))+(on?(ui.dir>0?ic("arrowU",12):ic("arrowD",12)):'')+'</button></div>'+
+        '<span class="colrs" data-colrs="'+k+'" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the '+esc(lcolName(k))+' column (arrow keys; double-click resets all)"></span></th>';
     }).join("")+'<th class="th-x"><button class="icon colsi" data-colsbtn aria-expanded="'+(!!ui.colsOpen)+'" title="Show, hide and order columns" aria-label="Columns"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg></button></th></tr></thead><tbody>';
     var emit=function(is){h+='<tr data-row="'+is.id+'"><td class="rh">'+(canDrag?'<span class="rgrip" draggable="true" data-rowdrag="'+is.id+'" title="Drag to reorder" aria-label="Drag to reorder '+ikey(is)+'"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg></span>':'')+'</td>'+order.map(function(k){return listCell(k,is)}).join("")+'<td class="rx"><button class="dots" data-open="'+is.id+'" aria-label="Open '+ikey(is)+'" title="Open">'+ic("more",18)+'</button></td></tr>'};
     if(!grp)rows.forEach(emit);
@@ -5227,7 +5240,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-calmode]"))){setCalMode(el.getAttribute("data-calmode"));return}
     if(t.closest("[data-unsch]")){ui.unsch=!ui.unsch;render();return}
     if(t.closest("[data-colsbtn]")){ui.colsOpen=!ui.colsOpen;render();return}
-    if(t.closest("[data-colreset]")){state.listCols2=null;state.listHide=[];save();render();return}
+    if(t.closest("[data-colreset]")){state.listCols2=null;state.listHide=[];state.listW=null;save();render();return}
     if((el=t.closest("[data-colshow]"))){
       var hk=el.getAttribute("data-colshow"),hl=(state.listHide||[]).filter(function(x){return x!==hk});
       if(!el.checked)hl.push(hk);state.listHide=hl;save();render();return;
@@ -5442,6 +5455,43 @@ img.who{object-fit:cover;background:var(--chip)}
       save();render();toast("Space deleted");return;
     }
   });
+  // List view: resize a column by dragging its header's right edge (or focus it and use the
+  // arrow keys). The first resize fixes every column at its current width; double-click resets.
+  function listWidths(){
+    var w={};document.querySelectorAll(".jl th[data-lcol]").forEach(function(th){w[th.getAttribute("data-lcol")]=th.offsetWidth});
+    return w;
+  }
+  function setListW(k,w){
+    state.listW=state.listW||listWidths();
+    state.listW[k]=Math.max(60,Math.round(w));
+    var tb=document.querySelector(".jl table.list");if(!tb)return;
+    var ths=document.querySelectorAll(".jl th[data-lcol]"),sum=66;
+    tb.classList.add("sized");tb.style.tableLayout="fixed";tb.style.minWidth="0";
+    ths.forEach(function(x){var c=x.getAttribute("data-lcol"),cw=state.listW[c]||150;x.style.width=cw+"px";sum+=cw});
+    tb.style.width=sum+"px";
+  }
+  document.addEventListener("pointerdown",function(e){
+    var h=e.target.closest&&e.target.closest("[data-colrs]");if(!h||e.button!==0)return;
+    e.preventDefault();e.stopPropagation();
+    var k=h.getAttribute("data-colrs"),th=h.closest("th");
+    if(!state.listW)state.listW=listWidths();
+    // the board is zoomed on computers: screen pixels -> layout pixels
+    var z=th.getBoundingClientRect().width/(th.offsetWidth||1)||1,x0=e.clientX,w0=state.listW[k]||th.offsetWidth;
+    h.setPointerCapture(e.pointerId);document.body.classList.add("lresizing");ui.lresizing=true;
+    function mv(ev){setListW(k,w0+(ev.clientX-x0)/z)}
+    function up(){h.removeEventListener("pointermove",mv);h.removeEventListener("pointerup",up);h.removeEventListener("pointercancel",up);document.body.classList.remove("lresizing");ui.lresizing=false;savePrefs()}
+    h.addEventListener("pointermove",mv);h.addEventListener("pointerup",up);h.addEventListener("pointercancel",up);
+  },true);
+  document.addEventListener("dragstart",function(e){if(ui.lresizing||(e.target.closest&&e.target.closest("[data-colrs]")))e.preventDefault()},true);
+  document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest("[data-colrs]")){e.preventDefault();e.stopPropagation()}},true);
+  document.addEventListener("dblclick",function(e){if(e.target.closest&&e.target.closest("[data-colrs]")){e.preventDefault();state.listW=null;savePrefs();render()}},true);
+  document.addEventListener("keydown",function(e){
+    var h=e.target.closest&&e.target.closest("[data-colrs]");if(!h||(e.key!=="ArrowLeft"&&e.key!=="ArrowRight"))return;
+    e.preventDefault();e.stopPropagation();
+    var k=h.getAttribute("data-colrs");if(!state.listW)state.listW=listWidths();
+    setListW(k,(state.listW[k]||150)+(e.key==="ArrowRight"?16:-16));savePrefs();
+  },true);
+
   function renderIssueSideOnly(){var is=byId(ui.issueId);if(is){$("i-side").innerHTML=issueSideHTML(is)}}
 
   document.addEventListener("change",function(e){
