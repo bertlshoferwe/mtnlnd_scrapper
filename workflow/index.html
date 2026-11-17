@@ -167,7 +167,7 @@ h1{font-family:var(--head);font-weight:700;font-size:26px;letter-spacing:-.02em;
 /* columns stop at the bottom of the window; their cards scroll inside (--colmax set by sizeColumns) */
 .board .col:not(.folded){display:flex;flex-direction:column;max-height:var(--colmax,none);box-sizing:border-box}
 .board .col>h2,.board .col>.add,.board .col>.qc{flex:none}
-.board .col .cards{flex:1 1 auto;min-height:24px;overflow-y:auto;overscroll-behavior:contain;margin:0 -4px;padding:2px 4px 4px;scrollbar-width:thin}
+.board .col .cards{flex:1 1 auto;min-height:24px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;margin:0 -4px;padding:2px 4px 4px;scrollbar-width:thin}
 .board::-webkit-scrollbar{display:none}
 .bmini{position:fixed;right:20px;bottom:20px;z-index:25;padding:5px;box-sizing:content-box;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:0 4px 14px rgba(16,22,46,.14);cursor:pointer;touch-action:none;user-select:none}
 .bmini[hidden]{display:none}
