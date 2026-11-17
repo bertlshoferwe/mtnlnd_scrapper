@@ -2835,7 +2835,7 @@ img.who{object-fit:cover;background:var(--chip)}
   function calChip(is){
     var done=isDone(is),an=is.assignee?nameOf(is.assignee):"";
     return '<button class="jc'+(done?' fin':an?' asg':'')+(overdue(is)?' over':'')+'" draggable="true" data-open="'+is.id+'" data-iid="'+is.id+'" title="'+esc(ikey(is)+" "+is.title)+'">'+
-      tiHTML(is.type)+'<span class="jk">'+ikey(is)+'</span><span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
+      tiHTML(is.type)+'<span class="jt">'+esc(is.title)+'</span>'+(an?nameAv(an):'')+'</button>';
   }
   var MONTHNAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
   function closeCalPop(){ui.calPop=null;var pe=document.querySelector(".jpop");if(pe)pe.remove()}
