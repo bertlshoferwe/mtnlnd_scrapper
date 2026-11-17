@@ -11,20 +11,18 @@ create table if not exists divisions (
   created_at timestamptz default now()
 );
 
+-- One list of sites shared by every division; each division's on/off switch
+-- and order are in division_sites. See migrations/001_shared_sites.sql.
 create table if not exists sites (
   id bigint generated always as identity primary key,
-  division_id text not null references divisions(id) on delete cascade,
+  division_id text references divisions(id) on delete cascade,  -- unused since sites are shared (null)
   name text not null,
   url text not null,
   listing jsonb,          -- null = not a listing site; {} = AI-detected; {"link_selector": "..."} = manual
   tabs jsonb,              -- null = no tabs; otherwise a list of {"label": "...", "selector": "..."}
   adapter text,            -- null = generic HTML crawl; otherwise a key from adapters.py (portal-specific API)
-  active boolean not null default true,  -- false = kept in the list but skipped by every scan
-  -- Drag-to-reorder position in the dashboard — also the order sites are
-  -- scanned in (see scraper.py's _scan_division, which just iterates
-  -- load_sites() in the order it returns). Defaults to id so a fresh site
-  -- lands at the end of the list.
-  sort_order bigint,
+  active boolean not null default true,  -- unused since sites are shared: division_sites.active
+  sort_order bigint,       -- unused since sites are shared: division_sites.sort_order
   -- Login, for a site whose documents sit behind a login form. Only used by
   -- the generic browser crawl (adapters and listing/tabs crawls don't use a
   -- real browser session). login_password_enc is Fernet-encrypted with
@@ -41,7 +39,28 @@ create table if not exists sites (
   -- A site with adapter 'learned' — the AI-learned recipe, its review
   -- preview, the user's corrections and status. See site_agent.py.
   learned jsonb,
+  -- null = in the shared list; 'requested' = asked for by requested_by, not
+  -- scanned until it's added; 'declined' = turned down (decline_reason).
+  status text,
+  requested_by text references divisions(id) on delete cascade,
+  request_note text,
+  decline_reason text,
   created_at timestamptz default now()
+);
+
+-- Each division's switch and order for a shared site. No row = off.
+create table if not exists division_sites (
+  division_id text not null references divisions(id) on delete cascade,
+  site_id bigint not null references sites(id) on delete cascade,
+  active boolean not null default true,
+  sort_order bigint,
+  primary key (division_id, site_id)
+);
+
+-- Settings shared by every division (e.g. "learn_fields").
+create table if not exists app_settings (
+  key text primary key,
+  value jsonb
 );
 -- Migration for existing databases:
 --   alter table sites add column if not exists adapter text;
@@ -286,6 +305,8 @@ create index if not exists scan_runs_division_idx on scan_runs(division_id, star
 -- blocks all access via that key while leaving service_role access untouched.
 alter table divisions enable row level security;
 alter table sites enable row level security;
+alter table division_sites enable row level security;
+alter table app_settings enable row level security;
 alter table keywords enable row level security;
 alter table scan_results enable row level security;
 alter table daily_summaries enable row level security;

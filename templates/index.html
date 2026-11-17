@@ -317,6 +317,10 @@
   ul.list li:hover .site-actions,
   .site-actions:focus-within { opacity: 1; }
   @media (hover: none) { .site-actions { opacity: 1; } }
+  #sitesModal:not(.sites-admin) .sites-admin-only { display: none !important; }
+  #sitesModal:not(.sites-admin) .site-actions { display: none; }
+  #siteRequestsList .site-actions { opacity: 1; }
+  ul.list li.site-req .site-name, ul.list li.site-req .site-url { opacity: .55; }
   ul.list li.site-off .site-name,
   ul.list li.site-off .site-url,
   ul.list li.site-off .site-tags { opacity: .4; }
@@ -1178,19 +1182,36 @@
   <div class="modal">
     <div class="modal-header">
       <div>
-        <h2>Sites</h2>
-        <p class="desc">The web pages checked every day for new construction plans. Scanned daily around <strong class="local-schedule" data-utc="{{ schedule_utc_hm }}">{{ display_schedule }}</strong>.</p>
+        <h2 id="sitesTitle">Sites</h2>
+        <p class="desc">The web pages checked every day for new construction plans. Every division has the same list — turn on the ones you want. Scanned daily around <strong class="local-schedule" data-utc="{{ schedule_utc_hm }}">{{ display_schedule }}</strong>.</p>
       </div>
       <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <div class="row" style="gap:8px; margin-bottom:14px;">
-        <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()">+ Add a site</button>
-        <button class="btn-ghost" onclick="toggleLearnFields()">Fields to collect</button>
+        <button class="btn-ghost" onclick="toggleRequestSite()">+ Request a site</button>
+        <!-- Hidden: triple-click (or triple-tap) the "Sites" title. -->
+        <span class="sites-admin-only row" style="gap:8px; margin:0;">
+          <button class="btn-ghost" id="showAddSiteBtn" onclick="showAddSite()">+ Add a site</button>
+          <button class="btn-ghost" onclick="toggleLearnFields()">Fields to collect</button>
+        </span>
+      </div>
+      <div class="learn-fields-box" id="requestSiteBox" style="display:none;">
+        <b style="font-size:14px;">Request a site</b>
+        <p class="desc" style="margin:4px 0 0;">It shows in your list as requested until it's set up and added. Once it's added, it's on for your division.</p>
+        <div class="row" style="margin-top:10px;">
+          <input type="text" id="reqSiteName" placeholder="Site name" style="flex:1; min-width:160px;">
+          <input type="url" id="reqSiteUrl" placeholder="https://example.com/bids" style="flex:2; min-width:220px;">
+        </div>
+        <textarea id="reqSiteNote" rows="2" placeholder="Note (optional) — e.g. which page lists the bids, or that it needs a login" style="width:100%; margin-top:8px;"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn-primary" onclick="sendSiteRequest()">Send request</button>
+          <button class="btn-ghost" onclick="toggleRequestSite(false)">Cancel</button>
+        </div>
       </div>
       <div class="learn-fields-box" id="learnFieldsBox" style="display:none;">
         <b style="font-size:14px;">What sites learned by AI collect</b>
-        <p class="desc" style="margin:4px 0 0;">Always: the ones shown in results. Add any others you want — they're saved with each project but not shown anywhere yet.</p>
+        <p class="desc" style="margin:4px 0 0;">For every division. Always: the ones shown in results. Add any others you want — they're saved with each project but not shown anywhere yet.</p>
         <div class="chips" id="learnFieldChips"></div>
         <div class="row" style="gap:6px;">
           <input type="text" id="learnFieldInput" placeholder="e.g. Owner, Engineer's estimate" style="flex:1;" onkeydown="if(event.key==='Enter') addLearnField()">
@@ -1257,6 +1278,11 @@
         </div>
       </div>
 
+      <div class="sites-admin-only" id="siteRequestsBox" style="display:none;">
+        <h3 style="margin:0 0 4px; font-size:14px;">Requests</h3>
+        <p class="desc" style="margin:0;">Set each one up (✎ — learn it with AI or fill it in), then add it to the list. It's turned on for the division that asked and off for everyone else.</p>
+        <ul class="list" id="siteRequestsList" style="margin-bottom:18px;"></ul>
+      </div>
       <ul class="list" id="sitesList"></ul>
       <div class="empty" id="sitesEmpty" style="display:none;">No sites yet.</div>
     </div>
@@ -1567,7 +1593,7 @@ function toggleAdv() {
 }
 
 function openModal(name) {
-  if (name === 'sites') hideAddSite();
+  if (name === 'sites') { hideAddSite(); toggleRequestSite(false); if (sitesAdmin) setSitesAdmin(false); }
   document.getElementById(name + 'Modal').classList.add('open');
 }
 function closeModal() {
@@ -1969,72 +1995,189 @@ const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const ICON_GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
 // The edit form is a single shared node: its home is at the top under the
-// "+ Add a site" button (used for adding), editSite() moves it into the row
+// buttons (used for "+ Add a site"), editSite() moves it into the row
 // being edited. parkFormHome() also keeps it clear of list.innerHTML wipes.
 function parkFormHome() {
-  const btn = document.getElementById('showAddSiteBtn');
-  btn.insertAdjacentElement('afterend', document.getElementById('addSiteForm'));
+  document.getElementById('requestSiteBox').insertAdjacentElement('afterend', document.getElementById('addSiteForm'));
+}
+
+// The list is shared by every division: each division only turns sites on or
+// off and drags its own order. Adding, editing and removing sites, requests
+// and Fields to collect sit behind the hidden menu (triple-click "Sites").
+let sitesAdmin = false;
+
+(function() {
+  let clicks = 0, timer = null;
+  document.getElementById('sitesTitle').addEventListener('click', function() {
+    clicks++;
+    clearTimeout(timer);
+    timer = setTimeout(function() { clicks = 0; }, 600);
+    if (clicks >= 3) { clicks = 0; setSitesAdmin(!sitesAdmin); }
+  });
+})();
+
+function setSitesAdmin(on) {
+  sitesAdmin = on;
+  document.getElementById('sitesModal').classList.toggle('sites-admin', on);
+  if (!on) {
+    hideAddSite();
+    document.getElementById('learnFieldsBox').style.display = 'none';
+  }
+  loadSites();
+}
+
+function siteRowHtml(site, opts) {
+  let tags = '';
+  if (site.status === 'requested') tags += '<span class="tag tag-tabs">' + (opts.mine ? 'requested' : 'from ' + escapeHtml(site.requested_by_name || site.requested_by || '')) + '</span>';
+  if (site.status === 'declined') tags += '<span class="tag tag-danger">turned down' + (site.decline_reason ? ': ' + escapeHtml(site.decline_reason) : '') + '</span>';
+  if (site.listing != null) tags += '<span class="tag">listing</span>';
+  if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
+  if (site.has_login) tags += loginStatusTag(site);
+  if (site.adapter === 'learned' && !opts.mine) tags += learnStatusTag(site);
+  const linkable = /^https?:\/\//i.test(site.url || '');
+  const urlHtml = site.url
+    ? (linkable
+        ? '<a class="site-url" href="' + escapeHtml(site.url) + '" target="_blank" rel="noopener">' + escapeHtml(site.url) + '</a>'
+        : '<div class="site-url">' + escapeHtml(site.url) + '</div>')
+    : '<div class="site-url" style="font-style:italic;">no URL — adapter decides where to look</div>';
+  const note = site.status && site.request_note
+    ? '<div class="site-url" style="white-space:pre-wrap;">“' + escapeHtml(site.request_note) + '”</div>' : '';
+  let right;
+  if (opts.request) {
+    right =
+      '<div class="site-actions">' +
+        '<button class="icon-btn" title="Set up" aria-label="Set up site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
+        '<button class="icon-btn danger" title="Turn down" aria-label="Turn down request" onclick="declineSiteRequest(' + site.id + ')">' + ICON_TRASH + '</button>' +
+      '</div>' +
+      '<button class="btn-primary" style="padding:5px 10px; font-size:13px;" onclick="acceptSiteRequest(' + site.id + ')">Add to list</button>';
+  } else if (opts.mine) {
+    right = '<button class="icon-btn" title="' + (site.status === 'declined' ? 'Clear' : 'Cancel request') + '" aria-label="Remove request" onclick="cancelSiteRequest(' + site.id + ')">&times;</button>';
+  } else {
+    right =
+      '<div class="site-actions">' +
+        '<button class="icon-btn" title="Edit — for every division" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
+        '<button class="icon-btn danger" title="Remove — for every division" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
+      '</div>' +
+      '<label class="switch" title="' + (site.active === false ? 'Off — not scanned for this division' : 'On — scanned daily for this division') + '">' +
+        '<input type="checkbox" ' + (site.active === false ? '' : 'checked') +
+        ' aria-label="Scan this site" onchange="toggleSiteActive(' + site.id + ', this.checked, this)">' +
+        '<span class="slider"></span>' +
+      '</label>';
+  }
+  return '<div class="site-row">' +
+      (opts.drag ? '<span class="site-grip" draggable="true" title="Drag to reorder — your division\'s order, also its scan order" aria-label="Drag to reorder">' + ICON_GRIP + '</span>' : '') +
+      '<div style="min-width:0; flex:1;">' +
+        '<div class="site-name">' + escapeHtml(site.name) +
+          (site.adapter ? '<span class="adapter-mark" title="Portal adapter: ' + escapeHtml(adapterLabel(site.adapter)) + '">*</span>' : '') +
+        '</div>' +
+        urlHtml + note +
+        '<div class="site-tags">' + tags + '</div>' +
+      '</div>' +
+      '<div class="site-right">' + right + '</div>' +
+    '</div>' +
+    '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
 }
 
 async function loadSites() {
   parkFormHome();  // detach from any row about to be destroyed
-  const sites = await api('/api/' + currentDivision + '/sites');
-  sitesCache = sites;
+  const rows = await api('/api/' + currentDivision + '/sites');
+  let requests = [];
+  if (sitesAdmin) {
+    try { requests = await api('/api/site-requests'); } catch (e) { /* shown as none */ }
+  }
+  const sites = rows.filter(function(s) { return !s.status; });
+  const mine = sitesAdmin ? [] : rows.filter(function(s) { return s.status; });
+  sitesCache = sites.concat(mine, requests);
   const list = document.getElementById('sitesList');
   const empty = document.getElementById('sitesEmpty');
   list.innerHTML = '';
-  empty.style.display = sites.length ? 'none' : 'block';
-  document.getElementById('sitesCount').textContent = sites.length;
-  siteCount = sites.length;
+  empty.style.display = sites.length || mine.length ? 'none' : 'block';
+  const on = sites.filter(function(s) { return s.active !== false; }).length;
+  document.getElementById('sitesCount').textContent = on;
+  siteCount = on;
   refreshRunNowButton();
-  sites.forEach(function(site, i) {
+  sites.forEach(function(site) {
     const li = document.createElement('li');
     if (site.active === false) li.className = 'site-off';
     li.dataset.siteId = site.id;
-    let tags = '';
-    if (site.listing != null) tags += '<span class="tag">listing</span>';
-    if (site.tabs != null) tags += '<span class="tag tag-tabs">tabs</span>';
-    if (site.has_login) tags += loginStatusTag(site);
-    if (site.adapter === 'learned') tags += learnStatusTag(site);
-    const linkable = /^https?:\/\//i.test(site.url || '');
-    const urlHtml = site.url
-      ? (linkable
-          ? '<a class="site-url" href="' + escapeHtml(site.url) + '" target="_blank" rel="noopener">' + escapeHtml(site.url) + '</a>'
-          : '<div class="site-url">' + escapeHtml(site.url) + '</div>')
-      : '<div class="site-url" style="font-style:italic;">no URL — adapter decides where to look</div>';
-    li.innerHTML =
-      '<div class="site-row">' +
-        '<span class="site-grip" draggable="true" title="Drag to reorder — this is also the scan order" aria-label="Drag to reorder">' + ICON_GRIP + '</span>' +
-        '<div style="min-width:0; flex:1;">' +
-          '<div class="site-name">' + escapeHtml(site.name) +
-            (site.adapter ? '<span class="adapter-mark" title="Portal adapter: ' + escapeHtml(adapterLabel(site.adapter)) + '">*</span>' : '') +
-          '</div>' +
-          urlHtml +
-          '<div class="site-tags">' + tags + '</div>' +
-        '</div>' +
-        '<div class="site-right">' +
-          '<div class="site-actions">' +
-            '<button class="icon-btn" title="Edit" aria-label="Edit site" onclick="editSite(' + site.id + ')">' + ICON_PENCIL + '</button>' +
-            '<button class="icon-btn danger" title="Remove" aria-label="Remove site" onclick="deleteSite(' + site.id + ')">' + ICON_TRASH + '</button>' +
-          '</div>' +
-          '<label class="switch" title="' + (site.active === false ? 'Inactive — not scanned' : 'Active — scanned daily') + '">' +
-            '<input type="checkbox" ' + (site.active === false ? '' : 'checked') +
-            ' aria-label="Scan this site" onchange="toggleSiteActive(' + site.id + ', this.checked, this)">' +
-            '<span class="slider"></span>' +
-          '</label>' +
-        '</div>' +
-      '</div>' +
-      '<div class="site-edit-slot" id="edit-slot-' + site.id + '"></div>';
+    li.innerHTML = siteRowHtml(site, { drag: true });
     list.appendChild(li);
     wireSiteDrag(li);
+  });
+  mine.forEach(function(site) {
+    const li = document.createElement('li');
+    li.className = 'site-req';
+    li.innerHTML = siteRowHtml(site, { mine: true });
+    list.appendChild(li);
+  });
+
+  const reqList = document.getElementById('siteRequestsList');
+  reqList.innerHTML = '';
+  document.getElementById('siteRequestsBox').style.display = requests.length ? '' : 'none';
+  requests.forEach(function(site) {
+    const li = document.createElement('li');
+    li.innerHTML = siteRowHtml(site, { request: true });
+    reqList.appendChild(li);
   });
 
   // A re-render mid-edit (e.g. deleting another site): re-mount the open form
   // under its row, or drop out of edit mode if that row is gone.
   if (editingSiteId != null) {
-    if (sites.some(function(s) { return s.id === editingSiteId; })) mountEditForm(editingSiteId);
+    if (document.getElementById('edit-slot-' + editingSiteId)) mountEditForm(editingSiteId);
     else hideAddSite();
   }
+}
+
+function toggleRequestSite(open) {
+  const box = document.getElementById('requestSiteBox');
+  if (open == null) open = box.style.display === 'none';
+  box.style.display = open ? '' : 'none';
+  if (open) document.getElementById('reqSiteName').focus();
+  else ['reqSiteName', 'reqSiteUrl', 'reqSiteNote'].forEach(function(id) { document.getElementById(id).value = ''; });
+}
+
+async function sendSiteRequest() {
+  const name = document.getElementById('reqSiteName').value.trim();
+  const url = document.getElementById('reqSiteUrl').value.trim();
+  if (!name || !url) { alert('Enter the site\'s name and web address.'); return; }
+  try {
+    await api('/api/' + currentDivision + '/site-requests', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: name, url: url, note: document.getElementById('reqSiteNote').value.trim() }),
+    });
+  } catch (e) { alert(e.message); return; }
+  toggleRequestSite(false);
+  loadSites();
+}
+
+async function cancelSiteRequest(siteId) {
+  const site = sitesCache.find(function(s) { return s.id === siteId; });
+  if (site && site.status === 'requested' && !confirm('Cancel this request?')) return;
+  try { await api('/api/' + currentDivision + '/sites/' + siteId, { method: 'DELETE' }); }
+  catch (e) { alert(e.message); }
+  loadSites();
+}
+
+async function acceptSiteRequest(siteId) {
+  const site = sitesCache.find(function(s) { return s.id === siteId; });
+  if (site && site.adapter === 'learned' && (site.learned || {}).status !== 'live'
+      && !confirm('The AI\'s findings for this site haven\'t been approved yet, so scans will skip it until they are. Add it anyway?')) return;
+  if (editingSiteId === siteId) hideAddSite();
+  try { await api('/api/site-requests/' + siteId + '/accept', { method: 'POST' }); }
+  catch (e) { alert(e.message); }
+  loadSites();
+}
+
+async function declineSiteRequest(siteId) {
+  const reason = prompt('Turn this request down? The division that asked sees it, with this reason (optional):', '');
+  if (reason === null) return;
+  if (editingSiteId === siteId) hideAddSite();
+  try {
+    await api('/api/site-requests/' + siteId + '/decline', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ reason: reason.trim() }),
+    });
+  } catch (e) { alert(e.message); }
+  loadSites();
 }
 
 // ---- Sites learned by AI (adapter "learned", see site_agent.py) ----
@@ -2437,6 +2580,7 @@ function wireSiteDrag(li) {
 
 async function saveSiteOrder() {
   const ids = Array.from(document.getElementById('sitesList').children)
+    .filter(function(li) { return li.dataset.siteId; })   // not your requests below the list
     .map(function(li) { return parseInt(li.dataset.siteId, 10); });
   try {
     await api('/api/' + currentDivision + '/sites/reorder', {
@@ -2694,7 +2838,7 @@ async function saveSite() {
 }
 
 async function deleteSite(siteId) {
-  if (!confirm('Remove this site?')) return;
+  if (!confirm('Remove this site for every division?')) return;
   await api('/api/' + currentDivision + '/sites/' + siteId, { method: 'DELETE' });
   loadSites();
 }
@@ -2709,9 +2853,12 @@ async function toggleSiteActive(siteId, active, input) {
     });
     li.classList.toggle('site-off', !active);
     const label = input.closest('.switch');
-    if (label) label.title = active ? 'Active — scanned daily' : 'Inactive — not scanned';
+    if (label) label.title = active ? 'On — scanned daily for this division' : 'Off — not scanned for this division';
     const s = sitesCache.find(function(x) { return x.id === siteId; });
     if (s) s.active = active;
+    siteCount = sitesCache.filter(function(x) { return !x.status && x.active !== false; }).length;
+    document.getElementById('sitesCount').textContent = siteCount;
+    refreshRunNowButton();
   } catch (e) {
     input.checked = !active;   // revert on failure
     alert(e.message);

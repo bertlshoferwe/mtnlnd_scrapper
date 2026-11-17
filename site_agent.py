@@ -38,7 +38,7 @@ is shown). State lives in sites.learned (jsonb):
   preview       what the draft found on a sample of projects
   learned_at / approved_at / last_run
 
-Project details beyond what the results page shows (the division's
+Project details beyond what the results page shows (the shared
 learn_fields list) are saved to project_flags.extra_fields, unshown for now.
 """
 
@@ -1026,8 +1026,9 @@ def site_login(site):
             "url": (site.get("login_url") or "").strip() or site.get("url")}
 
 
-def division_fields(division_id):
-    return [f for f in (supabase_store.get_division_extra(division_id, "learn_fields") or [])
+def extra_fields():
+    """The extra fields to collect ("Fields to collect" in Sites) — shared by every division."""
+    return [f for f in (supabase_store.get_app_setting("learn_fields") or [])
             if f and f not in BUILT_IN_FIELDS]
 
 
@@ -1091,7 +1092,7 @@ def run_learn(division_id, site_id):
     if ai is None:
         state.save(status="failed", message="No AI is set up on the scan worker (AI_PROVIDER + a key).")
         return
-    fields = division_fields(division_id)
+    fields = extra_fields()
     fetcher = None
     try:
         fetcher = Fetcher(site_login(site))
@@ -1134,7 +1135,7 @@ def scan_learned_site(site, ai_client):
         print("  Learned site not approved yet — open it in Sites to review. Skipping.")
         return [], {}, None, set()
     print(f"  Learned site: {state.data.get('summary') or 'replaying the saved recipe'}")
-    fields = division_fields(site["division_id"])
+    fields = extra_fields()
     rules, excludes = state.data.get("rules"), _excluded_urls(state.data)
     fetcher = None
     try:

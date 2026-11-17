@@ -14,13 +14,18 @@ Routes:
   POST /api/divisions                       create a division
   PATCH /api/divisions/<division_id>        rename a division
   DEL  /api/divisions/<division_id>          delete a division (cascades in Supabase)
-  GET  /api/<division_id>/sites              list sites
-  POST /api/<division_id>/sites              add a site
-  PATCH /api/<division_id>/sites/<site_id>   edit a site (name, url, adapter, selector/pattern)
-  POST /api/<division_id>/sites/<site_id>/active   toggle whether the site is scanned
-  POST /api/<division_id>/sites/reorder      persist a drag-to-reorder (also the scan order)
-  DEL  /api/<division_id>/sites/<site_id>     remove a site
-  GET/PUT /api/<division_id>/learn-fields     extra fields learned sites collect (saved, not shown yet)
+  GET  /api/<division_id>/sites              the shared site list, with this division's switches and order,
+                                             plus the sites this division requested
+  POST /api/<division_id>/sites              add a site to the shared list (on for this division)
+  PATCH /api/<division_id>/sites/<site_id>   edit a site, for every division (name, url, adapter, selector/pattern)
+  POST /api/<division_id>/sites/<site_id>/active   turn a site on or off for this division
+  POST /api/<division_id>/sites/reorder      persist this division's drag-to-reorder (also its scan order)
+  DEL  /api/<division_id>/sites/<site_id>     remove a site for every division (or clear a request)
+  POST /api/<division_id>/site-requests      request a site (name, url, note)
+  GET  /api/site-requests                    every division's requests (the hidden menu)
+  POST /api/site-requests/<site_id>/accept   add a request to the list (on for the division that asked)
+  POST /api/site-requests/<site_id>/decline  turn a request down, with an optional reason
+  GET/PUT /api/<division_id>/learn-fields     extra fields learned sites collect, shared (saved, not shown yet)
   POST /api/<division_id>/sites/<site_id>/learn          start an AI learning the site (…/learn/cancel stops it)
   POST /api/<division_id>/sites/<site_id>/learn/edit     review edits: site notes, a corrected value, undo
   POST /api/<division_id>/sites/<site_id>/learn/remove   leave a bid out; replies with a suggested skip rule
@@ -289,7 +294,12 @@ def api_get_sites(division_id):
     _, err = _require_division(division_id)
     if err:
         return err
-    return jsonify([_public_site(s) for s in supabase_store.load_sites(division_id)])
+    sites = supabase_store.load_sites(division_id)
+    try:
+        sites += supabase_store.load_site_requests(division_id)
+    except Exception:
+        pass  # a DB that hasn't run the shared-sites migration
+    return jsonify([_public_site(s) for s in sites])
 
 
 def _public_site(site):
@@ -386,9 +396,63 @@ def api_add_site(division_id):
             "url": login["url"],
         }
 
-    site = supabase_store.add_site(
-        division_id, name, url, listing=listing, adapter=adapter, login=login_row
-    )
+    try:
+        site = supabase_store.add_site(
+            division_id, name, url, listing=listing, adapter=adapter, login=login_row
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "site": _public_site(site)})
+
+
+@app.route("/api/<division_id>/site-requests", methods=["POST"])
+def api_request_site(division_id):
+    """Ask for a site to be added. Body: {"name", "url", "note"}. It shows
+    in this division's list as requested, and in the hidden menu's
+    Requests, until it's added or turned down."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()[:200]
+    url = (data.get("url") or "").strip()[:2000]
+    if not name or not url:
+        return jsonify({"error": "a name and a web address are required"}), 400
+    try:
+        site = supabase_store.add_site(division_id, name, url,
+                                       request_note=(data.get("note") or "").strip()[:1000])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "site": _public_site(site)})
+
+
+@app.route("/api/site-requests", methods=["GET"])
+def api_site_requests():
+    try:
+        reqs = supabase_store.load_site_requests()
+    except Exception:
+        return jsonify([])
+    names = {d["id"]: d["name"] for d in supabase_store.load_divisions()}
+    return jsonify([dict(_public_site(r), requested_by_name=names.get(r.get("requested_by"), ""))
+                    for r in reqs if r.get("status") == "requested"])
+
+
+@app.route("/api/site-requests/<int:site_id>/accept", methods=["POST"])
+def api_accept_site_request(site_id):
+    try:
+        site = supabase_store.accept_site_request(site_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({"ok": True, "site": _public_site(site)})
+
+
+@app.route("/api/site-requests/<int:site_id>/decline", methods=["POST"])
+def api_decline_site_request(site_id):
+    reason = ((request.get_json(force=True, silent=True) or {}).get("reason") or "").strip()[:500]
+    try:
+        site = supabase_store.decline_site_request(site_id, reason)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     return jsonify({"ok": True, "site": _public_site(site)})
 
 
@@ -452,9 +516,9 @@ def api_set_site_active(division_id, site_id):
 
 @app.route("/api/<division_id>/sites/reorder", methods=["POST"])
 def api_reorder_sites(division_id):
-    """Persists a drag-to-reorder from the dashboard — also the order sites
+    """Persists this division's drag-to-reorder — also the order its sites
     are scanned in (see scraper.py). Body: {"order": [site_id, ...]},
-    every site id for this division, top to bottom."""
+    every site id in the list, top to bottom."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -498,8 +562,9 @@ LEARN_BUILT_IN_FIELDS = ["Project name", "Bid date", "Bid time", "Location", "Pl
 
 @app.route("/api/<division_id>/learn-fields", methods=["GET", "PUT"])
 def api_learn_fields(division_id):
-    """The division's extra fields for learned sites to collect (saved per
-    project, not shown yet). PUT body: {"fields": ["Owner", ...]}."""
+    """The extra fields learned sites collect — one list for every division,
+    since sites are shared (saved per project, not shown yet). PUT body:
+    {"fields": ["Owner", ...]}."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -510,8 +575,11 @@ def api_learn_fields(division_id):
             f = re.sub(r"\s+", " ", str(f or "")).strip()[:60]
             if f and f.lower() not in (x.lower() for x in fields + LEARN_BUILT_IN_FIELDS):
                 fields.append(f)
-        supabase_store.save_division_extra(division_id, {"learn_fields": fields[:30]})
-    return jsonify({"fields": supabase_store.get_division_extra(division_id, "learn_fields") or [],
+        try:
+            supabase_store.save_app_setting("learn_fields", fields[:30])
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    return jsonify({"fields": supabase_store.get_app_setting("learn_fields") or [],
                     "built_in": LEARN_BUILT_IN_FIELDS})
 
 

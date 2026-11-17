@@ -217,14 +217,18 @@ def rename_division(division_id, name):
 
 
 def delete_division(division_id):
-    """Wipe a division completely: every site, keyword, scan result, daily
-    summary, and run-history row, then the division itself. The schema's
-    ON DELETE CASCADE would handle the children, but we delete them
-    explicitly too so it still works on a database whose foreign keys were
-    set up differently. A delete here is final — the dashboard confirms
-    first."""
+    """Wipe a division completely: its site switches and requests, every
+    keyword, scan result, daily summary, and run-history row, then the
+    division itself. Sites are shared, so they stay. The schema's ON DELETE
+    CASCADE would handle the children, but we delete them explicitly too so
+    it still works on a database whose foreign keys were set up differently.
+    A delete here is final — the dashboard confirms first."""
     client = get_client()
-    for table in ("scan_results", "daily_summaries", "scan_runs", "sites", "keywords", "project_flags"):
+    try:
+        client.table("sites").delete().eq("requested_by", division_id).execute()
+    except Exception:
+        pass  # a DB that hasn't run the shared-sites migration
+    for table in ("scan_results", "daily_summaries", "scan_runs", "division_sites", "keywords", "project_flags"):
         try:
             client.table(table).delete().eq("division_id", division_id).execute()
         except Exception:
@@ -238,65 +242,99 @@ def delete_division(division_id):
 # Sites
 # ---------------------------------------------------------------------------
 
+# One list of sites shared by every division (sites with status null). Each
+# division turns a site on or off and keeps its own order in division_sites;
+# a site no row mentions is off there. Rows handed out are overlaid with that
+# division's `active`/`sort_order` and `division_id`, so the scan worker and
+# the dashboard read them as before. A requested site (status 'requested' or
+# 'declined', requested_by = the asking division) isn't in the list and is
+# never scanned. See migrations/001_shared_sites.sql.
+
+SHARED_SITES_HINT = "run migrations/001_shared_sites.sql in Supabase"
+
+
+def _switches(division_id):
+    rows = (get_client().table("division_sites").select("site_id,active,sort_order")
+            .eq("division_id", division_id).execute().data)
+    return {r["site_id"]: r for r in rows}
+
+
+def _for_division(site, division_id, sw=None):
+    site = dict(site, division_id=division_id)
+    site["active"] = bool(sw and sw.get("active"))
+    site["sort_order"] = sw.get("sort_order") if sw and sw.get("sort_order") is not None else None
+    return site
+
+
 def load_sites(division_id):
-    # Also the order the scan worker visits sites in (scraper.py just
-    # iterates whatever this returns) — falls back to insertion order on a
-    # DB that hasn't run the sort_order migration yet, rather than erroring
-    # the whole sites list out.
+    """Every site in the shared list, in this division's order (sites it
+    hasn't placed go last, oldest first) — also the order the scan worker
+    visits them in. Falls back to the old per-division rows on a database
+    that hasn't run the shared-sites migration, so scans keep working."""
     try:
-        res = (
-            get_client().table("sites").select("*")
-            .eq("division_id", division_id).order("sort_order").execute()
-        )
+        sw = _switches(division_id)
+        rows = get_client().table("sites").select("*").is_("status", "null").order("id").execute().data
     except Exception:
-        res = (
-            get_client().table("sites").select("*")
-            .eq("division_id", division_id).order("id").execute()
-        )
-    # `active`/`sort_order` may be absent on a DB that skipped a migration —
-    # default them so both the dashboard and the scan worker see sane values.
-    for row in res.data:
-        row.setdefault("active", True)
-        if row.get("active") is None:
-            row["active"] = True
-        if row.get("sort_order") is None:
-            row["sort_order"] = row["id"]
-    return res.data
+        res = (get_client().table("sites").select("*")
+               .eq("division_id", division_id).order("id").execute())
+        for row in res.data:
+            row["active"] = row.get("active") is not False
+            if row.get("sort_order") is None:
+                row["sort_order"] = row["id"]
+        return sorted(res.data, key=lambda r: r["sort_order"])
+    sites = [_for_division(r, division_id, sw.get(r["id"])) for r in rows]
+    sites.sort(key=lambda r: (r["sort_order"] is None, r["sort_order"] or 0, r["id"]))
+    for i, site in enumerate(sites):
+        site["sort_order"] = i
+    return sites
+
+
+def load_site_requests(division_id=None):
+    """Requested sites, oldest first — one division's, or every division's."""
+    q = get_client().table("sites").select("*").in_("status", ["requested", "declined"])
+    if division_id:
+        q = q.eq("requested_by", division_id)
+    return [dict(r, division_id=division_id or r.get("requested_by")) for r in q.order("id").execute().data]
+
+
+def _set_switch(division_id, site_id, **patch):
+    try:
+        get_client().table("division_sites").upsert(
+            dict({"division_id": division_id, "site_id": site_id}, **patch),
+            on_conflict="division_id,site_id").execute()
+    except Exception as e:
+        raise ValueError(f"couldn't save — {SHARED_SITES_HINT}") from e
 
 
 def reorder_sites(division_id, ordered_ids):
-    """Persists a drag-to-reorder from the dashboard — ordered_ids is every
-    site id for this division, top to bottom. One update per site; this
-    list is always small (a handful to a few dozen sites). Raises
-    ValueError with a migration hint if the column is missing."""
+    """Persists a drag-to-reorder for one division — ordered_ids is every
+    site id in its list, top to bottom. Sites it hasn't switched on yet get
+    a row too (off), so their place sticks."""
+    sw = _switches(division_id)
+    rows = [{"division_id": division_id, "site_id": sid, "sort_order": i,
+             "active": bool((sw.get(sid) or {}).get("active"))} for i, sid in enumerate(ordered_ids)]
     try:
-        for i, site_id in enumerate(ordered_ids):
-            get_client().table("sites").update({"sort_order": i}) \
-                .eq("division_id", division_id).eq("id", site_id).execute()
+        get_client().table("division_sites").upsert(rows, on_conflict="division_id,site_id").execute()
     except Exception as e:
-        raise ValueError(
-            "couldn't update 'sort_order' — run the migration in schema.sql: "
-            "alter table sites add column if not exists sort_order bigint"
-        ) from e
+        raise ValueError(f"couldn't save the order — {SHARED_SITES_HINT}") from e
 
 
 def set_site_active(division_id, site_id, active):
-    """Flip a site's active flag. Inactive sites stay in the list but no scan
-    touches them. Raises ValueError with a migration hint if the column is
-    missing."""
-    try:
-        res = (
-            get_client().table("sites").update({"active": bool(active)})
-            .eq("division_id", division_id).eq("id", site_id).execute()
-        )
-    except Exception as e:
-        raise ValueError(
-            "couldn't update 'active' — run the migration in schema.sql: "
-            "alter table sites add column if not exists active boolean not null default true"
-        ) from e
-    if not res.data:
+    """Turn a site on or off for one division."""
+    site = get_site(division_id, site_id)
+    if site is None or site.get("status"):
         raise ValueError("site not found")
-    return res.data[0]
+    if site_id not in _switches(division_id):
+        # its first switch here: pin the order as shown, so it doesn't jump ahead of unplaced sites
+        reorder_sites(division_id, [s["id"] for s in load_sites(division_id)])
+    _set_switch(division_id, site_id, active=bool(active))
+    return dict(site, active=bool(active))
+
+
+def _turn_on_last(division_id, site_id):
+    """Switch a site on for a division, at the end of its list."""
+    reorder_sites(division_id, [s["id"] for s in load_sites(division_id) if s["id"] != site_id] + [site_id])
+    _set_switch(division_id, site_id, active=True)
 
 
 def record_login_result(division_id, site_id, ok, message=None):
@@ -309,18 +347,23 @@ def record_login_result(division_id, site_id, ok, message=None):
             "login_last_ok": bool(ok),
             "login_last_checked_at": datetime.now(timezone.utc).isoformat(),
             "login_last_error": None if ok else (message or "login failed"),
-        }).eq("division_id", division_id).eq("id", site_id).execute()
+        }).eq("id", site_id).execute()
     except Exception as e:
         print(f"  ! Could not record login result: {e}")
 
 
-def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, login=None):
-    """`login`, when given, is {"username", "password_enc", "url"} — the
+def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, login=None,
+             request_note=None):
+    """Add a site to the shared list, switched on for `division_id` (at the
+    end of its list) and off everywhere else. With `request_note` (even "")
+    it's a request from that division instead: not in the list, not scanned.
+
+    `login`, when given, is {"username", "password_enc", "url"} — the
     password already encrypted by the caller (api/index.py), since this
     module has no opinion on how secrets are handled."""
-    existing = load_sites(division_id)
-    next_order = (max(s["sort_order"] for s in existing) + 1) if existing else 0
-    row = {"division_id": division_id, "name": name, "url": url, "sort_order": next_order}
+    row = {"name": name, "url": url}
+    if request_note is not None:
+        row.update(status="requested", requested_by=division_id, request_note=request_note or None)
     if listing is not None:
         row["listing"] = listing
     if tabs is not None:
@@ -332,22 +375,46 @@ def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, logi
         row["login_password_enc"] = login["password_enc"]
         row["login_url"] = login["url"]
     try:
-        res = get_client().table("sites").insert(row).execute()
-    except Exception:
-        # sort_order column not migrated yet on this DB — fall back to the
-        # old insertion-order behavior rather than failing "add site" outright.
-        row.pop("sort_order", None)
-        res = get_client().table("sites").insert(row).execute()
+        site = get_client().table("sites").insert(row).execute().data[0]
+    except Exception as e:
+        raise ValueError(f"couldn't add the site — {SHARED_SITES_HINT}") from e
+    if request_note is None:
+        _turn_on_last(division_id, site["id"])
+        return dict(site, division_id=division_id, active=True)
+    return dict(site, division_id=division_id)
+
+
+def accept_site_request(site_id):
+    """Put a requested site in the shared list: on for the division that
+    asked (at the end of its list), off for everyone else."""
+    site = get_site(None, site_id)
+    if site is None or site.get("status") not in ("requested", "declined"):
+        raise ValueError("request not found")
+    division_id = site.get("requested_by")
+    get_client().table("sites").update({"status": None, "decline_reason": None}).eq("id", site_id).execute()
+    if division_id:
+        _turn_on_last(division_id, site_id)
+    return dict(site, status=None, division_id=division_id, active=True)
+
+
+def decline_site_request(site_id, reason=None):
+    """Turn a request down; the asking division sees it (and the reason)
+    until it clears it."""
+    res = (get_client().table("sites").update({"status": "declined", "decline_reason": reason or None})
+           .eq("id", site_id).in_("status", ["requested", "declined"]).execute())
+    if not res.data:
+        raise ValueError("request not found")
     return res.data[0]
 
 
 def update_site(division_id, site_id, name, url, listing=None, adapter=None, login_patch=None):
-    """Overwrite an existing site's config. `listing` and `adapter` are
-    written as given (including None, to clear a previously-set value) so the
-    dashboard's edit form can move a site between strategies. `tabs` is left
-    untouched — it has no dashboard UI. `login_patch` is merged in as given
-    (the caller decides whether to touch login_password_enc, so leaving a
-    password field blank in the edit form doesn't overwrite a saved one)."""
+    """Overwrite an existing site's config — for every division, since the
+    list is shared. `listing` and `adapter` are written as given (including
+    None, to clear a previously-set value) so the dashboard's edit form can
+    move a site between strategies. `tabs` is left untouched — it has no
+    dashboard UI. `login_patch` is merged in as given (the caller decides
+    whether to touch login_password_enc, so leaving a password field blank
+    in the edit form doesn't overwrite a saved one)."""
     patch = {
         "name": name,
         "url": url,
@@ -356,29 +423,35 @@ def update_site(division_id, site_id, name, url, listing=None, adapter=None, log
     }
     if login_patch:
         patch.update(login_patch)
-    res = (
-        get_client().table("sites").update(patch)
-        .eq("division_id", division_id).eq("id", site_id).execute()
-    )
+    res = get_client().table("sites").update(patch).eq("id", site_id).execute()
     if not res.data:
         raise ValueError("site not found")
-    return res.data[0]
+    return _for_division(res.data[0], division_id, _switches(division_id).get(site_id)) \
+        if not res.data[0].get("status") else dict(res.data[0], division_id=division_id)
 
 
 def get_site(division_id, site_id):
-    res = (
-        get_client().table("sites").select("*")
-        .eq("division_id", division_id).eq("id", site_id).limit(1).execute()
-    )
-    return res.data[0] if res.data else None
+    """One site, shared or requested. With a division, overlaid with its
+    switch like load_sites' rows."""
+    res = get_client().table("sites").select("*").eq("id", site_id).limit(1).execute()
+    if not res.data:
+        return None
+    site = res.data[0]
+    if not division_id:
+        return dict(site, division_id=site.get("requested_by"))
+    if site.get("status"):
+        return dict(site, division_id=division_id)
+    try:
+        return _for_division(site, division_id, _switches(division_id).get(site_id))
+    except Exception:
+        return site   # not migrated yet: the row still carries its own division
 
 
 def save_site_learned(division_id, site_id, learned):
     """Replace a learned site's state (see site_agent.py). Raises ValueError
     with a migration hint if the column is missing."""
     try:
-        get_client().table("sites").update({"learned": learned}) \
-            .eq("division_id", division_id).eq("id", site_id).execute()
+        get_client().table("sites").update({"learned": learned}).eq("id", site_id).execute()
     except Exception as e:
         raise ValueError(
             "couldn't save — run the migration in schema.sql: "
@@ -387,12 +460,26 @@ def save_site_learned(division_id, site_id, learned):
 
 
 def delete_site(division_id, site_id):
-    res = (
-        get_client().table("sites").delete()
-        .eq("division_id", division_id).eq("id", site_id).execute()
-    )
+    """Delete a site (or a request) for every division."""
+    res = get_client().table("sites").delete().eq("id", site_id).execute()
     if not res.data:
         raise ValueError("site not found")
+
+
+def get_app_setting(key):
+    """A setting shared by every division (app_settings), or None."""
+    try:
+        rows = get_client().table("app_settings").select("value").eq("key", key).limit(1).execute().data
+    except Exception:
+        return None
+    return rows[0]["value"] if rows else None
+
+
+def save_app_setting(key, value):
+    try:
+        get_client().table("app_settings").upsert({"key": key, "value": value}).execute()
+    except Exception as e:
+        raise ValueError(f"couldn't save — {SHARED_SITES_HINT}") from e
 
 
 # ---------------------------------------------------------------------------
