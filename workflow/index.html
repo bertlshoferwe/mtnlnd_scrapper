@@ -4452,9 +4452,10 @@ img.who{object-fit:cover;background:var(--chip)}
       });
     }).catch(function(){onp(0);return plain()});
   }
-  // Big files in 6 MB pieces over Storage's resumable (TUS) endpoint: Cloudflare turns away any one
+  // Big files in 90 MB pieces over Storage's resumable (TUS) endpoint: Cloudflare turns away any one
   // request over 100 MB. A piece that fails is retried from wherever the server says it got to.
-  var UP_PIECE=6*1024*1024,UP_TRIES=5;
+  // 90 MB (decimal, under the cap either way it's counted): few round trips, so big plan sets go up at full speed
+  var UP_PIECE=90*1000*1000,UP_TRIES=5;
   async function putChunked(st,path,f,onp){
     // the key goes on by hand: supabase-js adds it to its own requests as they're sent, so st.headers doesn't carry it
     var auth={apikey:CFG.SUPABASE_ANON_KEY,Authorization:"Bearer "+CFG.SUPABASE_ANON_KEY},b64=function(s){return btoa(unescape(encodeURIComponent(s)))};
