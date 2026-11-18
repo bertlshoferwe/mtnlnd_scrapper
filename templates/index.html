@@ -1179,7 +1179,7 @@
     .mh-find .mh-search { position: absolute; left: 10px; right: 10px; top: 54px; width: auto; max-width: none; z-index: 61; box-shadow: var(--shadow-md); animation: none; }
     .mh-search input { padding: 10px 0; }
     .mh-strip { padding: 0 14px 10px; }
-    .mh-status #runNowBtn { margin-left: auto; }
+    .mh-status #runNowBtn, .mh-status #cancelScanBtn { margin-left: auto; }
     .mh-status #statusDetail { order: 5; flex-basis: 100%; }
     .mh-status #statusDetail::before { display: none; }
     .masthead-actions { top: 52px; }
@@ -1726,6 +1726,7 @@ function refreshRunNowButton() {
   const ready = siteCount > 0 && keywordCount > 0;
   const active = scanRunning || runPending();
   btn.disabled = active || !ready;
+  btn.style.display = active ? 'none' : '';
   btn.title = runPending() ? 'Scan starting — please wait'
     : scanRunning
     ? 'A scan is already running'
@@ -1745,7 +1746,7 @@ async function cancelScan() {
     alert(e.message);
   }
   btn.disabled = false;
-  btn.textContent = 'Cancel scan';
+  btn.textContent = 'Cancel';
   runRequestedAt = 0;
   loadStatus();
   loadResultsInfo({ quiet: true });
