@@ -4394,9 +4394,11 @@ img.who{object-fit:cover;background:var(--chip)}
     return st.createSignedUploadUrl(path).then(function(r){
       if(r.error||!r.data)throw r.error||new Error("no upload link");
       return new Promise(function(res,rej){
+  // Anything bigger than one piece goes up resumable instead (see putChunked).
         var x=new XMLHttpRequest(),h=st.headers||{};
         x.open("PUT",r.data.signedUrl);
         x.setRequestHeader("x-upsert","false");
+    if(f.size>UP_PIECE)return putChunked(st,path,f,onp);
         Object.keys(h).forEach(function(k){if(/^(apikey|authorization)$/i.test(k))x.setRequestHeader(k,h[k])});
         x.upload.onprogress=function(e){if(e.lengthComputable)onp(Math.min(e.loaded,f.size))};
         x.onload=function(){if(x.status>=200&&x.status<300)res();else rej(new Error("upload failed ("+x.status+")"))};
@@ -4410,6 +4412,46 @@ img.who{object-fit:cover;background:var(--chip)}
     var bad=U.items.filter(function(x){return x.state==="err"}).length;
     if(ui.issueId!==bid)toast(bad?bad+" file"+(bad===1?"":"s")+" couldn’t upload":"Uploaded "+U.items.length+" file"+(U.items.length===1?"":"s"));
     if(!bad)U.clear=setTimeout(function(){if(!U.active&&!U.items.some(function(x){return x.state!=="ok"})){delete ups[bid];if(ui.issueId===bid)renderAttach()}},5000);
+  }
+  // Big files in 6 MB pieces over Storage's resumable (TUS) endpoint: Cloudflare turns away any one
+  // request over 100 MB. A piece that fails is retried from wherever the server says it got to.
+  var UP_PIECE=6*1024*1024,UP_TRIES=5;
+  async function putChunked(st,path,f,onp){
+    var h=st.headers||{},auth={},b64=function(s){return btoa(unescape(encodeURIComponent(s)))};
+    Object.keys(h).forEach(function(k){if(/^(apikey|authorization)$/i.test(k))auth[k]=h[k]});
+    var base=CFG.SUPABASE_URL.replace(/\/+$/,"")+"/storage/v1/upload/resumable";
+    function req(method,url,hd,body,prog){
+      return new Promise(function(res,rej){
+        var x=new XMLHttpRequest();x.open(method,url);
+        x.setRequestHeader("Tus-Resumable","1.0.0");
+        Object.keys(auth).forEach(function(k){x.setRequestHeader(k,auth[k])});
+        Object.keys(hd).forEach(function(k){x.setRequestHeader(k,hd[k])});
+        if(prog)x.upload.onprogress=function(e){prog(e.loaded)};
+        x.onload=function(){res(x)};x.onerror=function(){rej(new Error("network error"))};
+        x.send(body||null);
+      });
+    }
+    var c=await req("POST",base,{"Upload-Length":String(f.size),"x-upsert":"false",
+      "Upload-Metadata":["bucketName "+b64(FILE_BUCKET),"objectName "+b64(path),"contentType "+b64(f.type||"application/octet-stream"),"cacheControl "+b64("3600")].join(",")});
+    var loc=c.getResponseHeader("Location");
+    if(c.status!==201||!loc)throw new Error(c.status===413?"file is bigger than storage allows":"couldn’t start the upload ("+c.status+")");
+    // the upload's own address, on our Supabase URL (behind the proxy Location can come back as http://)
+    var url=base+"/"+loc.replace(/\/+$/,"").split("/").pop(),off=0,tries=0;
+    while(off<f.size){
+      var end=Math.min(off+UP_PIECE,f.size),at=off;
+      try{
+        var x=await req("PATCH",url,{"Upload-Offset":String(off),"Content-Type":"application/offset+octet-stream"},f.slice(off,end),
+          function(n){onp(Math.min(at+n,f.size))});
+        if(x.status!==204&&x.status!==200)throw new Error("upload failed ("+x.status+")");
+        off=parseInt(x.getResponseHeader("Upload-Offset"),10)||end;tries=0;onp(off);
+      }catch(err){
+        if(++tries>UP_TRIES)throw err;
+        await new Promise(function(r){setTimeout(r,1000*tries)});
+        var hd=await req("HEAD",url,{}).catch(function(){return null});
+        if(hd&&hd.status===404)throw new Error("the upload expired — try again");
+        var o=hd?parseInt(hd.getResponseHeader("Upload-Offset"),10):NaN;if(o>=0)off=o;onp(off);
+      }
+    }
   }
   function upRetry(bid){
     var U=ups[bid];if(!U)return;
