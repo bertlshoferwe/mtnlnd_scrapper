@@ -4417,8 +4417,8 @@ img.who{object-fit:cover;background:var(--chip)}
   // request over 100 MB. A piece that fails is retried from wherever the server says it got to.
   var UP_PIECE=6*1024*1024,UP_TRIES=5;
   async function putChunked(st,path,f,onp){
-    var h=st.headers||{},auth={},b64=function(s){return btoa(unescape(encodeURIComponent(s)))};
-    Object.keys(h).forEach(function(k){if(/^(apikey|authorization)$/i.test(k))auth[k]=h[k]});
+    // the key goes on by hand: supabase-js adds it to its own requests as they're sent, so st.headers doesn't carry it
+    var auth={apikey:CFG.SUPABASE_ANON_KEY,Authorization:"Bearer "+CFG.SUPABASE_ANON_KEY},b64=function(s){return btoa(unescape(encodeURIComponent(s)))};
     var base=CFG.SUPABASE_URL.replace(/\/+$/,"")+"/storage/v1/upload/resumable";
     function req(method,url,hd,body,prog){
       return new Promise(function(res,rej){
