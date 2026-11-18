@@ -2265,12 +2265,13 @@ img.who{object-fit:cover;background:var(--chip)}
      "bidscout". Opening the other side reuses its tab when one is open (and opens the link there
      without reloading when it can), otherwise opens a new tab. Bid Scout calls wfOpenLink below. */
   window.name="bidboard";
+  // The other tab is opened with its link and kept, so the next link goes to it without a reload (no
+  // window.open('') to look for it first: that leaves a blank tab when the link can't load into it).
+  var tabRefs={};
   function openInTab(name,url,fn){
-    var w=null;try{w=window.open("",name)}catch(e){}
-    if(!w){window.open(url,"_blank");return}
-    var live=false;try{live=w.location.href!=="about:blank"&&w.location.host===new URL(url,location.href).host}catch(e){}
-    try{if(live&&typeof w[fn]==="function"&&w[fn](url)){w.focus();return}}catch(e){}
-    w.location.href=url;try{w.focus()}catch(e){}
+    var w=tabRefs[name];
+    try{if(w&&!w.closed&&typeof w[fn]==="function"&&w[fn](url)){w.focus();return}}catch(e){}
+    var nw=window.open(url,name);if(nw){tabRefs[name]=nw;try{nw.focus()}catch(e){}}
   }
   // The services grid (CFG.APPS, from api/index.py's APPS): one opens in its own tab, on this
   // division, the way Bid Scout links do; the board itself is marked and just closes it.

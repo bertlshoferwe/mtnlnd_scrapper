@@ -5749,15 +5749,14 @@ async function openProjectByKey(key) {
 // "bidboard". Opening the other side reuses its tab when one is open (and opens the link there
 // without reloading when it can), otherwise opens a new tab. The board calls bsOpenLink below.
 window.name = 'bidscout';
+// The other tab is opened with its link and kept here, so the next link goes to it without a reload.
+// No window.open('') to look for it first: that leaves a blank tab when the link can't load into it.
+const tabRefs = {};
 function openInTab(name, url, fn) {
-  let w = null;
-  try { w = window.open('', name); } catch (e) { /* blocked */ }
-  if (!w) { window.open(url, '_blank'); return; }
-  let live = false;
-  try { live = w.location.href !== 'about:blank' && w.location.host === new URL(url, location.href).host; } catch (e) { /* another site */ }
-  try { if (live && typeof w[fn] === 'function' && w[fn](url)) { w.focus(); return; } } catch (e) { /* fall back to loading the link */ }
-  w.location.href = url;
-  try { w.focus(); } catch (e) { /* ignore */ }
+  const w = tabRefs[name];
+  try { if (w && !w.closed && typeof w[fn] === 'function' && w[fn](url)) { w.focus(); return; } } catch (e) { /* load the link */ }
+  const nw = window.open(url, name);
+  if (nw) { tabRefs[name] = nw; try { nw.focus(); } catch (e) { /* ignore */ } }
 }
 // A link from the board, opened in this tab as it is. Another division reloads the page on it.
 window.bsOpenLink = function (href) {
