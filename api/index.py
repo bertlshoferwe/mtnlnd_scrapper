@@ -159,6 +159,7 @@ def index():
         "index.html",
         display_schedule=DISPLAY_SCHEDULE_UTC,
         schedule_utc_hm=SCHEDULE_UTC_HM or "",
+        apps=APPS,
     )
 
 
@@ -227,9 +228,28 @@ def workflow_version():
     return resp
 
 
+# The services in the waffle menu at the top of Bid Scout and the bid board, in
+# order. A new service is one more entry: `url` is where it lives, `tab` the
+# browser tab it opens in (reused if open), `open` the function that page
+# exposes to show a link without reloading (or None), `division` whether it
+# takes ?division=, and `icon` an SVG on a 32x32 rounded square (same as its tab icon).
+APPS = [
+    {"key": "bidscout", "name": "Bid Scout", "url": "/", "tab": "bidscout", "open": "bsOpenLink", "division": True,
+     "icon": '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#202c54"/>'
+             '<circle cx="14" cy="14" r="7" fill="none" stroke="#fff" stroke-width="3.4"/>'
+             '<path d="m19.5 19.5 6 6" stroke="#9fb0e6" stroke-width="4" stroke-linecap="round"/></svg>'},
+    {"key": "bidboard", "name": "Bid board", "url": "/workflow/", "tab": "bidboard", "open": "wfOpenLink", "division": True,
+     "icon": '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#222b57"/>'
+             '<rect x="6" y="7" width="5.5" height="18" rx="1.6" fill="#fff"/>'
+             '<rect x="13.25" y="7" width="5.5" height="12" rx="1.6" fill="#9fb0e6"/>'
+             '<rect x="20.5" y="7" width="5.5" height="15" rx="1.6" fill="#fff"/></svg>'},
+]
+
+
 def _workflow_config_js():
     cfg = {
         "VERSION": _app_version(),
+        "APPS": APPS,
         "SUPABASE_URL": WORKFLOW_SUPABASE_URL,
         "SUPABASE_ANON_KEY": WORKFLOW_SUPABASE_ANON_KEY,
         # A view over `divisions` (id, name only) — see workflow/sql/002_bidscout.sql.

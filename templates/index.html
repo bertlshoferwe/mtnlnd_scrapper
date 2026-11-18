@@ -873,9 +873,27 @@
     background: var(--surface); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; color: var(--muted);
   }
   .masthead { position: relative; }
-  /* Bid board, then the menu button (Sites, Keywords, theme in a panel under it) */
-  .mh-board { margin-left: auto; }
+  /* search, the services grid, then the menu button (Sites, Keywords, theme in a panel under it) */
+  .mh-find { margin-left: auto; }
   .mh-menu-btn { display: inline-flex; padding: 7px 10px; }
+  /* the services grid (waffle): icons with their names under them */
+  .mh-apps { position: relative; display: flex; }
+  .mh-apps-btn { display: inline-flex; padding: 7px 10px; }
+  .mh-apps-btn svg { width: 16px; height: 16px; }
+  .apps-panel {
+    display: none; position: absolute; top: calc(100% + 10px); right: -6px; z-index: 61;
+    width: 300px; max-width: calc(100vw - 24px); padding: 10px;
+    grid-template-columns: repeat(3, 1fr); gap: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-md);
+  }
+  .apps-panel.open { display: grid; }
+  .apps-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px 10px;
+    border-radius: 12px; color: var(--text); text-decoration: none; font-size: 12.5px; font-weight: 500; text-align: center; line-height: 1.25;
+  }
+  .apps-tile:hover, .apps-tile:focus-visible { background: var(--accent-soft); outline: none; }
+  .apps-tile[aria-current="page"] { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 650; }
+  .apps-tile svg { width: 44px; height: 44px; display: block; }
   .masthead-actions {
     display: none; position: absolute; top: 54px; right: 10px; z-index: 60;
     flex-direction: column; align-items: stretch; gap: 4px; min-width: 200px; padding: 6px;
@@ -1154,9 +1172,10 @@
     .masthead h1 { order: 1; }
     .mh-divisions { order: 2; flex: 1 1 0; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .mh-divisions::-webkit-scrollbar { display: none; }
-    .mh-board { order: 3; margin-left: 0; }
     .mh-menu-btn { order: 3; }
     .mh-find { order: 3; }
+    .mh-apps { order: 3; position: static; }   /* the grid hangs from the bar's right edge, like the menu */
+    .apps-panel { top: 52px; right: 10px; }
     .mh-find .mh-search { position: absolute; left: 10px; right: 10px; top: 54px; width: auto; max-width: none; z-index: 61; box-shadow: var(--shadow-md); animation: none; }
     .mh-search input { padding: 10px 0; }
     .mh-strip { padding: 0 14px 10px; }
@@ -1187,15 +1206,13 @@
     .bs-ask { padding: 2px 12px 12px; }
   }
 </style>
+<script>window.APPS = {{ apps|tojson }};</script>
 </head>
 <body>
 <header class="masthead">
   <div class="masthead-inner">
     <h1 id="mastheadTitle">Bid Scout</h1>
     <div class="tabs mh-divisions" id="divisionTabs"></div>
-    <a class="theme-toggle mh-board" id="bidBoardLink" href="/workflow/" target="bidboard"
-       onclick="event.preventDefault(); openInTab('bidboard', '/workflow/' + (currentDivision ? '?division=' + encodeURIComponent(currentDivision) : ''), 'wfOpenLink')"
-       title="Track the projects this division is bidding on">Bid board</a>
     <!-- search, behind a magnifying glass; stays open while a search is in -->
     <div class="mh-find" id="mhFind">
       <label class="mh-search">
@@ -1203,6 +1220,13 @@
         <input type="search" id="resultsSearch" placeholder="Search project, file, or keyword" inputmode="search" autocomplete="off">
       </label>
       <button type="button" class="theme-toggle mh-find-btn" id="mhFindBtn" onclick="toggleFind()" aria-expanded="false" aria-controls="resultsSearch" title="Search" aria-label="Search projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    </div>
+    <!-- every service (Bid Scout, the bid board, ...), like Google's apps grid -->
+    <div class="mh-apps" id="mhApps">
+      <button type="button" class="theme-toggle mh-apps-btn" id="mhAppsBtn" onclick="toggleApps()" aria-expanded="false" aria-controls="appsPanel" title="Services" aria-label="Services">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2.1"/><circle cx="12" cy="5" r="2.1"/><circle cx="19" cy="5" r="2.1"/><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/><circle cx="5" cy="19" r="2.1"/><circle cx="12" cy="19" r="2.1"/><circle cx="19" cy="19" r="2.1"/></svg>
+      </button>
+      <nav class="apps-panel" id="appsPanel" aria-label="Services"></nav>
     </div>
     <button type="button" class="theme-toggle mh-menu-btn" id="mhMenuBtn" onclick="toggleMastheadMenu()" aria-expanded="false" aria-controls="mhNav" aria-label="Menu">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -5362,11 +5386,43 @@ function toggleMastheadMenu(open) {
 document.addEventListener('click', function(e) {
   const nav = document.getElementById('mhNav');
   if (!nav.classList.contains('open') || e.target.closest('#mhMenuBtn')) return;
-  // picking Sites / Keywords / Bid board closes it; the theme switch keeps it open to cycle
+  // picking Sites / Keywords closes it; the theme switch keeps it open to cycle
   if (!e.target.closest('#mhNav') || !e.target.closest('#themeToggle')) toggleMastheadMenu(false);
 });
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' && document.getElementById('mhNav').classList.contains('open')) toggleMastheadMenu(false);
+});
+
+// The services grid (window.APPS, from api/index.py's APPS). Picking one opens it in its own
+// tab, on this division, the way the Bid board link does; this page is marked and just closes it.
+function appUrl(a) {
+  return a.url + (a.division && currentDivision ? '?division=' + encodeURIComponent(currentDivision) : '');
+}
+function toggleApps(open) {
+  const panel = document.getElementById('appsPanel');
+  if (open == null) open = !panel.classList.contains('open');
+  if (open) {
+    panel.innerHTML = (window.APPS || []).map(a =>
+      `<a class="apps-tile" href="${escapeHtml(appUrl(a))}" data-app="${escapeHtml(a.key)}"${a.key === 'bidscout' ? ' aria-current="page"' : ''}>${a.icon}<span>${escapeHtml(a.name)}</span></a>`
+    ).join('');
+    toggleMastheadMenu(false);
+  }
+  panel.classList.toggle('open', open);
+  document.getElementById('mhAppsBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('appsPanel');
+  if (!panel.classList.contains('open') || e.target.closest('#mhAppsBtn')) return;
+  const tile = e.target.closest('.apps-tile');
+  if (tile && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+    e.preventDefault();
+    const a = (window.APPS || []).find(x => x.key === tile.dataset.app);
+    if (a && a.key !== 'bidscout') openInTab(a.tab, appUrl(a), a.open);
+  }
+  if (tile || !e.target.closest('#appsPanel')) toggleApps(false);
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('appsPanel').classList.contains('open')) toggleApps(false);
 });
 
 // Each filter section folds up by its heading; which ones are folded is
