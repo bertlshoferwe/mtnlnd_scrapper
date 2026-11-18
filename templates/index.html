@@ -907,22 +907,7 @@
     padding: 8px 0; font-size: 14px; color: var(--text); font-family: inherit;
   }
   .mh-search:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
-  .mh-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-width: 0; font-size: 12.5px; color: var(--masthead-muted); }
-  .mh-status .status-dot { margin-right: 0; flex-shrink: 0; }
-  .mh-status #statusText { white-space: nowrap; color: var(--masthead-text); }
-  .mh-status #statusDetail { flex: 0 1 auto; min-width: 0; margin: 0 4px 0 0; }
-  .mh-status #statusDetail:not(:empty)::before { content: "·"; margin-right: 8px; }
-  .mh-btn {
-    background: #ffffff; color: #202c54; border: 0; border-radius: 999px;
-    padding: 6px 12px; font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap;
-  }
-  .mh-btn:disabled { opacity: .5; cursor: default; }
-  .mh-btn-danger { background: var(--danger); color: #ffffff; }
   .mh-count { opacity: .7; font-weight: 500; margin-left: 3px; }
-  .mh-strip { padding: 0 18px 10px; }
-  .mh-strip .status-line { color: var(--masthead-muted); font-size: 12.5px; }
-  .mh-strip .progress { background: rgba(255,255,255,.15); margin: 8px 0 0; }
-  .mh-strip .progress-fill { background: #ffffff; }
 
   .bs-layout { display: flex; align-items: flex-start; gap: 16px; }
   .bs-filters {
@@ -930,6 +915,16 @@
     border-radius: var(--radius); padding: 12px 14px 4px;
     position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto;
   }
+  /* the scan, at the top of the sidebar */
+  .bf-scan { padding: 0 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .bf-scan-row { display: flex; align-items: center; gap: 7px; min-height: 30px; }
+  .bf-scan .status-dot { margin-right: 0; flex-shrink: 0; }
+  .bf-scan #statusText { flex: 1; min-width: 0; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bf-scan-btn { flex-shrink: 0; padding: 5px 11px; font-size: 12.5px; border-radius: 999px; }
+  .bf-scan .btn-danger { border: 1px solid currentColor; }
+  .bf-scan #statusDetail { color: var(--muted); line-height: 1.4; }
+  .bf-scan #statusDetail:empty { display: none; }
+  .bf-scan .progress { margin: 8px 0 0; }
   .bf-head { display: flex; align-items: center; gap: 4px; min-height: 28px; margin-bottom: 4px; }
   .bf-head .bf-heading { margin-right: auto; }
   .bf-fold, .bf-rail {
@@ -1159,15 +1154,17 @@
   /* Narrow screens: filters fold behind the Filters button */
   @media (max-width: 900px) {
     .bs-layout { flex-direction: column; align-items: stretch; }
-    .bs-filters { display: none; position: static; max-height: none; flex-basis: auto; }
-    .bs-layout.filters-open .bs-filters { display: block; }
+    .bs-filters { position: static; max-height: none; flex-basis: auto; }
+    .bs-layout:not(.filters-open) .bs-filters { padding-bottom: 2px; }
+    .bs-layout:not(.filters-open) .bs-filters > :not(.bf-scan) { display: none; }
+    .bs-layout:not(.filters-open) .bf-scan { border-bottom: 0; margin-bottom: 0; }
     .bs-filters-btn { display: inline-flex; }
     .bf-fold { display: none; }
   }
   /* Phones: each project becomes a card */
   @media (max-width: 700px) {
     .wrap { padding: 12px 10px 44px; }
-    /* Phones: title, division and the menu on one line; search; then scan status and Run now */
+    /* Phones: title, division and the menu on one line */
     .masthead-inner { gap: 10px; padding: 10px 10px 12px 14px; }
     .masthead h1 { order: 1; }
     .mh-divisions { order: 2; flex: 1 1 0; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -1178,10 +1175,6 @@
     .apps-panel { top: 52px; right: 10px; }
     .mh-find .mh-search { position: absolute; left: 10px; right: 10px; top: 54px; width: auto; max-width: none; z-index: 61; box-shadow: var(--shadow-md); animation: none; }
     .mh-search input { padding: 10px 0; }
-    .mh-strip { padding: 0 14px 10px; }
-    .mh-status #runNowBtn, .mh-status #cancelScanBtn { margin-left: auto; }
-    .mh-status #statusDetail { order: 5; flex-basis: 100%; }
-    .mh-status #statusDetail::before { display: none; }
     .masthead-actions { top: 52px; }
     .masthead-actions .theme-toggle { padding: 11px 12px; font-size: 14px; }
     .bs-bar { padding: 0 8px; }
@@ -1239,16 +1232,6 @@
       </button>
     </nav>
   </div>
-  <!-- The scan: its status and details on one line with Run now, and how far along while one runs -->
-  <div class="mh-strip">
-    <div class="mh-status">
-      <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
-      <span class="status-line" id="statusDetail"></span>
-      <button class="mh-btn" id="runNowBtn" onclick="runNow()">Run now</button>
-      <button class="mh-btn mh-btn-danger" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
-    </div>
-    <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
-  </div>
 </header>
 <div class="wrap">
 
@@ -1266,6 +1249,16 @@
     <aside class="bs-filters" id="filtersPanel" aria-label="Filters">
       <!-- folded down to a strip (wide screens): this opens it again -->
       <button type="button" class="bf-rail" onclick="setFiltersMini(false)" title="Show filters" aria-label="Show filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="bf-railcount" id="filtersRailCount"></span></button>
+      <!-- The scan: its status with Run now (Cancel while one runs), the details, and how far along -->
+      <div class="bf-scan">
+        <div class="bf-scan-row">
+          <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
+          <button class="btn-primary bf-scan-btn" id="runNowBtn" onclick="runNow()">Run now</button>
+          <button class="btn-danger bf-scan-btn" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
+        </div>
+        <div class="status-line" id="statusDetail"></div>
+        <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
+      </div>
       <div class="bf-head">
         <span class="bf-heading">Filters</span>
         <button type="button" class="linkbtn" id="clearFiltersBtn" onclick="clearAllFilters()" hidden>Clear all</button>
