@@ -80,8 +80,16 @@ button{cursor:pointer}
   .app.side-hidden .side .proj.add{padding:6px 0!important}
   .app.side-hidden .side #plist{display:flex;flex-direction:column;gap:4px}
 }
-@media (min-width:900px) and (prefers-reduced-motion:no-preference){.side{transition:width .18s,flex-basis .18s}}
-@media (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
+/* the sidebar folds to its rail like Bid Scout's filters (width and padding, .18s ease); on phones it slides in.
+   One rule per screen size: a shared .side{transition} would overwrite the other. */
+@media (min-width:900px){.side{overflow-x:hidden}}
+@media (min-width:900px) and (prefers-reduced-motion:no-preference){.side{transition:width .18s ease,flex-basis .18s ease,padding .18s ease}}
+@media (max-width:899px) and (prefers-reduced-motion:no-preference){.side{transition:transform .2s}}
+/* the sidebar button: a panel with an arrow, pointing the way it will move the sidebar */
+#menu .chev-out{display:none}
+.app.side-hidden #menu .chev-in{display:none}
+.app.side-hidden #menu .chev-out{display:inline}
+@media (max-width:899px){#menu .chev-in{display:none}#menu .chev-out{display:inline}}
 
 /* Top bar: the same floating rounded bar as Bid Scout's masthead, title on the left. Sizes are divided
    by --z so it comes out the same size on screen as Bid Scout's (the board is zoomed to 80% on computers). */
@@ -1095,7 +1103,7 @@ img.who{object-fit:cover;background:var(--chip)}
   <div class="scrim" id="scrim" data-scrim></div>
   <div class="main">
     <header class="top">
-      <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
+      <button class="icon" id="menu" data-menu aria-label="Open spaces"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path class="chev-in" d="m16 10-2 2 2 2"/><path class="chev-out" d="m14 10 2 2-2 2"/></svg></button>
       <div class="crumb"><h1 id="ptitle"></h1><small id="pkey"></small></div>
       <div class="apps" id="apps">
         <button class="icon appsbtn" id="appsBtn" type="button" aria-expanded="false" aria-controls="appsPanel" title="Services" aria-label="Services"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2.1"/><circle cx="12" cy="5" r="2.1"/><circle cx="19" cy="5" r="2.1"/><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/><circle cx="5" cy="19" r="2.1"/><circle cx="12" cy="19" r="2.1"/><circle cx="19" cy="19" r="2.1"/></svg></button>
