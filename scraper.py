@@ -521,7 +521,8 @@ def _site_login(site):
     username = (site.get("login_username") or "").strip()
     enc = site.get("login_password_enc")
     if not username or not enc:
-        return None
+        # none of its own: the division's saved login for its domain, if any
+        return division_login(site.get("division_id"), site.get("url")) if site.get("division_id") else None
     try:
         password = credentials.decrypt_password(enc)
     except Exception as e:
@@ -532,6 +533,31 @@ def _site_login(site):
         "password": password,
         "url": (site.get("login_url") or "").strip() or site.get("url"),
     }
+
+
+def division_login(division_id, url):
+    """The division's saved login for this link's domain (site_logins), as
+    {"id", "domain", "username", "password", "url", "session"}, or None. With
+    no sign-in page saved, `url` itself is opened to sign in: a link behind a
+    login sends the browser to the sign-in page, then back to the link."""
+    row = supabase_store.site_login_for(division_id, url)
+    if row is None:
+        return None
+    try:
+        password = credentials.decrypt_password(row["password_enc"])
+        session = json.loads(credentials.decrypt_password(row["session_enc"])) if row.get("session_enc") else None
+    except Exception as e:
+        print(f"  ! Could not decrypt the saved login for {row['domain']}: {e}")
+        return None
+    return {"id": row["id"], "domain": row["domain"], "username": row["username"], "password": password,
+            "url": row.get("login_url") or url, "session": session}
+
+
+def keep_login_result(login_id, result):
+    """Record how signing in with a division login went, keeping a good one's session."""
+    session = result.get("session") if result.get("ok") else None
+    supabase_store.record_site_login(login_id, result["ok"], result.get("message"),
+                                     credentials.encrypt_password(json.dumps(session)) if session else None)
 
 
 def _save_locations(site, adapter):
@@ -1122,9 +1148,13 @@ def _scan_division(division):
             )
             doc_links, site_cookies, login_result, listed_labels = scan_site(site, ai_client)
             if login_result is not None:
-                supabase_store.record_login_result(
-                    division_id, site["id"], login_result["ok"], login_result["message"]
-                )
+                shared = None if site.get("login_username") else supabase_store.site_login_for(division_id, site["url"])
+                if shared:
+                    keep_login_result(shared["id"], login_result)
+                else:
+                    supabase_store.record_login_result(
+                        division_id, site["id"], login_result["ok"], login_result["message"]
+                    )
                 status = "OK" if login_result["ok"] else f"FAILED ({login_result['message']})"
                 print(f"  Login check: {status}")
 

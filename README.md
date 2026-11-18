@@ -133,6 +133,17 @@ in. A due date or time the bid already has is never changed; a different one
 from the listing shows as "The listing says … Use it". Each link is re-read
 after the daily scan until its bid date passes, so addenda come in.
 
+**Sites behind a sign-in** (BuildingConnected, PlanHub, SmartBid, ...): each
+division keeps one login per domain in the bid board's Settings → Logins
+(`site_logins` — run `migrations/003_site_logins.sql` once; encrypted with
+`CREDENTIALS_KEY` like site logins, and never sent back to the browser, so a
+login can be replaced or removed but not viewed). A link on that domain, or
+a scanned site with no login of its own, is read signed in. Two-step sign-ins
+(email, then password) work, and the cookies from a good sign-in are kept
+(encrypted) so the next read skips signing in. A listing that lands on a
+sign-in page fails with "Add a login for …", which opens the form and reads
+the link again once it's saved.
+
 ## Choosing between Anthropic and Gemini
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:

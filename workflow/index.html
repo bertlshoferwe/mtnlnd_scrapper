@@ -2517,7 +2517,10 @@ img.who{object-fit:cover;background:var(--chip)}
       if((cd||ct)&&canAct())h+='<div class="lsrow lsconf">The listing says '+esc([cd&&shortDate(cd),ct&&fmtTime(ct)].filter(Boolean).join(" · "))+' <button class="btn small" data-lsuse>Use it</button></div>';
       if(canAct())h+='<button class="linkbtn" data-lsread style="font-size:12px">Read it again</button>';
     }else{
-      h+='<div class="fine lsbad">'+esc(im.stale?"Reading it stopped partway.":(im.message||"Couldn’t read the listing."))+'</div>'+(canAct()?'<button class="linkbtn" data-lsread style="font-size:12px">Try again</button>':'');
+      var need=!im.stale&&(im.result||{}).needs_login;   // behind a sign-in: add (or replace) the division's login for it
+      h+='<div class="fine lsbad">'+esc(im.stale?"Reading it stopped partway.":(im.message||"Couldn’t read the listing."))+'</div>'+
+        (canAct()&&need?'<button class="btn small" data-lsneed="'+esc(need)+'" style="margin:6px 8px 0 0">'+(im.result.has_login?'Replace the login for ':'Add a login for ')+esc(need)+'</button>':'')+
+        (canAct()?'<button class="linkbtn" data-lsread style="font-size:12px">Try again</button>':'');
     }
     return h+'</div>';
   }
@@ -3681,12 +3684,14 @@ img.who{object-fit:cover;background:var(--chip)}
     if(p&&d&&!isArchived(state.div))tabs.push(["space","Space · "+p.name]);
     if(d&&!isArchived(state.div))tabs.push(["division","Division · "+d.name]);
     if(d&&!isArchived(state.div))tabs.push(["dups","Duplicates"]);
+    if(d&&!isArchived(state.div))tabs.push(["logins","Logins"]);
     tabs.push(["workflows","Workflows"]);
     var nt=$("setNewTpl");if(nt)nt.style.display="none";   // the + lives on the Workflow templates panel now
     var h='<div class="settabs" role="tablist">'+tabs.map(function(x){return '<button class="tab" role="tab" data-settab="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+esc(x[1])+'</button>'}).join("")+'</div>';
     if(tab==="space")return h+settingsHTML();
     if(tab==="division")return h+membersHTML(d);
     if(tab==="dups")return h+dupsHTML(d);
+    if(tab==="logins")return h+loginsHTML(d);
     h+=tplEditorHTML();
     if(D.archived.length){
       h+='<section class="panel"><h3>Archived divisions</h3><p class="fine" style="margin:0 0 8px">These were deleted in Bid Scout. Their data is kept and can be viewed, but not changed.</p>';
@@ -3949,9 +3954,10 @@ img.who{object-fit:cover;background:var(--chip)}
     ui.boardKey=nbd?okey:null;
     if(nbd&&osl){nbd.style.scrollSnapType="none";nbd.scrollLeft=osl;requestAnimationFrame(function(){nbd.style.scrollSnapType=""})}
     $("fright").innerHTML=!showF?"":v==="calendar"?CALBAR:v==="list"?GROUPBAR:"";
-    if($("ov-settings").classList.contains("open"))$("orgSetBody").innerHTML=orgSettingsHTML();
-    // not while a name is being typed there: it only saves on leaving the box, so a redraw would undo it
+    // not while a login is being typed (a redraw would take the box out from under the cursor)
     var tae=document.activeElement;
+    if($("ov-settings").classList.contains("open")&&!(tae&&tae.hasAttribute&&tae.hasAttribute("data-lgf")))$("orgSetBody").innerHTML=orgSettingsHTML();
+    // not while a name is being typed there: it only saves on leaving the box, so a redraw would undo it
     if($("ov-tpl").classList.contains("open")&&!(tae&&tae.tagName==="INPUT"&&$("tplBody").contains(tae)))renderTplModal();
     placeCalPop();
     if(ui.qc){if(!document.querySelector(".qc"))ui.qc=null;else focusQC()}
@@ -4388,17 +4394,17 @@ img.who{object-fit:cover;background:var(--chip)}
     paintCDraft();
   }
   // Straight to storage with byte progress; if that route fails, the plain upload (no progress).
+  // Anything bigger than one piece goes up resumable instead (see putChunked).
   function putFile(path,f,onp){
     var st=sb.storage.from(FILE_BUCKET);
     function plain(){return st.upload(path,f,{contentType:f.type||undefined}).then(function(r){if(r.error)throw r.error;onp(f.size)})}
+    if(f.size>UP_PIECE)return putChunked(st,path,f,onp);
     return st.createSignedUploadUrl(path).then(function(r){
       if(r.error||!r.data)throw r.error||new Error("no upload link");
       return new Promise(function(res,rej){
-  // Anything bigger than one piece goes up resumable instead (see putChunked).
         var x=new XMLHttpRequest(),h=st.headers||{};
         x.open("PUT",r.data.signedUrl);
         x.setRequestHeader("x-upsert","false");
-    if(f.size>UP_PIECE)return putChunked(st,path,f,onp);
         Object.keys(h).forEach(function(k){if(/^(apikey|authorization)$/i.test(k))x.setRequestHeader(k,h[k])});
         x.upload.onprogress=function(e){if(e.lengthComputable)onp(Math.min(e.loaded,f.size))};
         x.onload=function(){if(x.status>=200&&x.status<300)res();else rej(new Error("upload failed ("+x.status+")"))};
@@ -4406,12 +4412,6 @@ img.who{object-fit:cover;background:var(--chip)}
         var fd=new FormData();fd.append("cacheControl","3600");fd.append("",f);x.send(fd);
       });
     }).catch(function(){onp(0);return plain()});
-  }
-  function upFinish(bid){
-    var U=ups[bid];if(!U||U.active||U.items.some(function(x){return x.state==="wait"}))return;
-    var bad=U.items.filter(function(x){return x.state==="err"}).length;
-    if(ui.issueId!==bid)toast(bad?bad+" file"+(bad===1?"":"s")+" couldn’t upload":"Uploaded "+U.items.length+" file"+(U.items.length===1?"":"s"));
-    if(!bad)U.clear=setTimeout(function(){if(!U.active&&!U.items.some(function(x){return x.state!=="ok"})){delete ups[bid];if(ui.issueId===bid)renderAttach()}},5000);
   }
   // Big files in 6 MB pieces over Storage's resumable (TUS) endpoint: Cloudflare turns away any one
   // request over 100 MB. A piece that fails is retried from wherever the server says it got to.
@@ -4452,6 +4452,12 @@ img.who{object-fit:cover;background:var(--chip)}
         var o=hd?parseInt(hd.getResponseHeader("Upload-Offset"),10):NaN;if(o>=0)off=o;onp(off);
       }
     }
+  }
+  function upFinish(bid){
+    var U=ups[bid];if(!U||U.active||U.items.some(function(x){return x.state==="wait"}))return;
+    var bad=U.items.filter(function(x){return x.state==="err"}).length;
+    if(ui.issueId!==bid)toast(bad?bad+" file"+(bad===1?"":"s")+" couldn’t upload":"Uploaded "+U.items.length+" file"+(U.items.length===1?"":"s"));
+    if(!bad)U.clear=setTimeout(function(){if(!U.active&&!U.items.some(function(x){return x.state!=="ok"})){delete ups[bid];if(ui.issueId===bid)renderAttach()}},5000);
   }
   function upRetry(bid){
     var U=ups[bid];if(!U)return;
@@ -5056,6 +5062,66 @@ img.who{object-fit:cover;background:var(--chip)}
     if(G.maybe.length){h+='<h4 style="margin:14px 0 4px">Maybe the same · '+G.maybe.length+'</h4><p class="fine" style="margin:0 0 8px">One name has every important word of the other.</p>';G.maybe.slice(0,100).forEach(function(l){h+=dupGroupHTML(l)})}
     return h+disH+'</section>';
   }
+  /* Logins for sites whose documents sit behind a sign-in (BuildingConnected, PlanHub, SmartBid), one per
+     domain for the division. The scan worker signs in with one when it reads a link on that domain. Kept
+     encrypted on the server and never sent back: a login is replaced (a whole new username and password)
+     or removed, not shown. ui.lg={div,list,loading,err,form:{domain,username,password,login_url,lock},busy,arm,reread} */
+  function lgApi(div,path,opts){return fetch("/api/"+encodeURIComponent(div)+"/logins"+(path||""),opts||{}).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})}
+  function lgLoad(div){
+    var L=ui.lg=ui.lg&&ui.lg.div===div?ui.lg:{div:div};L.loading=true;L.err="";
+    lgApi(div).then(function(d){if(ui.lg!==L)return;L.list=d;L.loading=false;render()})
+      .catch(function(e){if(ui.lg!==L)return;L.loading=false;L.err="Couldn’t load the logins: "+e.message;render()});
+  }
+  function lgOpen(div,domain,bid){   // from a bid whose listing needs a login: Settings → Logins, the form started
+    ui.setTab="logins";if(!ui.lg||ui.lg.div!==div)lgLoad(div);
+    ui.lg.form={domain:domain||"",username:"",password:"",login_url:"",lock:false};ui.lg.reread=bid||null;ui.lg.err="";
+    closeOv("ov-issue");openOrgSettings();
+    setTimeout(function(){var f=document.querySelector('[data-lgf="'+(domain?"username":"domain")+'"]');if(f)f.focus()},0);
+  }
+  function lgStatus(r){
+    var at=r.last_checked_at?shortDate(r.last_checked_at.slice(0,10)):"";
+    if(r.last_ok===true)return '<span>Signed in '+esc(at)+'</span>';
+    if(r.last_ok===false)return '<span class="lsbad">Didn’t sign in '+esc(at)+(r.last_error?': '+esc(r.last_error):'')+'</span>';
+    return '<span>Not used yet</span>';
+  }
+  function loginsHTML(d){
+    if(!ui.lg||ui.lg.div!==d.id)lgLoad(d.id);
+    var L=ui.lg,F=L.form;
+    var h='<section class="panel"><div class="phead"><h3>Site logins</h3>'+(canAct()&&!F?'<button class="addbtn" data-lgnew aria-label="Add a login" title="Add a login">'+ic("plus",16)+'</button>':'')+'</div>'+
+      '<p class="fine" style="margin:4px 0 12px">For sites whose documents sit behind a sign-in, like BuildingConnected, PlanHub and SmartBid. A listing link on that site is read signed in, for everyone in '+esc(d.name)+'. Saved passwords can be replaced, never shown.</p>';
+    if(F){
+      h+='<div class="lgform">'+
+        '<label for="lg-domain">Website</label><input id="lg-domain" data-lgf="domain" placeholder="buildingconnected.com" autocomplete="off" value="'+esc(F.domain)+'"'+(F.lock?' readonly':'')+'>'+
+        '<label for="lg-user">Username or email</label><input id="lg-user" data-lgf="username" autocomplete="off" value="'+esc(F.username)+'">'+
+        '<label for="lg-pass">Password</label><input id="lg-pass" type="password" data-lgf="password" autocomplete="new-password" value="'+esc(F.password)+'">'+
+        '<label for="lg-url">Sign-in page <span style="font-weight:400">(optional)</span></label><input id="lg-url" data-lgf="login_url" type="url" placeholder="Blank: sign in from the link being read" autocomplete="off" value="'+esc(F.login_url)+'">'+
+        (L.err?'<p class="fine lsbad" style="margin:8px 0 0">'+esc(L.err)+'</p>':'')+
+        '<div class="actions" style="margin-top:10px"><button class="btn primary small" data-lgsave'+(L.busy?' disabled':'')+'>'+(L.busy?'Saving…':F.lock?'Replace login':'Save login')+'</button><button class="btn small" data-lgcancel>Cancel</button></div></div>';
+    }
+    if(L.loading&&!L.list)return h+'<p class="fine">Loading…</p></section>';
+    if(L.err&&!F)h+='<p class="fine lsbad">'+esc(L.err)+'</p>';
+    var list=L.list||[];
+    if(!list.length&&!F&&!L.err)h+='<p class="fine">No logins yet.</p>';
+    list.forEach(function(r){
+      h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(r.domain)+'</b><div class="fine" style="margin:2px 0 0">'+esc(r.username)+' · '+lgStatus(r)+'</div></div>'+
+        (canAct()?'<button class="btn small" data-lgreplace="'+esc(r.id)+'">Replace</button><button class="btn small danger" data-lgdel="'+esc(r.id)+'">'+(L.arm===r.id?'Tap to remove':'Remove')+'</button>':'')+'</div>';
+    });
+    return h+'</section>';
+  }
+  function lgSave(){
+    var L=ui.lg,F=L&&L.form;if(!F||L.busy)return;
+    if(!F.domain.trim()||!F.username.trim()||!F.password){L.err="Fill in the website, username and password.";render();return}
+    L.busy=true;L.err="";render();
+    lgApi(L.div,"",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain:F.domain,username:F.username,password:F.password,login_url:F.login_url})})
+      .then(function(d){
+        L.busy=false;L.form=null;
+        L.list=(L.list||[]).filter(function(r){return r.domain!==d.login.domain}).concat([d.login]).sort(function(a,b){return a.domain.localeCompare(b.domain)});
+        toast("Login saved for "+d.login.domain);
+        var is=L.reread&&byId(L.reread),ls=is&&listingOf(is);L.reread=null;
+        if(is&&ls&&ls.own){closeOv("ov-settings");openIssue(is.id);lsRead(is,ls.url)}else render();   // back to the bid, reading its listing again
+      })
+      .catch(function(e){L.busy=false;L.err="Couldn’t save it: "+e.message;render()});
+  }
   function submitCreate(e){
     // Enter in Summary doesn't make a bid that's already on the board; clicking Create anyway does
     if(ui.cdupSame&&!(e&&e.type==="click")){var bx=$("c-dups");if(bx){bx.scrollIntoView({block:"nearest"});bx.animate&&bx.animate([{transform:"translateX(0)"},{transform:"translateX(-4px)"},{transform:"translateX(4px)"},{transform:"translateX(0)"}],{duration:220})}return}
@@ -5376,6 +5442,24 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-adclear]")){var ai2=byId(ui.issueId);if(ai2&&addendumOn(ai2)){clearAddendum(ai2);save();renderIssue();render()}return}
     if(t.closest("[data-reloadpage]")){location.reload();return}
     if(t.closest("[data-dupcancel]")){ui.dupMerge=null;render();return}
+    if(t.closest("[data-lgnew]")&&ui.lg){ui.lg.form={domain:"",username:"",password:"",login_url:"",lock:false};ui.lg.err="";ui.lg.arm=null;render();var lf=$("lg-domain");if(lf)lf.focus();return}
+    if((el=t.closest("[data-lgreplace]"))&&ui.lg){
+      var lr=(ui.lg.list||[]).filter(function(r){return r.id===el.getAttribute("data-lgreplace")})[0];
+      if(lr){ui.lg.form={domain:lr.domain,username:lr.username,password:"",login_url:lr.login_url||"",lock:true};ui.lg.err="";ui.lg.arm=null;render();var lp=$("lg-pass");if(lp)lp.focus()}
+      return;
+    }
+    if(t.closest("[data-lgcancel]")&&ui.lg){ui.lg.form=null;ui.lg.err="";ui.lg.reread=null;render();return}
+    if(t.closest("[data-lgsave]")){lgSave();return}
+    if((el=t.closest("[data-lgdel]"))&&ui.lg){
+      var lid=el.getAttribute("data-lgdel"),LG=ui.lg;
+      if(LG.arm!==lid){LG.arm=lid;render();return}
+      LG.arm=null;
+      lgApi(LG.div,"/"+encodeURIComponent(lid),{method:"DELETE"})
+        .then(function(){LG.list=(LG.list||[]).filter(function(r){return r.id!==lid});render();toast("Login removed")})
+        .catch(function(e){toast("Couldn’t remove it: "+e.message,3500)});
+      return;
+    }
+    if((el=t.closest("[data-lsneed]"))){var lb=byId(ui.issueId);if(lb)lgOpen(lb.divisionId,el.getAttribute("data-lsneed"),lb.id);return}
     if((el=t.closest("[data-dupnot]"))){
       var nid=el.getAttribute("data-dupnot"),nb=byId(nid.split(",")[0]),nsp=nb&&spaceOf(nb);
       if(nsp){nsp.marks=(nsp.marks||[]).concat([{id:"notdup-"+uid("m"),kind:"mark",notdup:nid}]);save();render();toast("Marked not the same")}
@@ -5763,6 +5847,7 @@ img.who{object-fit:cover;background:var(--chip)}
     if(ui.ask&&ui.ask.quote&&el.hasAttribute&&el.hasAttribute("data-qamt")){ui.ask.quote.amount=el.value;if(el.value.trim())askOk("quote");return}
     if(ui.ask&&el.hasAttribute&&el.hasAttribute("data-askhand")){var hx=ui.ask.hand[+el.getAttribute("data-askhand")];if(hx){hx.pick=el.value;var av=document.querySelector('[data-askav="'+el.getAttribute("data-askhand")+'"]');if(av)av.innerHTML=avHTML(hx.pick)}return}
     if(ui.qc&&el.hasAttribute&&el.hasAttribute("data-qct")){ui.qc.title=el.value;return}
+    if(ui.lg&&ui.lg.form&&el.hasAttribute&&el.hasAttribute("data-lgf")){ui.lg.form[el.getAttribute("data-lgf")]=el.value;return}
     if(el.id==="q"){ui.f.q=el.value;render();return}
     if(el.id==="bs-q"&&ui.bsPick){
       ui.bsPick.q=el.value;var pos=el.selectionStart;renderAttach();

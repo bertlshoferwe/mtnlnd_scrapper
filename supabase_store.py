@@ -17,6 +17,7 @@ import re
 import uuid
 import requests
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import urlparse
 from supabase import create_client
 
 _client = None
@@ -1988,6 +1989,69 @@ def listing_imports_to_recheck():
         return []
     today = date.today().isoformat()
     return [r for r in rows if ((r.get("result") or {}).get("bid_date") or "9999") >= today]
+
+
+SITE_LOGINS_HINT = "run migrations/003_site_logins.sql in Supabase"
+
+
+def login_domain(text):
+    """"https://app.BuildingConnected.com/x" -> "app.buildingconnected.com";
+    a bare domain is kept as typed (lowercased, no www.). "" if it isn't one."""
+    t = (text or "").strip().lower()
+    host = urlparse(t if "://" in t else "//" + t).hostname or ""
+    host = re.sub(r"^www\.", "", host)
+    return host if re.match(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$", host) else ""
+
+
+def load_site_logins(division_id):
+    """A division's saved logins, secrets included — server side only."""
+    try:
+        return (get_client().table("site_logins").select("*")
+                .eq("division_id", division_id).order("domain").execute().data)
+    except Exception as e:
+        raise ValueError(f"couldn't read the logins — {SITE_LOGINS_HINT}") from e
+
+
+def site_login_for(division_id, url):
+    """The division's login for this link's domain (the most specific one when
+    both buildingconnected.com and app.buildingconnected.com are saved), or None."""
+    host = login_domain(url)
+    if not host:
+        return None
+    try:
+        rows = load_site_logins(division_id)
+    except ValueError:
+        return None
+    hits = [r for r in rows if host == r["domain"] or host.endswith("." + r["domain"])]
+    return max(hits, key=lambda r: len(r["domain"])) if hits else None
+
+
+def save_site_login(division_id, domain, username, password_enc, login_url=None):
+    """Add a login, or replace the one saved for that domain (a new password
+    clears the old session and status)."""
+    row = {"division_id": division_id, "domain": domain, "username": username, "password_enc": password_enc,
+           "login_url": login_url, "session_enc": None, "last_ok": None, "last_checked_at": None,
+           "last_error": None, "updated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        return get_client().table("site_logins").upsert(row, on_conflict="division_id,domain").execute().data[0]
+    except Exception as e:
+        raise ValueError(f"couldn't save the login — {SITE_LOGINS_HINT}") from e
+
+
+def delete_site_login(division_id, login_id):
+    get_client().table("site_logins").delete().eq("division_id", division_id).eq("id", login_id).execute()
+
+
+def record_site_login(login_id, ok, message=None, session_enc=None):
+    """How the last sign-in went; a good one keeps the browser session for next time."""
+    patch = {"last_ok": bool(ok), "last_checked_at": datetime.now(timezone.utc).isoformat(),
+             "last_error": None if ok else (message or "login failed")}
+    if session_enc is not None or not ok:
+        patch["session_enc"] = session_enc
+    try:
+        get_client().table("site_logins").update(patch).eq("id", login_id).execute()
+    except Exception as e:
+        print(f"  ! Could not record login result: {e}")
 
 
 BID_FILES_BUCKET = "bid-files"

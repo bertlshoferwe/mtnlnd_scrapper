@@ -185,11 +185,28 @@ _USERNAME_SELECTOR = (
     "input[type=text][id*=user i], input[type=text][id*=email i], "
     "input[type=text]"
 )
+# The same without the catch-all text box: on a page with no password field,
+# only a box that's clearly for the email/username starts a two-step sign-in
+# (a signed-in page's search box mustn't).
+_EMAIL_SELECTOR = _USERNAME_SELECTOR.rsplit(",", 1)[0]
 _SUBMIT_SELECTOR = (
     "button[type=submit], input[type=submit], "
     "button:has-text('Log in'), button:has-text('Log In'), "
     "button:has-text('Sign in'), button:has-text('Sign In')"
 )
+
+
+def _visible(page, selector):
+    el = page.query_selector(selector)
+    return el if el and el.is_visible() else None
+
+
+def _wait_visible(page, selector, ms):
+    try:
+        page.wait_for_selector(selector, state="visible", timeout=ms)
+    except Exception:
+        pass
+    return _visible(page, selector)
 
 
 def _attempt_login(ctx, login, page=None):
@@ -201,6 +218,12 @@ def _attempt_login(ctx, login, page=None):
     credentials, but it does catch the common case of a login page that just
     reloads itself on a wrong password.
 
+    Two-step sign-ins (Autodesk's, for BuildingConnected: the email, Next,
+    then the password on the next screen) work too. `login["session"]`, when
+    given, is the cookies kept from the last good sign-in: they go in first,
+    and a page that then shows no sign-in form counts as signed in. A good
+    sign-in's result carries "session" (the cookies now) for the caller to keep.
+
     `page`, when given, is used (and left open) instead of a throwaway page
     that gets closed here — needed for a site whose login goes through an
     SSO/OAuth redirect (a separate login.* origin handing back a session via
@@ -209,44 +232,76 @@ def _attempt_login(ctx, login, page=None):
     care (the generic crawl, which does its own separate navigation
     afterward and has no such redirect) can leave this out."""
     owns_page = page is None
+    if login.get("session"):
+        try:
+            ctx.add_cookies(login["session"])
+        except Exception as e:
+            print(f"  ! Login: couldn't restore the saved session ({e})")
     if page is None:
         page = ctx.new_page()
-    try:
-        page.goto(login["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
-        page.wait_for_timeout(800)
 
-        pw_input = page.query_selector("input[type=password]")
-        if not pw_input or not pw_input.is_visible():
-            msg = f"no password field found on {login['url']}"
-            print(f"  ! Login: {msg}")
-            return {"ok": False, "message": msg}
-        user_input = page.query_selector(_USERNAME_SELECTOR)
-        if not user_input or not user_input.is_visible():
-            msg = f"no username field found on {login['url']}"
-            print(f"  ! Login: {msg}")
-            return {"ok": False, "message": msg}
-
-        user_input.fill(login["username"])
-        pw_input.fill(login["password"])
-
-        submit = page.query_selector(_SUBMIT_SELECTOR)
-        if submit:
-            submit.click(timeout=4000)
+    def submit(field):
+        button = _visible(page, _SUBMIT_SELECTOR)
+        if button:
+            button.click(timeout=4000)
         else:
-            pw_input.press("Enter")
+            field.press("Enter")
+
+    def settle():
         try:
             page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
         except Exception:
             pass  # some sites never go idle (polling/websockets) — check below anyway
 
-        still_on_login = page.query_selector("input[type=password]")
-        if still_on_login and still_on_login.is_visible():
+    try:
+        page.goto(login["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        page.wait_for_timeout(800)
+
+        pw_input = _visible(page, "input[type=password]")
+        if not pw_input and not _visible(page, _EMAIL_SELECTOR):
+            # a sign-in page drawn by script, or a redirect to one still on its way
+            _wait_visible(page, "input[type=password], " + _EMAIL_SELECTOR, 10000)
+            pw_input = _visible(page, "input[type=password]")
+        user_input = _visible(page, _USERNAME_SELECTOR) if pw_input else _visible(page, _EMAIL_SELECTOR)
+        if not pw_input and login.get("session") and not user_input:
+            print(f"  Still signed in as {login['username']} (saved session)")
+            return {"ok": True, "message": None, "session": ctx.cookies()}
+        two_step = not pw_input and user_input
+        if two_step:
+            # The email first, then the password on the next screen.
+            user_input.fill(login["username"])
+            submit(user_input)
+            pw_input = _wait_visible(page, "input[type=password]", 15000)
+        if not pw_input:
+            msg = f"no password field found on {login['url']}"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
+        if two_step:
+            user_input = _visible(page, _USERNAME_SELECTOR)
+            if user_input and (user_input.input_value() or "").strip():
+                user_input = None  # the two-step form shows the email again, already filled
+        elif not user_input:
+            msg = f"no username field found on {login['url']}"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
+
+        if user_input:
+            user_input.fill(login["username"])
+        pw_input.fill(login["password"])
+        submit(pw_input)
+        settle()
+
+        if _visible(page, "input[type=password]"):
             msg = "still on a page with a password field after submitting — check the username/password"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
+        if _visible(page, "input[autocomplete=one-time-code], input[name*=code i], input[id*=code i]"):
+            msg = "the site asked for a verification code"
             print(f"  ! Login: {msg}")
             return {"ok": False, "message": msg}
 
         print(f"  Logged in as {login['username']} at {login['url']}")
-        return {"ok": True, "message": None}
+        return {"ok": True, "message": None, "session": ctx.cookies()}
     except Exception as e:
         msg = str(e)
         print(f"  ! Login attempt failed ({login['url']}): {msg}")

@@ -32,6 +32,7 @@ from bs4 import BeautifulSoup
 
 import adapters
 import ai_provider
+import browser_crawl
 import scraper
 import site_agent
 import supabase_store
@@ -163,9 +164,40 @@ def _page_docs(html, page_url):
     return [(u, fn) for u, fn in scraper._dedupe_doc_links(page_url, [a["href"] for a in soup.find_all("a", href=True)])]
 
 
+SIGN_IN_URL = re.compile(r"log-?[io]n|sign-?in|auth|sso|account", re.I)
+
+
+def _on_sign_in(page):
+    """True when the open page is a sign-in form, not the project."""
+    if page is None:
+        return False
+    try:
+        return bool(browser_crawl._visible(page, "input[type=password]")
+                    or (SIGN_IN_URL.search(page.url) and browser_crawl._visible(page, browser_crawl._EMAIL_SELECTOR)))
+    except Exception:
+        return False
+
+
+def _needs_login(run, url, login, tried):
+    """The listing is behind a sign-in: say so, and which domain's login would read it."""
+    host = _host(url)
+    domain = login["domain"] if login and login.get("domain") else ".".join(host.split(".")[-2:])
+    if not login:
+        msg = f"This listing is behind a sign-in. Add a login for {domain} to read it."
+    elif tried and not tried["ok"]:
+        msg = f"Signing in to {domain} didn't work: {tried['message']}."
+    else:
+        msg = f"Signed in to {domain}, but the listing still shows a sign-in page."
+    run.progress(msg)
+    run.save(status="failed", message=msg, result={"needs_login": domain, "has_login": bool(login)},
+             last_read_at=_now())
+
+
 def _read_generic(url, fetcher, ai, run, site_name):
     run.progress("Opening the page")
     html, final, json_reqs = fetcher.explore(url, True)
+    if _on_sign_in(fetcher.page) and not _page_docs(html, final):
+        return {"name": "", "site": site_name, "docs": [], "sign_in": True}
     links = _page_docs(html, final)
     info = {}
     if ai is not None:
@@ -239,11 +271,17 @@ def run_import(row):
     run.progress(f"Reading {url}")
     site = _site_for(division_id, url)
     login = scraper._site_login(site) if site and site.get("login_username") else None
+    shared = None if login else scraper.division_login(division_id, url)
+    if shared:
+        run.progress(f"Signing in to {shared['domain']} as {shared['username']}")
     ai = ai_provider.get_provider()
-    fetcher = site_agent.Fetcher(login)
+    fetcher = site_agent.Fetcher(login or shared)
     try:
-        if fetcher.login_result and not fetcher.login_result["ok"]:
-            run.progress(f"Logging in to {site['name']} didn't work: {fetcher.login_result['message']}")
+        tried = fetcher.login_result
+        if shared and tried:
+            scraper.keep_login_result(shared["id"], tried)
+        if tried and not tried["ok"]:
+            run.progress(f"Signing in to {site['name'] if login else shared['domain']} didn't work: {tried['message']}")
         got = None
         if site:
             got = _read_with_adapter(site, url, run) or _read_learned(site, url, fetcher, run)
@@ -252,6 +290,9 @@ def run_import(row):
         cookies = fetcher.cookies()
     finally:
         fetcher.close()
+    if got.get("sign_in") and not got["docs"]:
+        _needs_login(run, url, login or shared, tried)
+        return
 
     # Keep the project it was read into before (a re-read), so files add to it.
     key = row.get("project_key") or f"{got['site']} — {got['name']}"

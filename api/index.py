@@ -21,6 +21,8 @@ Routes:
   POST /api/<division_id>/sites/<site_id>/active   turn a site on or off for this division
   POST /api/<division_id>/sites/reorder      persist this division's drag-to-reorder (also its scan order)
   DEL  /api/<division_id>/sites/<site_id>     remove a site for every division (or clear a request)
+  GET/POST /api/<division_id>/logins         the division's logins for sites behind a sign-in (write-only: add or replace)
+  DEL  /api/<division_id>/logins/<login_id>  remove one
   POST /api/<division_id>/site-requests      request a site (name, url, note)
   GET  /api/site-requests                    every division's requests (the hidden menu)
   POST /api/site-requests/<site_id>/accept   add a request to the list (on for the division that asked)
@@ -408,6 +410,53 @@ def api_add_site(division_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True, "site": _public_site(site)})
+
+
+def _public_login(row):
+    """A saved login without its secrets — they never go back to the browser."""
+    return {k: row.get(k) for k in ("id", "domain", "username", "login_url", "last_ok", "last_checked_at",
+                                    "last_error", "updated_at")}
+
+
+@app.route("/api/<division_id>/logins", methods=["GET", "POST"])
+def api_site_logins(division_id):
+    """The division's logins for sites behind a sign-in (BuildingConnected,
+    PlanHub, ...). POST {"domain", "username", "password", "login_url"} adds
+    one, or replaces the one saved for that domain — write-only, so a change
+    is always a whole new username and password."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    try:
+        if request.method == "GET":
+            return jsonify([_public_login(r) for r in supabase_store.load_site_logins(division_id)])
+        data = request.get_json(force=True, silent=True) or {}
+        domain = supabase_store.login_domain(data.get("domain"))
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        login_url = (data.get("login_url") or "").strip() or None
+        if not domain:
+            raise ValueError("that doesn't look like a website — e.g. buildingconnected.com")
+        if not username or not password:
+            raise ValueError("a username and password are both needed")
+        if login_url and not re.match(r"^https?://[^\s/]+\.[^\s]+$", login_url):
+            raise ValueError("the sign-in page doesn't look like a link")
+        row = supabase_store.save_site_login(division_id, domain, username,
+                                             credentials.encrypt_password(password), login_url)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:   # CREDENTIALS_KEY not set
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True, "login": _public_login(row)})
+
+
+@app.route("/api/<division_id>/logins/<login_id>", methods=["DELETE"])
+def api_delete_site_login(division_id, login_id):
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    supabase_store.delete_site_login(division_id, login_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/<division_id>/site-requests", methods=["POST"])
