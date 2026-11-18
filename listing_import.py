@@ -25,6 +25,7 @@ State lives in listing_imports (migrations/002_listing_imports.sql).
 import json
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urljoin, urlparse
 
@@ -193,6 +194,37 @@ def _needs_login(run, url, login, tried):
              last_read_at=_now())
 
 
+TABS_BUDGET_S = 120
+
+
+def _open_tabs(page, page_url, docs, run):
+    """Click the page's file tabs (Plans / Specs / Addenda, Documents, ...) the
+    way the scan's crawl does, adding each tab's document links to `docs`.
+    Returns {key: (filename, bytes)} for files that only come as a download
+    when a button is clicked (key: the download's address, or page#filename)."""
+    if page is None:
+        return {}
+    run.progress("Opening its file tabs")
+    caught = []
+    page.on("download", lambda d: caught.append(d))
+    try:
+        anchors = browser_crawl._reveal_and_download(page, time.time() + TABS_BUDGET_S) + browser_crawl._anchors(page)
+    except Exception as e:
+        run.progress(f"Couldn't open its file tabs ({e})"[:200])
+        return {}
+    for u, fn in scraper._dedupe_doc_links(page_url, [h for h, _t in anchors if h]):
+        docs.setdefault(u, fn)
+    grabbed = {}
+    for dl in caught:
+        fn = (dl.suggested_filename or "").strip()
+        if not fn.lower().endswith(browser_crawl.DOC_EXT):
+            continue   # PDFs and Word files only, like the scan
+        content = browser_crawl._save_download(dl)
+        if content:
+            grabbed[dl.url if dl.url.startswith("http") else f"{page_url}#{fn}"] = (fn[:200], content)
+    return grabbed
+
+
 def _read_generic(url, fetcher, ai, run, site_name):
     run.progress("Opening the page")
     html, final, json_reqs = fetcher.explore(url, True)
@@ -208,6 +240,7 @@ def _read_generic(url, fetcher, ai, run, site_name):
         u = urljoin(final, str(d.get("url") or ""))
         if u.startswith("http") and u not in docs:
             docs[u] = str(d.get("name") or u.rsplit("/", 1)[-1].split("?")[0])[:200]
+    grabbed = _open_tabs(fetcher.page, final, docs, run)
     if not docs and ai is not None:
         found = _explore(url, fetcher, ai, run)
         if found:
@@ -223,7 +256,9 @@ def _read_generic(url, fetcher, ai, run, site_name):
     holders = [adapters.plan_holder(h.get("company"), contact=h.get("contact"), phone=h.get("phone"),
                                     emails=[h["email"]] if h.get("email") else [])
                for h in info.get("plan_holders") or [] if isinstance(h, dict) and h.get("company")]
-    return {"name": name[:200], "site": site_name, "docs": [(u, fn, None) for u, fn in docs.items()],
+    return {"name": name[:200], "site": site_name,
+            "docs": [(u, fn, None) for u, fn in docs.items() if u not in grabbed]
+                    + [(u, fn, content) for u, (fn, content) in grabbed.items()],
             "bid_date": site_agent.parse_date(info.get("bid_date")) if info.get("bid_date") else None,
             "bid_time": site_agent.parse_time(info.get("bid_time")) if info.get("bid_time") else None,
             "location": info.get("location"), "holders": holders or None}

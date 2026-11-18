@@ -63,7 +63,7 @@ _FOLLOW = re.compile(
 # Buttons / tabs that reveal a document list when clicked.
 _REVEAL = re.compile(
     r"(project files|^files$|documents?|plans?|attachments?|downloads?|"
-    r"bid docs?|specifications?|addend|planholder|plan holder|related files)",
+    r"bid docs?|specs?|specifications?|addend|planholder|plan holder|related files)",
     re.I,
 )
 # Text that means "this click actually downloads a file".
@@ -120,7 +120,7 @@ def _visible_clickables(frame):
     return out
 
 
-def _click_matching(page, frame, pattern, deadline, expect_download, limit):
+def _click_matching(page, frame, pattern, deadline, expect_download, limit, after=None):
     clicked = 0
     for handle, text in _visible_clickables(frame):
         if clicked >= limit or time.time() > deadline:
@@ -134,23 +134,52 @@ def _click_matching(page, frame, pattern, deadline, expect_download, limit):
             else:
                 handle.click(timeout=4000)
                 page.wait_for_timeout(900)
+                if after:
+                    after()
             clicked += 1
         except Exception:
             continue
     return clicked
 
 
+def _anchors(page):
+    """[(href, text)] for every link on the page, child frames included."""
+    out = []
+    for frame in page.frames:
+        try:
+            out += frame.eval_on_selector_all(
+                "a[href]",
+                "els => els.map(e => [e.href, (e.textContent || '').trim()])",
+            )
+        except Exception:
+            pass
+    return out
+
+
 def _reveal_and_download(page, deadline):
     """Round 1: click tabs/links that reveal a file list. Round 2: click the
     resulting Download buttons (their downloads are caught by the page's
     'download' handler). Done for the main frame and every child frame, since
-    many bid pages embed a third-party portal in an <iframe>."""
+    many bid pages embed a third-party portal in an <iframe>.
+
+    Tabs that show one list at a time (Bidtracer's Plans / Specs / Addenda)
+    swap the last one's files out, so each tab's links and Download buttons
+    are taken right after it's clicked. Returns the links seen on the way, as
+    [(href, text)]; the caller adds the ones still on the page at the end."""
+    seen = []
+
+    def take():
+        seen.extend(_anchors(page))
+        for f in page.frames:
+            _click_matching(page, f, _DOWNLOAD, deadline, expect_download=True, limit=10)
+
     for frame in page.frames:
-        _click_matching(page, frame, _REVEAL, deadline, expect_download=False, limit=6)
+        _click_matching(page, frame, _REVEAL, deadline, expect_download=False, limit=6, after=take)
     page.wait_for_timeout(1000)
     for frame in page.frames:
         _click_matching(page, frame, _DOWNLOAD, deadline, expect_download=True, limit=30)
     page.wait_for_timeout(1200)
+    return seen
 
 
 def _page_label(page, url):
@@ -191,7 +220,7 @@ _USERNAME_SELECTOR = (
 _EMAIL_SELECTOR = _USERNAME_SELECTOR.rsplit(",", 1)[0]
 _SUBMIT_SELECTOR = (
     "button[type=submit], input[type=submit], "
-    "button:has-text('Log in'), button:has-text('Log In'), "
+    "button:has-text('Log in'), button:has-text('Log In'), button:has-text('Login'), "
     "button:has-text('Sign in'), button:has-text('Sign In')"
 )
 
@@ -207,6 +236,29 @@ def _wait_visible(page, selector, ms):
     except Exception:
         pass
     return _visible(page, selector)
+
+
+# Cloudflare's "verify you are human" box on a sign-in form (Bidtracer's): it
+# puts its token in a hidden cf-turnstile-response field once it passes, and
+# a form sent before then is turned away.
+_BOT_CHECK = "input[name=cf-turnstile-response], .cf-turnstile, iframe[src*='challenges.cloudflare.com']"
+BOT_CHECK_WAIT_MS = 30000
+# Sign-in tries before giving up. Not more: a wrong password tried over and
+# over can lock the account.
+LOGIN_TRIES = 3
+
+
+def _bot_check_passed(page):
+    """False if the page has the check and it didn't pass in time; True otherwise."""
+    if not page.query_selector(_BOT_CHECK):
+        return True
+    try:
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('input[name=cf-turnstile-response]')].some(i => i.value)",
+            timeout=BOT_CHECK_WAIT_MS)
+        return True
+    except Exception:
+        return False
 
 
 def _attempt_login(ctx, login, page=None):
@@ -285,16 +337,30 @@ def _attempt_login(ctx, login, page=None):
             print(f"  ! Login: {msg}")
             return {"ok": False, "message": msg}
 
-        if user_input:
-            user_input.fill(login["username"])
-        pw_input.fill(login["password"])
-        submit(pw_input)
-        settle()
-
-        if _visible(page, "input[type=password]"):
-            msg = "still on a page with a password field after submitting — check the username/password"
-            print(f"  ! Login: {msg}")
-            return {"ok": False, "message": msg}
+        for attempt in range(1, LOGIN_TRIES + 1):
+            if user_input:
+                user_input.fill(login["username"])
+            pw_input.fill(login["password"])
+            if not _bot_check_passed(page):
+                msg = "the site's Cloudflare check never passed, so it wouldn't take the sign-in"
+                print(f"  ! Login: {msg}")
+                return {"ok": False, "message": msg}
+            submit(pw_input)
+            settle()
+            pw_input = _visible(page, "input[type=password]")
+            if not pw_input:
+                break
+            if attempt == LOGIN_TRIES:
+                msg = (f"still on a page with a password field after {LOGIN_TRIES} tries — "
+                       "check the username/password")
+                print(f"  ! Login: {msg}")
+                return {"ok": False, "message": msg}
+            # Back on the form: some sites (Bidtracer) turn the first try or two away anyway.
+            print(f"  Login: try {attempt} came back to the sign-in form — trying again")
+            page.wait_for_timeout(1500)
+            user_input = _visible(page, _USERNAME_SELECTOR)
+            if user_input and (user_input.input_value() or "").strip() == login["username"]:
+                user_input = None
         if _visible(page, "input[autocomplete=one-time-code], input[name*=code i], input[id*=code i]"):
             msg = "the site asked for a verification code"
             print(f"  ! Login: {msg}")
@@ -370,17 +436,8 @@ def crawl_site(start_url, login=None):
                 page.close()
                 continue
 
-            _reveal_and_download(page, deadline)
-
-            anchors = []
-            for frame in page.frames:
-                try:
-                    anchors += frame.eval_on_selector_all(
-                        "a[href]",
-                        "els => els.map(e => [e.href, (e.textContent || '').trim()])",
-                    )
-                except Exception:
-                    pass
+            anchors = _reveal_and_download(page, deadline)
+            anchors += _anchors(page)
 
             label = _page_label(page, url)
             liberal_left = 25 if depth == 0 else 0  # first hop: follow links even without a keyword hint
