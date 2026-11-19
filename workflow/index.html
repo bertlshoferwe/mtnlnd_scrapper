@@ -81,7 +81,11 @@ button{cursor:pointer}
 @media (min-width:900px){
   body{height:calc(100vh / var(--z));min-height:0;display:flex;flex-direction:column;overflow:hidden}
   body>.top{flex-shrink:0}
-  .app{flex:1;min-height:0;gap:calc(16px / var(--z));padding:0 calc(16px / var(--z)) calc(16px / var(--z))}
+  /* Bid Scout's spacing on screen: 16px under the top bar, 16px between the sidebar and the content, edges in
+     line with the top bar. The content's own sections (tabs, filters, board) already pad 16px (12px for the view
+     tabs), so the gap and right edge take that off; its division tabs start level with the sidebar's top. */
+  .app{flex:1;min-height:0;gap:calc(16px / var(--z) - 16px);padding:calc(8px / var(--z)) calc(16px / var(--z) - 16px) calc(16px / var(--z)) calc(16px / var(--z))}
+  .main .dtabs{padding-top:0}
   .main{min-height:0;overflow:auto}
   .side{--side-bg:var(--surface);--side-ink:var(--ink);--side-mute:var(--muted);--side-hi:var(--chip);
     width:calc(236px / var(--z));flex-basis:calc(236px / var(--z));position:static;height:auto;align-self:stretch;
