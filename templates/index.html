@@ -915,7 +915,9 @@
     border-radius: var(--radius); padding: 12px 14px 4px;
     position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto;
   }
-  /* the scan, at the top of the sidebar */
+  .bs-filters { display: flex; flex-direction: column; }
+  .bs-filters > * { flex-shrink: 0; }
+  /* the scan, at the bottom of the sidebar (wide screens, below) or the top (phones) */
   .bf-scan { padding: 0 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
   .bf-scan-row { display: flex; align-items: center; gap: 7px; min-height: 30px; }
   .bf-scan .status-dot { margin-right: 0; flex-shrink: 0; }
@@ -940,7 +942,7 @@
   }
   .bf-railcount:empty { display: none; }
   .bf-top { display: flex; justify-content: flex-end; margin: -4px -6px 2px 0; }
-  .bf-rail.bf-rail-scan { height: auto; padding: 4px 0; margin-top: 6px; gap: 3px; }
+  .bf-rail.bf-rail-scan { height: auto; padding: 4px 0; margin: auto auto 0; gap: 3px; }
   .bf-rail-scan .bf-ring, .bf-rail-scan .status-dot { grid-area: 1 / 1; }
   .bf-rail-scan .status-dot { margin: 0; place-self: center; }
   .bf-ring { width: 30px; height: 30px; transform: rotate(-90deg); visibility: hidden; }
@@ -960,6 +962,11 @@
     .bs-layout.filters-mini .bs-filters { flex-basis: 56px; padding: 10px 8px; overflow: hidden; }
     .bs-layout.filters-mini .bs-filters > :not(.bf-rail) { display: none !important; }
     .bs-layout.filters-mini .bf-rail { display: grid; }
+    /* pinned to the bottom, still in view while the filters scroll */
+    .bf-scan {
+      order: 99; margin: auto 0 0; padding: 10px 0 12px; border-bottom: 0; border-top: 1px solid var(--border);
+      position: sticky; bottom: -4px; background: var(--card);
+    }
   }
   @media (prefers-reduced-motion: reduce) { .bs-filters { transition: none; } }
   .bf-heading { font-weight: 750; font-size: 14px; }
@@ -1172,6 +1179,7 @@
     .bs-filters { position: static; max-height: none; flex-basis: auto; }
     .bs-layout:not(.filters-open) .bs-filters { padding-bottom: 2px; }
     .bs-layout:not(.filters-open) .bs-filters > :not(.bf-scan) { display: none; }
+    .bf-scan { order: -1; }
     .bs-layout:not(.filters-open) .bf-scan { border-bottom: 0; margin-bottom: 0; }
     .bs-filters-btn { display: inline-flex; }
     .bf-fold, .bf-top { display: none; }
@@ -1263,26 +1271,16 @@
     <!-- Filters: always in view on a wide screen; behind the Filters button on a phone -->
     <aside class="bs-filters" id="filtersPanel" aria-label="Filters">
       <!-- folded down to a strip (wide screens): this opens it again -->
-      <button type="button" class="bf-rail" onclick="setFiltersMini(false)" title="Show filters" aria-label="Show filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="bf-railcount" id="filtersRailCount"></span></button>
-      <!-- the scan, folded: a ring for how far along, the status dot in it -->
+      <button type="button" class="bf-rail" id="filtersRail" onclick="setFiltersMini(false)" title="Show filters" aria-label="Show filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="bf-railcount" id="filtersRailCount"></span></button>
+      <!-- the scan, folded, at the strip's bottom: a ring for how far along, the status dot in it -->
       <button type="button" class="bf-rail bf-rail-scan" id="scanRail" onclick="setFiltersMini(false)" aria-label="Scan status">
         <svg class="bf-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bf-ring-track" cx="18" cy="18" r="15"/><circle class="bf-ring-fill" id="scanRailRing" cx="18" cy="18" r="15" pathLength="100"/></svg>
         <span class="status-dot idle" id="scanRailDot"></span>
         <span class="bf-rail-pct" id="scanRailPct"></span>
       </button>
-      <!-- the sidebar's own fold button, where the strip's open button sits -->
+      <!-- the sidebar's own fold button, in its top corner -->
       <div class="bf-top">
         <button type="button" class="bf-fold" onclick="setFiltersMini(true)" title="Hide filters" aria-label="Hide filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 10-2 2 2 2"/></svg></button>
-      </div>
-      <!-- The scan: its status with Run now (Cancel while one runs), the details, and how far along -->
-      <div class="bf-scan">
-        <div class="bf-scan-row">
-          <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
-          <button class="btn-primary bf-scan-btn" id="runNowBtn" onclick="runNow()">Run now</button>
-          <button class="btn-danger bf-scan-btn" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
-        </div>
-        <div class="status-line" id="statusDetail"></div>
-        <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
       </div>
       <div class="bf-head">
         <span class="bf-heading">Filters</span>
@@ -1329,6 +1327,16 @@
             <option value="100">100</option>
           </select>
         </label>
+      </div>
+      <!-- The scan, at the bottom (the top on phones): its status with Run now (Cancel while one runs), the details, and how far along -->
+      <div class="bf-scan">
+        <div class="bf-scan-row">
+          <span id="statusDot" class="status-dot idle"></span><span id="statusText">Loading&hellip;</span>
+          <button class="btn-primary bf-scan-btn" id="runNowBtn" onclick="runNow()">Run now</button>
+          <button class="btn-danger bf-scan-btn" id="cancelScanBtn" onclick="cancelScan()" style="display:none;">Cancel</button>
+        </div>
+        <div class="status-line" id="statusDetail"></div>
+        <div class="progress" id="scanProgress" style="display:none;"><div class="progress-fill" id="scanProgressFill"></div></div>
       </div>
     </aside>
 
@@ -5514,7 +5522,7 @@ const FILTERS_MINI_KEY = 'bidscout_filters_mini';
 function setFiltersMini(on) {
   document.getElementById('bsLayout').classList.toggle('filters-mini', on);
   try { localStorage.setItem(FILTERS_MINI_KEY, on ? '1' : '0'); } catch (e) { /* per-viewer convenience only */ }
-  if (on) document.querySelector('.bf-rail').focus(); else document.querySelector('.bf-fold').focus();
+  if (on) document.getElementById('filtersRail').focus(); else document.querySelector('.bf-fold').focus();
 }
 try {
   if (localStorage.getItem(FILTERS_MINI_KEY) === '1') document.getElementById('bsLayout').classList.add('filters-mini');
