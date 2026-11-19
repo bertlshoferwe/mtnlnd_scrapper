@@ -882,8 +882,9 @@
   .mh-apps-btn svg { width: 16px; height: 16px; }
   .apps-panel {
     display: none; position: absolute; top: calc(100% + 10px); right: -6px; z-index: 61;
-    width: 300px; max-width: calc(100vw - 24px); padding: 10px;
-    grid-template-columns: repeat(3, 1fr); gap: 4px;
+    max-width: calc(100vw - 24px); padding: 10px;
+    /* just wide enough for its tiles: up to 3 to a row (--cols is set when it opens) */
+    grid-template-columns: repeat(var(--cols, 3), 92px); gap: 4px;
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-md);
   }
   .apps-panel.open { display: grid; }
@@ -5439,6 +5440,7 @@ function toggleApps(open) {
     panel.innerHTML = (window.APPS || []).map(a =>
       `<a class="apps-tile" href="${escapeHtml(appUrl(a))}" data-app="${escapeHtml(a.key)}"${a.key === 'bidscout' ? ' aria-current="page"' : ''}>${a.icon}<span>${escapeHtml(a.name)}</span></a>`
     ).join('');
+    panel.style.setProperty('--cols', Math.min(3, Math.max(1, (window.APPS || []).length)));
     toggleMastheadMenu(false);
   }
   panel.classList.toggle('open', open);

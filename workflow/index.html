@@ -132,8 +132,8 @@ header.top .btn:hover,header.top .icon:hover{color:var(--mast-ink);background:rg
    like the header, so it's the same size on screen as Bid Scout's. */
 .apps{position:relative;display:flex;flex-shrink:0}
 header.top .apps .icon{margin-left:0}
-.appspanel{display:none;position:absolute;top:calc(100% + 10px / var(--z));right:calc(-6px / var(--z));z-index:70;width:calc(300px / var(--z));max-width:calc((100vw - 24px) / var(--z));
-  padding:calc(10px / var(--z));grid-template-columns:repeat(3,1fr);gap:calc(4px / var(--z));background:var(--surface);border:1px solid var(--line);
+.appspanel{display:none;position:absolute;top:calc(100% + 10px / var(--z));right:calc(-6px / var(--z));z-index:70;max-width:calc((100vw - 24px) / var(--z));
+  padding:calc(10px / var(--z));grid-template-columns:repeat(var(--cols,3),calc(92px / var(--z)));gap:calc(4px / var(--z));background:var(--surface);border:1px solid var(--line);
   border-radius:calc(16px / var(--z));box-shadow:0 12px 32px rgba(16,22,46,.18)}
 .appspanel.open{display:grid}
 .appstile{display:flex;flex-direction:column;align-items:center;gap:calc(7px / var(--z));padding:calc(12px / var(--z)) calc(4px / var(--z)) calc(10px / var(--z));
@@ -2339,6 +2339,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var pn=$("appsPanel");if(open==null)open=!pn.classList.contains("open");
     if(open)pn.innerHTML=(CFG.APPS||[]).map(function(a){
       return '<a class="appstile" href="'+esc(appUrl(a))+'" data-app="'+esc(a.key)+'"'+(a.key==="bidboard"?' aria-current="page"':'')+'>'+a.icon+'<span>'+esc(a.name)+'</span></a>'}).join("");
+    if(open)pn.style.setProperty("--cols",Math.min(3,Math.max(1,(CFG.APPS||[]).length)));   // just wide enough for its tiles
     pn.classList.toggle("open",open);$("appsBtn").setAttribute("aria-expanded",open?"true":"false");
   }
   document.addEventListener("click",function(e){
