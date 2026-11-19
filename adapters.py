@@ -115,7 +115,8 @@ class SiteAdapter:
         `site` is the sites row (dict)."""
         raise NotImplementedError
 
-    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None):
+    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None,
+                                    stop_by=None, progress=None, on_project=None):
         """Only for needs_browser=True adapters. Return (doc_links,
         login_result, current_updated):
         doc_links is [(label, document_url_or_None, filename, content_bytes_or_None,
@@ -130,7 +131,13 @@ class SiteAdapter:
         an opaque {project_id: watermark} pair an adapter may use to skip
         re-fetching a project whose listing hasn't changed since the previous
         run — see ConstructConnectAdapter, the only adapter using this so
-        far."""
+        far. `stop_by` (optional) is a time.time() by which to stop and return
+        what's been found so far; `progress(done, total)` (optional) reports
+        how far through the portal's listing it is. `on_project(docs,
+        watermark)` (optional) is handed each project's documents (same
+        tuples) and its {project_id: watermark} as soon as they're fetched, so
+        they're scanned and saved even if the run dies later; the returned
+        doc_links then carry no content bytes."""
         raise NotImplementedError
 
 
@@ -630,43 +637,90 @@ class ConstructConnectAdapter(SiteAdapter):
     CONTACTS_STALE_S = 20 * 3600
     MAX_CONTACT_REFRESH = 40
 
-    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None):
+    # Once one tab crashes (out of memory on a big project's docviewer),
+    # every tab after it crashed too and the run ground through the rest of
+    # the list failing (2026-11-18 logs) — so on a crash the browser is
+    # restarted, logged in and filtered again, and the list re-walked
+    # (projects already done this run are skipped as unchanged).
+    MAX_BROWSER_RESTARTS = 3
+    CRASH_MARKERS = ("crashed", "Target closed", "has been closed", "adopt element handle")
+
+    def find_documents_with_browser(self, site, login, known_updated=None, holders_at=None,
+                                    stop_by=None, progress=None, on_project=None):
         self._site_name = site.get("name") or ""
         self._holders_at = holders_at or {}
+        self._progress = progress
+        self._on_project = on_project
+        self._listed_total = 0
+        self._contacts_refreshed = 0
+        self._crashed_labels = set()
         if not login:
             print("  ! ConstructConnect: no login configured on this site — skipping")
             return [], None, {}
 
+        # RUN_BUDGET_S alone ignored how long the sites before this one took:
+        # as the last site it ran into the 9.5-hour hard limit and was killed
+        # mid-crawl (2026-11-18). stop_by ends it inside the scan's own budget.
         deadline = time.time() + self.RUN_BUDGET_S
+        if stop_by is not None and stop_by < deadline:
+            deadline = stop_by
+            if deadline <= time.time():
+                print("  ! ConstructConnect: no time left in this scan — skipping it; "
+                      "the earlier sites used it all")
+                return [], None, {}
+            print(f"  ConstructConnect: {int(deadline - time.time()) // 60} min "
+                  "left in the scan for this site")
+        out, current_updated = [], {}
+        known = dict(known_updated or {})
         pw, browser, page, login_result = self._start_login(login)
         try:
-            if page is None:
-                return [], login_result, {}
-
-            # Not filtering by Saved Search yet (SAVED_SEARCHES above is
-            # parked for that) — but the location, category and bid date
-            # filters scope the default nationwide view down to what matters.
-            # All three are required — without them the grid is the whole
-            # nationwide list (thousands of projects), which can't finish in
-            # RUN_BUDGET_S. That happened every night 2026-11-14 to 11-17:
-            # ConstructConnect's new cookie banner and nav bar blocked the
-            # filter clicks, and each run ended in a 10-hour timeout. Better
-            # to skip ConstructConnect for one night, loudly.
-            self._open_filter_panel(page)
-            filtered = [self._apply_location_filter(page),
-                        self._apply_category_filter(page),
-                        self._apply_bid_date_filter(page)]
-            if not all(filtered):
-                print("  ! ConstructConnect: couldn't set the search filters (see the "
-                      "*_filter_failed screenshots in debug/) — skipping it this run "
-                      "rather than crawling the unfiltered nationwide list")
-                return [], login_result, {}
-            out, current_updated = self._scan_results_page(page, deadline, known_updated or {})
-            if not out:
+            for attempt in range(self.MAX_BROWSER_RESTARTS + 1):
+                if page is None:
+                    break
+                if not self._apply_filters(page):
+                    break
+                found, updated = self._scan_results_page(page, deadline, known)
+                out.extend(found)
+                current_updated.update(updated)
+                known.update(updated)
+                if not self._crashed or time.time() > deadline:
+                    break
+                if attempt == self.MAX_BROWSER_RESTARTS:
+                    print("  ! ConstructConnect: the browser kept crashing — stopping here")
+                    break
+                print("  ! ConstructConnect: the browser crashed — restarting it and picking up where it left off")
+                self._close_browser(pw, browser)
+                pw, browser, page, login_result = self._start_login(login)
+            if not out and page is not None:
                 self._save_debug_screenshot(page, "no_docs_found")
             return out, login_result, current_updated
         finally:
             self._close_browser(pw, browser)
+
+    def _apply_filters(self, page):
+        """Not filtering by Saved Search yet (SAVED_SEARCHES above is parked
+        for that) — but the location, category and bid date filters scope
+        the default nationwide view down to what matters. All three are
+        required — without them the grid is the whole nationwide list
+        (thousands of projects), which can't finish in RUN_BUDGET_S. That
+        happened every night 2026-11-14 to 11-17: ConstructConnect's new
+        cookie banner and nav bar blocked the filter clicks, and each run
+        ended in a 10-hour timeout. Better to skip ConstructConnect for one
+        night, loudly."""
+        self._open_filter_panel(page)
+        filtered = [self._apply_location_filter(page),
+                    self._apply_category_filter(page),
+                    self._apply_bid_date_filter(page)]
+        if not all(filtered):
+            print("  ! ConstructConnect: couldn't set the search filters (see the "
+                  "*_filter_failed screenshots in debug/) — skipping it this run "
+                  "rather than crawling the unfiltered nationwide list")
+            return False
+        return True
+
+    def _note_crash(self, e):
+        if any(m in str(e) for m in self.CRASH_MARKERS):
+            self._crashed = True
 
     def refetch_project_documents(self, login, project_url, label):
         """Re-fetches one project's documents live — for when a previously
@@ -999,6 +1053,8 @@ class ConstructConnectAdapter(SiteAdapter):
                 self._click(page.locator(f"#bidDate-listbox-option-{self.BID_DATE_DAYS}"))
             page.wait_for_timeout(1500)
             count = re.search(r"Projects\s*([\d,]+)", page.evaluate("document.body.innerText") or "")
+            if count:
+                self._listed_total = int(count.group(1).replace(",", ""))
             print(f"  ConstructConnect: scoped results to bid dates in the {self.BID_DATE_WINDOW.lower()}"
                   + (f" ({count.group(1)} projects)" if count else ""))
             self._save_debug_screenshot(page, "bid_date_filter_applied")
@@ -1057,7 +1113,7 @@ class ConstructConnectAdapter(SiteAdapter):
         project_count = 0
         skipped_no_docs = 0
         skipped_unchanged = 0
-        contacts_refreshed = 0
+        self._crashed = False
         while project_count < self.MAX_PROJECTS_PER_SEARCH and time.time() < deadline:
             rows = self._project_rows(page)
             if not rows:
@@ -1065,39 +1121,77 @@ class ConstructConnectAdapter(SiteAdapter):
             for label, doc_status, project_id, last_updated, project_url in rows:
                 if project_count >= self.MAX_PROJECTS_PER_SEARCH or time.time() > deadline:
                     break
+                self._report_progress(project_count + 1)
                 if label:
                     self.listed_labels.add(label)
-                if project_id and last_updated:
-                    current_updated[project_id] = last_updated
+                watermark = {project_id: last_updated} if project_id and last_updated else {}
                 if doc_status in self.NO_DOCS_STATUSES:
+                    current_updated.update(watermark)
                     skipped_no_docs += 1
                     project_count += 1
                     continue
                 if (project_id and last_updated
                         and known_updated.get(project_id) == last_updated):
+                    current_updated.update(watermark)
                     skipped_unchanged += 1
                     project_count += 1
-                    if contacts_refreshed < self.MAX_CONTACT_REFRESH and self._contacts_stale(label):
-                        contacts_refreshed += 1
+                    if self._contacts_refreshed < self.MAX_CONTACT_REFRESH and self._contacts_stale(label):
+                        self._contacts_refreshed += 1
                         try:
                             self._refresh_contacts(page, label, project_url)
                         except Exception as e:
+                            self._note_crash(e)
                             print(f"  ! ConstructConnect: couldn't refresh plan holders for '{label}': {e}")
+                    if self._crashed:
+                        break
                     continue
+                if label in self._crashed_labels:
+                    # Crashed the browser on an earlier pass — not again this run.
+                    project_count += 1
+                    continue
+                docs = []
                 try:
-                    out.extend(self._download_project(page, label, project_url))
+                    docs = self._download_project(page, label, project_url)
                 except Exception as e:
+                    self._note_crash(e)
                     print(f"  ! ConstructConnect: project '{label}' failed: {e}")
                 project_count += 1
-            if not self._go_to_next_page(page):
+                if self._crashed:
+                    # Not marked done, so the next run tries it again.
+                    self._crashed_labels.add(label)
+                    break
+                current_updated.update(watermark)
+                if self._on_project:
+                    # Scanned and saved now, then let go of — holding every
+                    # project's files until the end used up the memory.
+                    try:
+                        self._on_project(docs, watermark)
+                    except Exception as e:
+                        print(f"  ! ConstructConnect: couldn't save '{label}' ({e})")
+                    docs = [(lbl, u, fn, None, src, bd, bt) for (lbl, u, fn, _, src, bd, bt) in docs]
+                out.extend(docs)
+            if self._crashed or not self._go_to_next_page(page):
                 break
             page.wait_for_timeout(1500)
+        if time.time() > deadline:
+            print("  ! ConstructConnect: out of time for this scan — stopping here; "
+                  "the next scan skips the projects already done")
         print(f"  ConstructConnect: {project_count} project(s) checked, "
               f"{skipped_no_docs} skipped (no documents posted yet), "
               f"{skipped_unchanged} skipped (unchanged since last scan; "
-              f"{contacts_refreshed} of those had their plan holders refreshed), "
+              f"{self._contacts_refreshed} of those had their plan holders refreshed), "
               f"{len(out)} document(s) found")
         return out, current_updated
+
+    def _report_progress(self, done):
+        """At most every 5s — skipped (unchanged) projects go by quickly."""
+        if not self._progress or time.time() - getattr(self, "_progress_at", 0) < 5:
+            return
+        self._progress_at = time.time()
+        try:
+            self._progress(done, max(self._listed_total, done))
+        except Exception as e:
+            print(f"  ! ConstructConnect: progress update failed ({e})")
 
     def _save_debug_screenshot(self, page, tag):
         """Save a screenshot + the page's visible text under a distinct
@@ -1306,6 +1400,7 @@ class ConstructConnectAdapter(SiteAdapter):
         try:
             tab = self._open_project(page, label, project_url)
         except Exception as e:
+            self._note_crash(e)
             print(f"  ! ConstructConnect: couldn't open '{label}': {e}")
             return []
         try:
@@ -1362,6 +1457,7 @@ class ConstructConnectAdapter(SiteAdapter):
                     self._saved_docs_panel_debug = True
                     self._save_debug_screenshot(page, "documents_panel_failed")
         except Exception as e:
+            self._note_crash(e)
             print(f"  ! ConstructConnect: couldn't download documents for '{label}': {e}")
         finally:
             if doc_page:
@@ -1778,6 +1874,7 @@ class ConstructConnectAdapter(SiteAdapter):
                 page.click(self.DOWNLOAD_START_SELECTOR, timeout=8000, force=True)
             return dl_info.value
         except Exception as e:
+            self._note_crash(e)
             print(f"  ! ConstructConnect: '{format_name}' download didn't work ({e})")
             if not getattr(self, "_saved_zip_picker_debug", False):
                 self._saved_zip_picker_debug = True

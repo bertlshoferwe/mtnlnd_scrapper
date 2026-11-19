@@ -3403,6 +3403,9 @@ async function loadStatus() {
     // A count only means something while actually scanning a site's docs.
     // In any other phase, ignore it (an older run may have left a stale total).
     const scanningDocs = /^scanning\b/i.test(s.progress_label || '');
+    // ConstructConnect reports how far through its project list it is while
+    // still finding documents (scraper.py resets the total to 0 per site).
+    const checkingProjects = /^checking\b/i.test(s.progress_label || '') && s.progress_total > 0;
 
     if (scanningDocs && s.progress_total > 0) {
       const done = s.progress_done, tot = s.progress_total;
@@ -3414,6 +3417,15 @@ async function loadStatus() {
       detail.textContent = bits.join('  ·  ');
       fill.classList.remove('indeterminate');
       fill.style.width = pct + '%';
+    } else if (checkingProjects) {
+      const done = s.progress_done, tot = s.progress_total;
+      const bits = [];
+      if (sitePart) bits.push(sitePart);
+      bits.push('project ' + done + ' of ' + tot);
+      if (overall > 0) bits.push(overall + ' scanned so far');
+      detail.textContent = bits.join('  ·  ');
+      fill.classList.remove('indeterminate');
+      fill.style.width = Math.min(100, Math.round(100 * done / tot)) + '%';
     } else {
       const bits = [];
       if (sitePart) bits.push(sitePart);

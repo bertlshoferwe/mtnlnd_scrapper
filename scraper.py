@@ -143,6 +143,10 @@ EMBED_DOC_CHARS = 8000  # doc text length embedded for the similarity ranking
 # shared-runner time limit to worry about (see api/index.py's matching
 # STALE_RUN_AFTER raise, which has to stay above this).
 SCAN_DIVISION_BUDGET_S = int(os.environ.get("SCAN_DIVISION_BUDGET_S") or str(8 * 3600))
+# A browser-driven site (ConstructConnect) stops crawling this long before the
+# budget runs out, so the run still ends on its own (seen-tracking, fit
+# suggestions) well short of the scan worker's hard limit.
+BROWSER_SITE_SCAN_RESERVE_S = int(os.environ.get("BROWSER_SITE_SCAN_RESERVE_S") or str(30 * 60))
 
 # After each scan, reconcile which advertised documents are still listed so a
 # project that drops off the source site can be flagged "no longer listed"
@@ -584,7 +588,7 @@ def _save_plan_holders(site, adapter):
           f"{len(mapping)} project(s)")
 
 
-def scan_site(site, ai_client):
+def scan_site(site, ai_client, stop_by=None, progress=None, on_project=None):
     """
     Dispatch to the right document-finding strategy for a site and return
     (doc_links, cookies, login_result):
@@ -605,6 +609,8 @@ def scan_site(site, ai_client):
         {"ok": bool, "message": str_or_None} from the login attempt — the
         caller records this so the dashboard can show whether the site's
         saved credentials are working.
+    `stop_by` / `progress` / `on_project` only reach a browser-driven adapter (see
+    SiteAdapter.find_documents_with_browser).
     """
     if (site.get("adapter") or "").strip() == "learned":
         return site_agent.scan_learned_site(site, ai_client)
@@ -621,7 +627,8 @@ def scan_site(site, ai_client):
             known_updated = supabase_store.load_project_last_updated(division_id)
             doc_links, login_result, current_updated = adapter.find_documents_with_browser(
                 site, _site_login(site), known_updated=known_updated,
-                holders_at=supabase_store.load_plan_holders_at(division_id))
+                holders_at=supabase_store.load_plan_holders_at(division_id),
+                stop_by=stop_by, progress=progress, on_project=on_project)
             if current_updated:
                 supabase_store.save_project_last_updated(division_id, current_updated)
             _save_plan_holders(site, adapter)
@@ -1146,7 +1153,51 @@ def _scan_division(division):
                 run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
                 done=0, total=0, overall=overall_done,
             )
-            doc_links, site_cookies, login_result, listed_labels = scan_site(site, ai_client)
+            # Wall-clock (time.time()) for the adapter, from the monotonic deadline.
+            stop_by = time.time() + (deadline - time.monotonic()) - BROWSER_SITE_SCAN_RESERVE_S
+
+            def site_progress(done, total, name=name, site_i=site_i):
+                supabase_store.update_run_progress(
+                    run_id, label=f"Checking {name}", site_i=site_i, site_n=n_sites,
+                    done=done, total=total, overall=overall_done,
+                )
+
+            # ConstructConnect hands over each project as soon as it's
+            # downloaded: scanned and marked done right away, so a run that's
+            # stopped partway keeps its work — every run used to be killed
+            # before the crawl ended and the next one started over (2026-11-18).
+            streamed = set()
+
+            def handle_project(docs, watermark, name=name, url=url):
+                nonlocal overall_done
+                bid_dates, bid_times = {}, {}
+                for label, doc_url, filename, content, source_url, bd, bt in docs:
+                    key = f"{name} — {label}" if label else name
+                    if bd:
+                        bid_dates[key] = bd
+                    if bt:
+                        bid_times[key] = bt
+                    doc_key = doc_url or f"{url}#{filename}"
+                    streamed.add(doc_key)
+                    if doc_key in already_scanned:
+                        continue
+                    overall_done += 1
+                    row = process_document(division_id, doc_ctx, run_date, key, doc_key, doc_url,
+                                           filename, content, source_url)
+                    rows.append(row)
+                    if row[7] != "Download failed":
+                        already_scanned[doc_key] = source_url
+                        print(f"  - [{label or 'page'}] {filename}: {row[7]} ({row[6] or 'none'})")
+                if bid_dates:
+                    supabase_store.save_project_bid_dates(division_id, bid_dates)
+                if bid_times:
+                    supabase_store.save_project_bid_times(division_id, bid_times)
+                if watermark:
+                    supabase_store.save_project_last_updated(division_id, watermark)
+
+            doc_links, site_cookies, login_result, listed_labels = scan_site(
+                site, ai_client, stop_by=stop_by, progress=site_progress,
+                on_project=handle_project)
             if login_result is not None:
                 shared = None if site.get("login_username") else supabase_store.site_login_for(division_id, site["url"])
                 if shared:
@@ -1188,6 +1239,7 @@ def _scan_division(division):
             site_total = sum(
                 1 for _, du, fn, _, _, _, _ in doc_links
                 if (du or f"{url}#{fn}") not in already_scanned
+                and (du or f"{url}#{fn}") not in streamed
             )
             site_done = 0
             supabase_store.update_run_progress(
@@ -1213,6 +1265,8 @@ def _scan_division(division):
                 # For a URL-less capture, key the "already scanned" / logged
                 # URL off the site + filename so re-runs still skip it.
                 doc_key = doc_url or f"{url}#{filename}"
+                if doc_key in streamed:
+                    continue
                 if doc_key in already_scanned:
                     skipped_seen += 1
                     # Backfill a source_url onto rows logged before we tracked it.
