@@ -64,6 +64,7 @@ Routes:
   GET  /api/<division_id>/results             paginated/filterable rows (search, status, page, page_size) for the Results table
   GET  /download/<division_id>/results        build and stream an .xlsx on the fly from Supabase rows
   GET  /workflow/                             the bid workflow board (workflow/index.html) + its config.js
+  GET  /vendors/, /api/vendors/...             Vendors: the vendor and salesman directory (vendors_api.py)
 
 Every route that touches Supabase or the scan worker does one or two quick
 network calls and returns almost immediately — the actual scanning work
@@ -104,12 +105,14 @@ import supabase_store
 import weekly_email
 import adapters
 import credentials
+import vendors_api
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(_REPO_ROOT, "templates")
 VENDOR_DIR = os.path.join(_REPO_ROOT, "vendor")
 WORKFLOW_DIR = os.path.join(_REPO_ROOT, "workflow")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
+app.register_blueprint(vendors_api.bp)   # /vendors/ and /api/vendors (vendors_api.py)
 
 COLUMN_HEADERS = [
     "Date", "Site", "Bid Opening", "Filename",
@@ -248,7 +251,27 @@ APPS = [
              '<rect x="6" y="7" width="5.5" height="18" rx="1.6" fill="#fff"/>'
              '<rect x="13.25" y="7" width="5.5" height="12" rx="1.6" fill="#9fb0e6"/>'
              '<rect x="20.5" y="7" width="5.5" height="15" rx="1.6" fill="#fff"/></svg>'},
+    {"key": "vendors", "name": "Vendors", "url": "/vendors/", "tab": "vendors", "open": "vnOpenLink", "division": True,
+     "icon": '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#24305e"/>'
+             '<rect x="5.5" y="8.5" width="21" height="15" rx="2.4" fill="#fff"/>'
+             '<circle cx="11.5" cy="14.2" r="2.6" fill="#9fb0e6"/>'
+             '<path d="M7.8 20.2c.6-2 2.1-3 3.7-3s3.1 1 3.7 3z" fill="#9fb0e6"/>'
+             '<rect x="17" y="12.6" width="7" height="2" rx="1" fill="#24305e"/>'
+             '<rect x="17" y="16.6" width="5" height="2" rx="1" fill="#24305e"/></svg>'},
 ]
+
+
+@app.route("/vendors/")
+def vendors_index():
+    # Config inline, for the same reason as the board's (see workflow_index).
+    # VENDORS_CARD_READER: "browser" (the default: the card is read on the phone
+    # with Tesseract.js) — the one place to switch to another reader later.
+    cfg = {"VERSION": _app_version(), "APPS": APPS,
+           "CARD_READER": os.environ.get("VENDORS_CARD_READER") or "browser"}
+    resp = Response(vendors_api.page_html("window.APP_CONFIG = " + json.dumps(cfg).replace("</", "<\\/") + ";\n"),
+                    mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 def _workflow_config_js():

@@ -414,6 +414,24 @@ def import_listing():
     return jsonify({"ok": True})
 
 
+@app.route("/vendor-pull", methods=["POST"])
+def vendor_pull():
+    """Pull a vendor's items and/or logo now (vendor_catalog.py). Body:
+    {vendor_id, what: "all" | "logo" | "pdf", pdf_path, force}. A logo pull
+    answers when it's done; the others run in the background and show up in
+    Vendors' catalog review."""
+    body = request.get_json(silent=True) or {}
+    vid = str(body.get("vendor_id") or "").strip()
+    what = body.get("what") or "all"
+    if not re.fullmatch(r"[0-9a-f-]{36}", vid) or what not in ("all", "logo", "pdf"):
+        return jsonify({"ok": False, "error": "vendor_id and what required"}), 400
+    if what == "logo":
+        result = vendor_catalog.pull(vid, "logo", force=bool(body.get("force")))
+        return jsonify(result), (200 if result["ok"] else 422)
+    threading.Thread(target=vendor_catalog.pull, args=(vid, what, body.get("pdf_path")), daemon=True).start()
+    return jsonify({"ok": True, "message": "Pull started. Its result shows up in Catalog review."})
+
+
 @app.route("/learn-cancel", methods=["POST"])
 def learn_cancel():
     """Stop a site's learning. Body: {division_id, site_id}."""
@@ -622,3 +640,7 @@ threading.Thread(target=weekly_email.loop, daemon=True).start()
 # Saved sign-in sessions (Bidtracer's lasts a day) visited every few hours so they don't run out — see session_keepalive.py.
 import session_keepalive  # noqa: E402
 threading.Thread(target=session_keepalive.loop, daemon=True).start()
+
+# Vendors' items, pulled from each vendor's website once a week — see vendor_catalog.py.
+import vendor_catalog  # noqa: E402
+threading.Thread(target=vendor_catalog.loop, daemon=True).start()

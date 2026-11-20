@@ -152,6 +152,45 @@ username and password filled in and "Remember me" ticked. Once you're
 signed in, the session is kept for that login — a site's own login too,
 after running `migrations/004_site_login_session.sql` once.
 
+## Vendors
+
+`/vendors/` (in the apps menu next to Bid Scout and the bid board) is a
+directory of vendors and their salesmen ("contacts"): "I'm bidding this item
+in this state — who do I call?". Run `migrations/006_vendors.sql` once (it
+also makes the private `vendor-files` storage bucket). The page is
+`vendors/index.html`; its API is `vendors_api.py`, the tables
+`vendors_store.py`. The browser never reads the tables directly — RLS is on
+with no policies — and every write goes through `_can_edit()`, every admin
+call through `_is_admin()`, so sign-in, when it comes, only changes those two.
+
+- **Contacts and vendors are shared by every division**; what a vendor sells
+  (`vendor_items`) is kept per division, and a vendor shows in the divisions
+  it was added to or has items in. A contact's service area is nationwide,
+  states, or named regions inside a state — or not set, which stays visible
+  ("Coverage not set") when a job-state filter is on.
+- **Search** runs in the database (`vendor_search()`): every word has to match
+  the vendor's name or website, one of its items in the division, or one of
+  its contacts (name, title, email, phone, state or region).
+- **Business cards** are read on the phone with Tesseract.js (the photo is
+  shrunk, read, then always shown in the review form — nothing is saved until
+  you press Save, and the service area is set by hand). The photo is kept
+  with the contact. `VENDORS_CARD_READER` (default `browser`) is the switch
+  for another reader later; one only has to return the same fields.
+- **Items** are pulled weekly from each vendor's website by the scan worker
+  (`vendor_catalog.py`): a store's product feed, then schema.org product
+  markup, then the AI reading the pages, or an uploaded PDF catalog. Each
+  division's Bid Scout keywords decide which products belong in it. The first
+  pull goes straight in; later changes wait in **Catalog review** (triple-click
+  the "Vendors" title) for Approve / Reject, next to Failed pulls and vendor
+  websites. robots.txt is respected, requests are spaced out, and sites
+  behind a sign-in are skipped. The site's logo is pulled too, unless one was
+  uploaded by hand.
+- Installable as an app (manifest and a service worker that keeps only the
+  page itself — no data offline).
+
+Tests: `python -m unittest tests.test_vendors` (needs the scanner's packages,
+e.g. inside the scanner container).
+
 ## Choosing between Anthropic and Gemini
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:

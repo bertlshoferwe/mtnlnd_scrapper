@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171d33">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vendors">
+<title>Vendors</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<script src="config.js"></script>
+<style>
+:root{--bg:#0d1120;--s:#161b2c;--s2:#1f2539;--mast:#171d33;--t:#e6e9f1;--m:#99a1b3;--b:#2b3247;--bs:#3c4559;--a:#93a3d6;--ah:#adb9e2;--as:#232b47;--ast:#bcc6e8;--ac:#12162b;--d:#e0705f;--ok:#57bb80;--w:#d49b52}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+button,input,select{font-family:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+a{color:inherit}
+svg{flex:none}
+mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
+.app{min-height:100vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+.mast{position:sticky;top:0;z-index:30;background:var(--mast);border-bottom:1px solid var(--b);padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left))}
+.mast-in{max-width:1400px;margin:0 auto;height:56px;display:flex;align-items:center;gap:10px}
+.mast h1{font-size:18px;margin:0;font-weight:700;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:default}
+.pill{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--bs);background:var(--as);color:var(--ast);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;max-width:46vw}
+.pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp{flex:1}
+.ib{width:40px;height:40px;border-radius:999px;border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;color:var(--t)}
+.ib:hover{background:var(--as)}
+.rel{position:relative}
+.main{width:100%;max-width:1400px;margin:0 auto;padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left));flex:1}
+.tool{display:flex;gap:8px;align-items:center}
+.search{flex:1;min-width:0;height:48px;border:1px solid var(--bs);background:var(--s);border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 14px}
+.search:focus-within{border-color:var(--a)}
+.search input{flex:1;min-width:0;background:transparent;border:0;outline:0;font-size:16px}
+.search .n{font-size:12px;color:var(--m);white-space:nowrap}
+.btn{height:48px;min-width:48px;padding:0 14px;border-radius:12px;border:1px solid var(--bs);background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:600;text-decoration:none}
+.btn:hover{background:var(--as)}
+.btn.pri{background:var(--a);color:var(--ac);border-color:var(--a);font-weight:700}
+.btn.pri:hover{background:var(--ah)}
+.btn.dng{border-color:var(--d);color:var(--d)}
+.btn.sm{height:36px;min-width:36px;padding:0 12px;font-size:13px;border-radius:8px}
+.badge{min-width:18px;height:18px;border-radius:999px;background:var(--a);color:var(--ac);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.h2{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);margin:18px 4px 8px}
+.card{background:var(--s);border:1px solid var(--b);border-radius:12px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr))}
+.vcard{padding:14px;display:flex;flex-direction:column;gap:10px;cursor:pointer;text-align:left;width:100%}
+.vcard:hover,.vcard.sel{border-color:var(--bs);background:var(--s2)}
+.vcard.sel{border-color:var(--a)}
+.vhead{display:flex;gap:12px;align-items:center;min-width:0}
+.logo{position:relative;overflow:hidden;width:44px;height:44px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:#fff;flex:none}
+.logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff}
+.logo.lg{width:64px;height:64px;font-size:22px;border-radius:14px}
+.logo.sm{width:36px;height:36px;font-size:13px}
+.vname{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.vweb{font-size:13px;color:var(--m);overflow-wrap:anywhere}
+.sm-row{display:flex;gap:8px;align-items:baseline;font-size:14px;flex-wrap:wrap}
+.sm-row .ti{color:var(--m);font-size:13px}
+.srv{font-size:12px;color:var(--ast);background:var(--as);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.srv.un{color:var(--w);background:#3a2f1e}
+.more{font-size:13px;color:var(--ast)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:5px 10px;border-radius:999px;background:var(--as);color:var(--ast);border:1px solid transparent}
+.chip.hit{border-color:var(--a)}
+.chip button{border:0;background:transparent;color:var(--m);padding:0 2px;font-size:15px;line-height:1;min-width:20px;min-height:20px}
+.chip.tog{cursor:pointer;background:transparent;border-color:var(--bs);color:var(--t);min-height:36px;padding:5px 12px}
+.chip.tog.on{background:var(--as);border-color:var(--a);color:var(--ast)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--b);width:100%;background:transparent;border-left:0;border-right:0;border-top:0;text-align:left;min-height:56px}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--s2)}
+.row.sel{background:var(--s2);box-shadow:inset 3px 0 0 var(--a)}
+.row .sub{font-size:12px;color:var(--m)}
+.empty{padding:36px 16px;text-align:center;color:var(--m)}
+.scroll{overflow:hidden}
+.ov{position:fixed;inset:0;z-index:40;background:rgba(3,6,14,.64)}
+.pop{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--mast);border-top:1px solid var(--bs);border-radius:16px 16px 0 0;padding:16px 12px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;max-height:88vh;overflow:auto}
+.pop h3{margin:0 4px 4px;font-size:14px}
+.opt{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 14px;border-radius:12px;border:1px solid var(--bs);background:var(--s2);width:100%;text-align:left;text-decoration:none}
+.opt:hover{border-color:var(--a)}
+.opt .ic{width:40px;height:40px;border-radius:999px;background:var(--as);color:var(--ast);display:inline-flex;align-items:center;justify-content:center}
+.opt b{display:block;font-size:15px}.opt span.s{display:block;font-size:12px;color:var(--m)}
+.fld{display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-radius:12px;border:1px solid var(--bs);background:var(--s2)}
+.lab{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m)}
+.in,select.in{height:40px;width:100%;border-radius:8px;border:1px solid var(--bs);background:var(--as);padding:0 10px;font-size:16px;outline:0}
+.in:focus{border-color:var(--a)}
+.chk{display:flex;align-items:center;gap:12px;min-height:48px;font-size:15px}
+.chk input{width:18px;height:18px;accent-color:var(--a);margin:0}
+@media(min-width:640px){
+ .ov{background:transparent}
+ .pop{position:absolute;left:0;right:auto;bottom:auto;top:calc(100% + 8px);width:320px;border:1px solid var(--bs);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:14px 12px 12px}
+ .pop.r{left:auto;right:0}
+ .pop.menu{width:250px;padding:6px;gap:2px;border-radius:12px}
+ .pop.menu h3,.pop.menu>.btn{display:none}
+ .pop.menu .opt{border:0;background:transparent;min-height:50px;padding:6px 10px;gap:12px;border-radius:8px}
+ .pop.menu .opt:hover{background:var(--as)}
+ .pop.menu .opt .ic{width:34px;height:34px}
+ .pop.menu .opt b{font-size:14px}
+ .main{padding:16px 20px}
+}
+.appsgrid{display:grid;grid-template-columns:repeat(var(--cols,3),88px);gap:8px}
+.tile{width:88px;padding:12px 6px 10px;border-radius:12px;background:transparent;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;font-weight:600;border:0;text-align:center}
+.tile:hover{background:var(--as)}
+.tile.cur{background:var(--s2)}
+.tile svg{width:40px;height:40px;display:block}
+.desk{display:block}
+@media(min-width:1000px){
+ .desk{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,32vw,430px);gap:16px;align-items:start}
+ .desk.nodet{grid-template-columns:minmax(0,1fr)}
+}
+.detail{position:sticky;top:72px}
+.dhead{padding:16px;display:flex;gap:14px;align-items:center}
+.pen{opacity:0;transition:opacity .15s}
+.dhead:hover .pen,.crow:hover .pen,.pen:focus-visible{opacity:1}
+@media(hover:none){.pen{opacity:1}}
+.sec{padding:14px 16px;border-top:1px solid var(--b)}
+.crow{padding:12px 16px;border-top:1px solid var(--b);display:flex;gap:12px}
+.crow .nm{font-weight:700}
+.kv{font-size:14px;color:var(--ast);text-decoration:none;display:inline-flex;gap:6px;align-items:center;min-height:28px;overflow-wrap:anywhere}
+.back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;font-size:14px;font-weight:600;color:var(--ast);padding:8px 4px;min-height:44px}
+.page{max-width:720px;margin:0 auto}
+.warn{padding:10px 14px;border-radius:12px;border:1px solid var(--w);background:#2c2418;color:#f0cfa0;font-size:14px}
+.okb{padding:10px 14px;border-radius:12px;border:1px solid #2f6a49;background:#16281f;color:#a8e0c0;font-size:14px}
+.errb{padding:10px 14px;border-radius:12px;border:1px solid #7a3b33;background:#2a1715;color:#f0b4aa;font-size:14px}
+.cardimg{height:190px;border-radius:12px;border:1px dashed var(--bs);background:var(--s);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--m);overflow:hidden;position:relative}
+.cardimg img{width:100%;height:100%;object-fit:contain}
+.cardimg .busy{position:absolute;inset:0;background:rgba(13,17,32,.72);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--t)}
+.sw{position:relative;width:46px;height:28px;border-radius:999px;background:var(--bs);border:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.15s}
+.sw.on{background:var(--a)}.sw.on::after{left:21px}
+.bar{position:sticky;bottom:0;background:var(--bg);padding:12px 0 calc(8px + env(safe-area-inset-bottom));display:flex;gap:8px}
+.bar .btn{flex:1}
+.modal-ov{position:fixed;inset:0;z-index:50;background:rgba(3,6,14,.64);display:flex;align-items:flex-end;justify-content:center}
+.dlg{background:var(--s);border:1px solid var(--bs);width:100%;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+.dlg .bar{background:var(--s);bottom:-8px}
+.dlg .page{max-width:none}
+@media(min-width:640px){.modal-ov{align-items:center}.dlg{width:560px;border-radius:16px;max-height:88vh}}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#e6e9f1;color:#12162b;padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:calc(100vw - 32px)}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--bs);border-top-color:var(--a);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.hint{font-size:12px;color:var(--m)}
+.tabs{display:flex;gap:4px;margin:2px 0 0;flex-wrap:wrap}
+.offline{background:#2c2418;color:#f0cfa0;border-bottom:1px solid var(--w);text-align:center;font-size:14px;padding:8px 12px}
+.loading{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--m);padding:36px 16px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+@media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
+</style>
+</head>
+<body>
+<div class="app" id="root"></div>
+<script>
+(function(){
+var CFG=window.APP_CONFIG||{};
+var COLORS=['#4f6bd6','#2f8f83','#b0663a','#8a5bc2','#3f7fb8','#a5524f','#5e8a3a','#b08a2f','#6a6fa8','#b05a8c'];
+var STATES=['UT','ID','CO','NV','WY','AZ','NM','MT'];
+var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+var S={divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
+  modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
+  results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
+var mq=window.matchMedia('(min-width:1000px)');
+var $=function(id){return document.getElementById(id)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+var I={
+ plus:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+ plusS:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+ search:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#99a1b3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+ filter:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>',
+ cam:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 012-2h2l1.5-2h5L16 6h2a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>',
+ pen:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>',
+ back:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+ waffle:'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg>',
+ chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+ phone:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>',
+ mail:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+ card:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.5 1.7-2 3-2s2.4.5 3 2M15 10h3M15 13h2"/></svg>'
+};
+
+/* ---------- talking to the server ---------- */
+function api(path,opts){
+ opts=opts||{};
+ var o={method:opts.method||'GET',headers:{}};
+ if(opts.body instanceof FormData)o.body=opts.body;
+ else if(opts.body!==undefined){o.body=JSON.stringify(opts.body);o.headers['Content-Type']='application/json'}
+ return fetch(path,o).then(function(r){
+  if(S.offline){S.offline=false;render()}
+  return r.json().catch(function(){return {}}).then(function(d){if(!r.ok)throw new Error(d.error||('the server answered '+r.status));return d});
+ },function(e){S.offline=true;render();throw new Error("You're offline")});
+}
+function qs(o){return Object.keys(o).filter(function(k){return o[k]!==''&&o[k]!=null&&o[k]!==false}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(o[k])}).join('&')}
+var listSeq=0,listTimer=null;
+function loadList(delay){
+ clearTimeout(listTimer);
+ listTimer=setTimeout(function(){
+  var seq=++listSeq;
+  if(!S.div)return;
+  api('/api/vendors?'+qs({division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''})).then(function(d){
+   if(seq!==listSeq)return;S.results=d.vendors;S.loading=false;S.err='';paintResults();
+  }).catch(function(e){if(seq!==listSeq)return;S.loading=false;S.err=e.message;paintResults()});
+ },delay||0);
+}
+function loadDetail(){
+ if(!S.vid)return Promise.resolve();
+ var id=S.vid;
+ return api('/api/vendors/'+encodeURIComponent(id)+'?'+qs({division:S.div})).then(function(d){if(S.vid===id){S.detail=d;render()}})
+  .catch(function(e){if(S.vid===id){S.detail={error:e.message};render()}});
+}
+function loadNames(){return api('/api/vendors/names').then(function(d){S.names=d}).catch(function(){})}
+function refresh(){loadList();loadDetail();loadNames()}
+
+/* ---------- helpers ---------- */
+function hash(s){var h=0;s=String(s);for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return Math.abs(h)}
+function ini(n){var w=String(n||'?').replace(/&/g,'').split(/\s+/).filter(Boolean);return ((w[0]||'?')[0]+(w[1]?w[1][0]:'')).toUpperCase()}
+// A vendor's logo, or its initials on a color tile that's always the same for that vendor. An image that
+// fails to load removes itself, which shows the initials underneath: never a broken image.
+function logoHTML(v,cls){
+ return '<span class="logo'+(cls?' '+cls:'')+'" style="background:'+COLORS[hash(v.id)%COLORS.length]+'" aria-hidden="true">'+esc(ini(v.name))+
+  (v.logo?'<img src="'+esc(v.logo)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'</span>';
+}
+function srvLine(c){return '<span class="srv'+(c.unset?' un':'')+'">'+esc(c.area_text)+'</span>'}
+function toks(){return S.q.toLowerCase().split(/\s+/).filter(Boolean)}
+function hl(txt,T){var out=esc(txt);T.forEach(function(t){if(!t)return;var re=new RegExp('('+esc(t).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');out=out.replace(/(<[^>]*>)|([^<]+)/g,function(m,tag,text){return tag?tag:text.replace(re,'<mark>$1</mark>')})});return out}
+function divName(id){var d=S.divs.filter(function(x){return x.id===id})[0];return d?d.name:''}
+function shortDate(iso){if(!iso)return '';var d=new Date(iso);return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+function telHref(p){return 'tel:'+String(p).replace(/[^\d+]/g,'')}
+function filterCount(){return (S.st!=='Any'?1:0)+(S.wc?1:0)}
+function saveUrl(){
+ var q={division:S.div};if(S.vid)q.vendor=S.vid;
+ try{history.replaceState(null,'','?'+qs(q))}catch(e){}
+ try{localStorage.setItem('vendors.div',S.div)}catch(e){}
+}
+
+/* ---------- masthead ---------- */
+function appsHTML(){
+ var apps=CFG.APPS||[];
+ return '<div class="appsgrid" style="--cols:'+Math.min(3,Math.max(1,apps.length))+'">'+apps.map(function(a){
+  return '<a class="tile'+(a.key==='vendors'?' cur':'')+'" href="'+esc(appUrl(a))+'" data-app="'+esc(a.key)+'"'+(a.key==='vendors'?' aria-current="page"':'')+'>'+a.icon+'<span>'+esc(a.name)+'</span></a>'}).join('')+'</div>';
+}
+function appUrl(a){return a.url+(a.division&&S.div?'?division='+encodeURIComponent(S.div):'')}
+function renderMast(){
+ var title=S.view==='admin'?'Catalog review':S.view==='scan'?(S.scanStage===2?(S.edit?'Edit contact':'New contact'):'Scan card'):S.view==='form'?(S.edit?'Edit contact':'New contact'):'Vendors';
+ return '<header class="mast"><div class="mast-in">'+
+ '<h1 data-act="title">'+esc(title)+'</h1>'+
+ '<div class="rel"><button class="pill" data-act="p-div" aria-haspopup="true" aria-expanded="'+(S.panel==='div')+'"><span>'+esc(divName(S.div)||'Division')+'</span>'+I.chev+'</button>'+
+ (S.panel==='div'?'<div class="ov" data-act="close"></div><div class="pop" style="width:220px"><h3>Division</h3>'+S.divs.map(function(d){return '<button class="opt" data-act="div" data-id="'+esc(d.id)+'" style="min-height:48px"><b>'+esc(d.name)+(d.id===S.div?' ✓':'')+'</b></button>'}).join('')+'<span class="hint" style="padding:0 4px">Divisions come from Bid Scout.</span></div>':'')+
+ '</div><div class="sp"></div>'+
+ '<div class="rel"><button class="ib" aria-label="Apps" aria-haspopup="true" aria-expanded="'+(S.panel==='apps')+'" data-act="p-apps">'+I.waffle+'</button>'+
+ (S.panel==='apps'?'<div class="ov" data-act="close"></div><div class="pop r" style="width:auto">'+appsHTML()+'</div>':'')+
+ '</div></div></header>'+(S.offline?'<div class="offline" role="status">You’re offline. Vendors needs a connection to show and save anything.</div>':'');
+}
+
+/* ---------- list ---------- */
+function filtersBody(){
+ return '<div class="fld"><label class="lab" for="fst">Job state</label><select class="in" id="fst" data-chg="st">'+['Any'].concat(STATES).map(function(s){return '<option'+(S.st===s?' selected':'')+'>'+s+'</option>'}).join('')+'</select><span class="hint">Hides contacts who don’t cover this state. Contacts with no area set stay, marked Coverage not set.</span></div>'+
+ '<label class="chk fld" style="flex-direction:row"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label>';
+}
+function addMenu(panel){
+ return '<div class="ov" data-act="close"></div><div class="pop r menu"><h3>Add a contact</h3><button class="opt" data-act="scan"><span class="ic">'+I.cam+'</span><span><b>Scan a business card</b><span class="s">Use the camera, then review</span></span></button><button class="opt" data-act="manual"><span class="ic">'+I.pen+'</span><span><b>Enter manually</b><span class="s">Type the details yourself</span></span></button><button class="btn" data-act="close">Cancel</button></div>';
+}
+function renderToolbar(){
+ var n=filterCount();
+ return '<div class="tool"><div class="search">'+I.search+'<input id="q" type="search" placeholder="Search items, vendors or contacts" aria-label="Search" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"><span class="n" id="count" aria-live="polite"></span></div>'+
+ '<div class="rel"><button class="btn" aria-label="Filters'+(n?' ('+n+' on)':'')+'" aria-haspopup="true" aria-expanded="'+(S.panel==='filter')+'" data-act="p-filter">'+I.filter+(n?'<span class="badge">'+n+'</span>':'')+'</button>'+
+ (S.panel==='filter'?'<div class="ov" data-act="close"></div><div class="pop r" role="dialog" aria-label="Filters"><h3>Filters</h3>'+filtersBody()+'<div style="display:flex;gap:8px"><button class="btn" style="flex:1" data-act="clear">Clear</button><button class="btn pri" style="flex:1" data-act="close">Done</button></div></div>':'')+'</div>'+
+ '<div class="rel"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
+ (S.panel==='add'?addMenu():'')+'</div></div>';
+}
+function vcard(r,T){
+ var sh=r.contacts.slice(0,2),more=r.contacts.length-sh.length;
+ var body=sh.map(function(c){return '<div class="sm-row"><b>'+hl(c.name,T)+'</b><span class="ti">'+hl(c.title,T)+'</span>'+srvLine(c)+'</div>'}).join('');
+ if(!r.contacts.length)body='<div class="hint">No contacts yet</div>';
+ if(more>0)body+='<div class="more">+'+more+' more</div>';
+ var items=r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
+ return '<button class="card vcard'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'"><div class="vhead">'+logoHTML(r)+'<div style="min-width:0"><div class="vname">'+hl(r.name,T)+'</div><div class="vweb">'+hl(r.website,T)+'</div></div></div>'+body+items+'</button>';
+}
+function renderResults(){
+ if(S.loading&&!S.results)return '<div class="loading"><span class="spin"></span>Loading vendors…</div>';
+ if(S.err&&!S.results)return '<div class="card empty">Couldn’t load vendors: '+esc(S.err)+'</div>';
+ var T=toks(),res=S.results||[],h='';
+ if(!res.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
+ if(T.length)h='<div class="grid">'+res.map(function(r){return vcard(r,T)}).join('')+'</div>';
+ else h='<div class="card scroll">'+res.map(function(r){
+  return '<button class="row'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'">'+logoHTML(r,'sm')+'<span style="flex:1;min-width:0"><b>'+esc(r.name)+'</b><div class="sub">'+r.contact_count+' salesm'+(r.contact_count===1?'an':'en')+(r.states.length?' · '+esc(r.states.join(', ')):'')+'</div></span></button>'}).join('')+'</div>';
+ return (T.length?'<div class="h2">'+res.length+' vendor'+(res.length===1?'':'s')+'</div>':'<div class="h2">Vendors · A to Z</div>')+h;
+}
+function paintResults(){
+ var el=$('results');if(!el){render();return}
+ el.innerHTML=renderResults();
+ var c=$('count');if(c)c.textContent=S.results?S.results.length+' vendor'+(S.results.length===1?'':'s'):'';
+}
+
+/* ---------- one vendor ---------- */
+function renderVendor(){
+ var v=S.detail;
+ if(!v||v.id!==S.vid&&!v.error)return '<div class="card loading"><span class="spin"></span>Loading…</div>';
+ if(v.error)return '<div class="card empty">'+esc(v.error)+'</div>';
+ var cs=v.contacts,its=v.items;
+ var h='<div class="card"><div class="dhead">'+logoHTML(v,'lg')+'<div style="flex:1;min-width:0"><div class="vname" style="font-size:20px">'+esc(v.name)+'</div>'+(v.website?'<a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a>':'<div class="vweb">No web address</div>')+'</div><button class="ib pen" aria-label="Edit vendor" data-act="editvendor">'+I.pen+'</button></div>';
+ h+='<div class="sec" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px"><span class="lab">Contacts · '+cs.length+'</span><div class="rel"><button class="btn sm" data-act="addfor" aria-haspopup="true" aria-expanded="'+(S.panel==='addv')+'">'+I.plusS+'Add</button>'+(S.panel==='addv'?addMenu():'')+'</div></div>';
+ if(!cs.length)h+='<div class="crow"><span class="hint">No contacts yet.</span></div>';
+ cs.forEach(function(c){
+  h+='<div class="crow"><div style="flex:1;min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint" style="margin-bottom:6px">'+esc(c.title)+'</div>':'')+
+   '<div style="display:flex;flex-direction:column;gap:4px">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
+   (c.has_card?'<a class="kv" href="/api/vendors/cards/'+esc(c.id)+'" target="_blank" rel="noopener">'+I.card+'Business card</a>':'')+'</div><div style="margin-top:8px">'+srvLine(c)+'</div></div><button class="ib pen" aria-label="Edit '+esc(c.name)+'" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>';
+ });
+ h+='<div class="sec"><button class="row" style="padding:0;border:0;min-height:44px" data-act="items" aria-expanded="'+S.itemsOpen+'"><span style="flex:1"><b>Items they sell · '+its.length+'</b><div class="sub">'+(v.website?'From their website, ':'')+esc(divName(S.div))+' division</div></span><span class="btn sm">'+(S.itemsOpen?'Hide':'Show')+'</span></button>';
+ if(S.itemsOpen){
+  h+='<div class="chips" style="margin-top:12px">'+(its.length?its.map(function(i){return '<span class="chip">'+esc(i.name)+'<button aria-label="Remove '+esc(i.name)+'" data-act="rmitem" data-id="'+esc(i.id)+'">×</button></span>'}).join(''):'<span class="hint">None yet.</span>')+'</div>';
+  h+=S.addItem?'<form data-form="item" style="display:flex;gap:8px;margin-top:12px"><input class="in" id="newitem" placeholder="Item name" aria-label="Item name" value="'+esc(S.newItem)+'" autocomplete="off"><button class="btn sm pri" style="height:40px"'+(S.busy?' disabled':'')+'>Add</button></form>':'<button class="btn sm" style="margin-top:12px" data-act="additem">+ Add item</button>';
+ }
+ return h+'</div></div>';
+}
+
+/* ---------- edit vendor ---------- */
+function renderVendorModal(){
+ var m=S.vm,v=S.detail||{};
+ var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0;font-size:18px">Edit vendor</h2><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
+ h+='<form data-form="vmodal" style="display:flex;flex-direction:column;gap:10px">';
+ var src=v.logo_source==='site'?'Pulled from '+esc(v.website||'their website')+(v.logo_pulled_at?' on '+shortDate(v.logo_pulled_at):''):v.logo_source==='card'?'Taken from a business card':v.logo_source==='manual'?'Uploaded by you':'No logo found yet. Initials show until a business card or their website provides one.';
+ h+='<div class="fld"><div class="lab">Logo</div><div style="display:flex;align-items:center;gap:14px">'+logoHTML({id:v.id,name:m.name||v.name,logo:v.logo},'lg')+'<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><span class="hint" style="font-size:13px;color:var(--ast)">'+src+'</span><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+  (v.website&&v.logo_source!=='manual'?'<button type="button" class="btn sm" data-act="vpull"'+(S.busy?' disabled':'')+'>'+(S.busy==='pull'?'Pulling…':'Pull again')+'</button>':'')+
+  '<label class="btn sm" style="cursor:pointer">Upload to replace<input type="file" accept="image/*" data-vlogo hidden></label>'+(v.logo?'<button type="button" class="btn sm" data-act="vlogoclear">Remove</button>':'')+'</div></div></div></div>';
+ h+='<div class="fld"><label class="lab" for="vm-n">Vendor name</label><input class="in" id="vm-n" data-vf="name" value="'+esc(m.name)+'" autocomplete="off"></div>';
+ h+='<div class="fld"><label class="lab" for="vm-w">Web address</label><input class="in" id="vm-w" data-vf="website" value="'+esc(m.website)+'" placeholder="example.com" autocomplete="off" inputmode="url"><span class="hint">Items they sell are pulled from this site each week.</span></div>';
+ var n=(v.contacts||[]).length;
+ if(m.confirm)h+='<div class="warn">Delete '+esc(v.name)+'? This also removes its '+n+' contact'+(n===1?'':'s')+' and items, for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="vdel">Delete vendor</button><button type="button" class="btn sm" data-act="vdelno">Keep</button></div></div>';
+ h+='<div class="bar">'+(m.confirm?'':'<button type="button" class="btn dng" style="flex:0 0 auto" data-act="vdelask">Delete</button>')+'<button type="button" class="btn" data-act="cancel">Cancel</button><button class="btn pri"'+(S.busy?' disabled':'')+'>Save</button></div></form>';
+ return h;
+}
+
+/* ---------- contact form ---------- */
+function vendorMatch(name){var n=String(name||'').trim().toLowerCase();return n?S.names.filter(function(x){return x.name.trim().toLowerCase()===n})[0]:null}
+function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',email:'',website:'',nationwide:false,areas:[]}}
+function renderForm(){
+ var d=S.draft,v=vendorMatch(d.vendor);
+ var h='<div class="page">';
+ if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0;font-size:18px">'+(S.edit?'Edit contact':'New contact')+'</h2><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
+ else h+='<button class="back" data-act="cancel">'+I.back+'Back</button>';
+ if(S.view==='scan')h+='<div class="okb" style="margin-bottom:10px">Read from the card. Check each field, then save. Coverage is not on the card, so set it by hand.</div>';
+ h+='<div id="dupbox">'+dupHTML()+'</div>';
+ h+='<form data-form="contact" style="display:flex;flex-direction:column;gap:10px">';
+ function f(l,k,ty,ex){return '<div class="fld"><label class="lab" for="f-'+k+'">'+l+'</label><input class="in" id="f-'+k+'" data-fld="'+k+'" type="'+ty+'" value="'+esc(d[k])+'" '+(ex||'')+'></div>'}
+ h+=f('Name','name','text','autocomplete="off" autocapitalize="words"')+f('Title','title','text','autocomplete="off"');
+ h+='<div class="fld"><label class="lab" for="f-vendor">Vendor</label><input class="in" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off"><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'+f('Phone','phone','tel','autocomplete="off"')+f('Email','email','email','autocomplete="off" autocapitalize="off"')+'</div>';
+ h+='<div class="fld"><div><div class="lab">Service area</div><div class="hint">Which jobs this salesman covers</div></div>';
+ h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;min-height:44px"><span style="font-size:15px;font-weight:600" id="natlab">Nationwide</span><button type="button" class="sw'+(d.nationwide?' on':'')+'" role="switch" aria-checked="'+d.nationwide+'" aria-labelledby="natlab" data-act="nat"></button></div>';
+ if(!d.nationwide){
+  h+='<div class="chips" style="margin-top:6px" role="group" aria-label="States">'+STATES.map(function(s){var on=d.areas.some(function(x){return x.state===s});return '<button type="button" class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="st" data-id="'+s+'">'+s+'</button>'}).join('')+'</div>';
+  d.areas.forEach(function(x){
+   h+='<div style="margin-top:8px"><div class="hint" style="margin-bottom:6px">Regions in '+x.state+' (blank = whole state)</div><div class="chips">'+x.regions.map(function(r,i){return '<span class="chip">'+esc(r)+'<button type="button" aria-label="Remove '+esc(r)+'" data-act="rmreg" data-id="'+x.state+'|'+i+'">×</button></span>'}).join('')+'</div><div style="display:flex;gap:8px;margin-top:6px"><input class="in" style="height:40px" placeholder="Add region" aria-label="Add a region in '+x.state+'" data-reg="'+x.state+'"><button type="button" class="btn sm" data-act="addreg" data-id="'+x.state+'">Add</button></div></div>';
+  });
+  if(!d.areas.length)h+='<div class="hint" style="margin-top:6px">Nothing selected: shown as Coverage not set.</div>';
+ }
+ h+='</div>';
+ if(S.confirmDel)h+='<div class="warn">Delete '+esc(d.name||'this contact')+'? This removes it for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="del">Delete</button><button type="button" class="btn sm" data-act="nodel">Keep</button></div></div>';
+ h+='<div class="bar">'+(S.edit&&!S.confirmDel?'<button type="button" class="btn dng" style="flex:0 0 auto" data-act="askdel">Delete</button>':'')+'<button type="button" class="btn" data-act="cancel">Cancel</button><button class="btn pri"'+(S.busy?' disabled':'')+'>'+(S.busy?'Saving…':'Save')+'</button></div></form></div>';
+ return h;
+}
+function vendorHint(name,v){
+ if(!String(name||'').trim())return 'Pick an existing vendor or type a new one.';
+ return v?'Matches an existing vendor. Their items carry over.':'New vendor. Add its website later so items can be pulled.';
+}
+function dupHTML(){var m=S.dup;return m?'<div class="warn" style="margin-bottom:10px">'+esc(m.name)+' already has this email'+(m.vendor?' at '+esc(m.vendor):'')+'. Saving will add a second entry.</div>':''}
+var dupTimer=null;
+function checkDup(){
+ clearTimeout(dupTimer);
+ dupTimer=setTimeout(function(){
+  var e=S.draft&&S.draft.email.trim();
+  if(!e||!/@/.test(e)){S.dup=null;var b=$('dupbox');if(b)b.innerHTML='';return}
+  api('/api/vendors/contacts/email?'+qs({email:e,not:S.edit||''})).then(function(d){S.dup=d.match;var b=$('dupbox');if(b)b.innerHTML=dupHTML()}).catch(function(){});
+ },300);
+}
+
+/* ---------- business card ---------- */
+function renderScan(){
+ var h='<div class="page"><button class="back" data-act="cancel">'+I.back+'Back</button><div style="display:flex;flex-direction:column;gap:10px">';
+ h+='<div class="cardimg">'+(S.scan?'<img alt="The business card" src="'+S.scan+'">':I.cam+'<span>Point the camera at a business card</span>');
+ if(S.scanStage===1)h+='<div class="busy"><div class="spin"></div><span>'+esc(S.scanMsg||'Reading card…')+'</span></div>';
+ h+='</div>';
+ if(S.scanErr)h+='<div class="errb">'+esc(S.scanErr)+'</div>';
+ h+='<label class="btn pri" style="cursor:pointer">'+I.cam+'Take or choose a photo<input type="file" accept="image/*" capture="environment" data-file hidden></label>';
+ h+='<button class="btn" data-act="skipscan">Enter it by hand instead</button>';
+ h+='<div class="hint" style="text-align:center">The card is read on this device; the photo is kept with the contact.</div>';
+ return h+'</div></div>';
+}
+// A photo shrunk to at most 1600px on its long side, as JPEG: what's read and what's kept.
+function shrink(file){
+ return new Promise(function(res,rej){
+  var url=URL.createObjectURL(file),img=new Image();
+  img.onload=function(){
+   var k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');
+   c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+   c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+   c.toBlob(function(b){b?res({blob:b,dataUrl:c.toDataURL('image/jpeg',.85)}):rej(new Error('couldn’t read that photo'))},'image/jpeg',.85);
+  };
+  img.onerror=function(){URL.revokeObjectURL(url);rej(new Error('that isn’t a photo this browser can open'))};
+  img.src=url;
+ });
+}
+var tessLoad=null;
+function tesseract(){
+ if(window.Tesseract)return Promise.resolve(window.Tesseract);
+ if(!tessLoad)tessLoad=new Promise(function(res,rej){var s=document.createElement('script');s.src=TESSERACT_URL;s.onload=function(){res(window.Tesseract)};s.onerror=function(){tessLoad=null;rej(new Error('couldn’t load the card reader'))};document.head.appendChild(s)});
+ return tessLoad;
+}
+// The card reader. CARD_READER (from the server's VENDORS_CARD_READER) picks it; "browser" reads the card
+// here with Tesseract.js. Another reader (Azure, an AI model) only has to give back the same fields.
+var READERS={
+ browser:function(blob){
+  return tesseract().then(function(T){
+   return T.recognize(blob,'eng',{logger:function(m){if(m.status==='recognizing text'){S.scanMsg='Reading card… '+Math.round(100*m.progress)+'%';paintScanMsg()}else if(/load/.test(m.status||'')){S.scanMsg='Getting the card reader ready…';paintScanMsg()}}});
+  }).then(function(r){return parseCard(r.data.text||'')});
+ }
+};
+function paintScanMsg(){var b=document.querySelector('.cardimg .busy span');if(b)b.textContent=S.scanMsg}
+var TITLE_RE=/\b(sales|manager|rep|representative|director|president|owner|estimator|account|territory|engineer|dispatch|specialist|coordinator|consultant|vp|vice|ceo|cfo|coo|principal|partner|branch|regional|inside|outside|operations|marketing|purchasing|project|supervisor|technician|agent|associate)\b/i;
+var CO_RE=/\b(inc|llc|l\.l\.c|co|corp|corporation|company|supply|supplies|materials|products|industries|group|enterprises|distribution|distributors|systems|solutions|services|equipment|rental|rentals|precast|steel|pipe|concrete|aggregate|ltd)\b\.?/i;
+function parseCard(text){
+ var lines=text.split(/\n+/).map(function(l){return l.replace(/[|_~]+/g,' ').replace(/\s+/g,' ').trim()}).filter(function(l){return l.length>1});
+ var all=lines.join('\n');
+ var email=(all.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[''])[0].toLowerCase();
+ var web=(all.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig,' ').match(/\b(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|us|co|biz|info|io)\b(?:\/\S*)?/i)||[''])[0].replace(/^https?:\/\//i,'').replace(/^www\./i,'');
+ var phones=[];
+ // each number's label is the few characters just before it ("C: ", "Fax ", "Office")
+ lines.forEach(function(l){var re=/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g,m;while((m=re.exec(l))){var dd=m[0].replace(/\D/g,'').replace(/^1(?=\d{10}$)/,''),lab=l.slice(Math.max(0,m.index-8),m.index);if(dd.length===10)phones.push({n:'('+dd.slice(0,3)+') '+dd.slice(3,6)+'-'+dd.slice(6),fax:/fax|\bf\b/i.test(lab),cell:/\b(c|m|cell|mobile)\b/i.test(lab)})}});
+ var ph=phones.filter(function(p){return p.cell})[0]||phones.filter(function(p){return !p.fax})[0]||phones[0];
+ var plain=lines.filter(function(l){return !/@|\d{3}.*\d{4}|www\.|\.com\b/i.test(l)});
+ var title=plain.filter(function(l){return TITLE_RE.test(l)&&l.split(' ').length<=7})[0]||'';
+ // the vendor: one already in Vendors named on the card or sharing its email/web domain, else a company-looking line
+ var dom=(email.split('@')[1]||web.split('/')[0]||'').toLowerCase().replace(/^www\./,'');
+ var low=all.toLowerCase();
+ var known=S.names.filter(function(v){var vd=String(v.website||'').toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0];return (dom&&vd&&vd===dom)||low.indexOf(v.name.toLowerCase())>=0})[0];
+ var company=known?known.name:(plain.filter(function(l){return CO_RE.test(l)&&l!==title})[0]||'');
+ if(!company&&dom){var b=dom.split('.')[0];company=b.charAt(0).toUpperCase()+b.slice(1)}
+ if(company&&company===company.toUpperCase())company=company.toLowerCase().replace(/\b[a-z]/g,function(c){return c.toUpperCase()}).replace(/\b(Llc|Inc)\b/g,function(x){return x==='Llc'?'LLC':x});
+ var name=plain.filter(function(l){return l!==title&&l!==company&&!CO_RE.test(l)&&/^[A-Z][a-zA-Z'.-]+(\s+[A-Z][a-zA-Z'.-]*){1,3}$/.test(l)})[0]||'';
+ return {name:name,title:title,vendor:company,phone:ph?ph.n:'',email:email,website:known?'':web};
+}
+function readCard(file){
+ S.scanErr='';S.scanStage=1;S.scanMsg='Reading card…';S.cardPath=null;render();
+ shrink(file).then(function(sh){
+  S.scan=sh.dataUrl;render();
+  var fd=new FormData();fd.append('file',sh.blob,'card.jpg');
+  var up=api('/api/vendors/cards',{method:'POST',body:fd}).then(function(d){S.cardPath=d.path}).catch(function(){S.cardPath=null});
+  var reader=READERS[CFG.CARD_READER]||READERS.browser;
+  return reader(sh.blob).then(function(f){
+   var d=blank(S.ctxV);
+   ['name','title','phone','email','website'].forEach(function(k){if(f[k])d[k]=f[k]});
+   if(!S.ctxV&&f.vendor)d.vendor=f.vendor;
+   S.draft=d;S.scanStage=2;S.dup=null;render();window.scrollTo(0,0);checkDup();
+   return up;
+  });
+ }).catch(function(e){S.scanStage=0;S.scanErr='Couldn’t read the card ('+e.message+'). Try another photo, or enter it by hand.';render()});
+}
+
+/* ---------- admin: catalog review ---------- */
+function loadAdmin(){
+ api('/api/vendors/admin/review').then(function(d){S.admin.review=d;render()}).catch(function(e){S.admin.review={error:e.message};render()});
+ api('/api/vendors/admin/vendors').then(function(d){S.admin.vendors=d;render()}).catch(function(e){S.admin.vendors={error:e.message};render()});
+}
+function renderAdmin(){
+ var A=S.admin,rv=Array.isArray(A.review)?A.review:[],vv=Array.isArray(A.vendors)?A.vendors:[];
+ var failed=vv.filter(function(v){return v.last_pull&&v.last_pull.status==='failed'});
+ var h='<div class="page" style="max-width:820px"><button class="back" data-act="adminback">'+I.back+'Vendors</button>';
+ h+='<div class="tabs" role="tablist">'+[['review','To review ('+rv.length+')'],['failed','Failed pulls ('+failed.length+')'],['vendors','Vendors']].map(function(x){return '<button class="chip tog'+(S.atab===x[0]?' on':'')+'" role="tab" aria-selected="'+(S.atab===x[0])+'" data-act="atab" data-id="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">';
+ var err=(A.review&&A.review.error)||(A.vendors&&A.vendors.error);
+ if(err)h+='<div class="errb">'+esc(err)+'</div>';
+ if(A.review===null||A.vendors===null)h+='<div class="card loading"><span class="spin"></span>Loading…</div>';
+ else if(S.atab==='review'){
+  if(!rv.length)h+='<div class="card empty">Nothing to review. Each vendor’s items are pulled again a week after the last pull.</div>';
+  rv.forEach(function(r){
+   h+='<div class="card" style="padding:14px"><div class="vhead">'+logoHTML(r,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(r.name)+'</b><div class="hint">Pulled '+esc(shortDate(r.at))+' · '+esc(r.division)+' division</div></div></div>';
+   if(r.added.length)h+='<div class="lab" style="margin:12px 0 6px;color:var(--ok)">New · '+r.added.length+'</div><div class="chips">'+r.added.map(function(x){return '<span class="chip" style="border-color:#2f6a49">'+esc(x)+'</span>'}).join('')+'</div>';
+   if(r.removed.length)h+='<div class="lab" style="margin:12px 0 6px;color:var(--d)">No longer listed · '+r.removed.length+'</div><div class="chips">'+r.removed.map(function(x){return '<span class="chip" style="border-color:#7a3b33;text-decoration:line-through">'+esc(x)+'</span>'}).join('')+'</div>';
+   h+='<div style="display:flex;gap:8px;margin-top:14px"><button class="btn sm pri" data-act="approve" data-id="'+esc(r.id)+'" data-div="'+esc(r.division_id)+'">Approve</button><button class="btn sm" data-act="reject" data-id="'+esc(r.id)+'" data-div="'+esc(r.division_id)+'">Reject</button></div></div>';
+  });
+ }else if(S.atab==='failed'){
+  if(!failed.length)h+='<div class="card empty">No failed pulls.</div>';
+  failed.forEach(function(v){
+   h+='<div class="card" style="padding:14px"><div class="vhead">'+logoHTML(v,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(v.name)+'</b><div class="hint">'+esc(v.website||'No web address')+' · '+esc(shortDate(v.last_pull.started_at))+'</div></div></div><div class="warn" style="margin-top:10px">'+esc(v.last_pull.failure_reason||'The pull failed')+'</div><div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sm" data-act="retry" data-id="'+esc(v.id)+'">Try again</button><label class="btn sm" style="cursor:pointer">Upload PDF catalog<input type="file" accept="application/pdf" data-pdf="'+esc(v.id)+'" hidden></label></div></div>';
+  });
+ }else{
+  h+='<form class="card" data-form="vendor" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="lab">Add a vendor website</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="in" style="flex:1 1 180px" id="nv-n" placeholder="Vendor name" aria-label="Vendor name" autocomplete="off"><input class="in" style="flex:1 1 180px" id="nv-w" placeholder="Web address" aria-label="Web address" autocomplete="off" inputmode="url"><button class="btn pri" style="height:40px">Add</button></div><span class="hint">Added to '+esc(divName(S.div))+'. Its items are pulled right away.</span></form>';
+  h+='<div class="card scroll">'+(vv.length?vv.map(function(v){var lp=v.last_pull;return '<div class="row" style="cursor:default">'+logoHTML(v,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(v.name)+'</b><div class="hint">'+(lp?(lp.status==='failed'?'Last pull failed ':lp.status==='running'?'Pulling now · started ':'Last pulled ')+esc(shortDate(lp.started_at)):'Not pulled yet')+'</div></div><input class="in" style="width:min(220px,45%);height:40px;font-size:14px" data-web="'+esc(v.id)+'" value="'+esc(v.website)+'" placeholder="Web address" aria-label="Web address for '+esc(v.name)+'" inputmode="url"></div>'}).join(''):'<div class="empty">No vendors yet.</div>')+'</div>';
+ }
+ return h+'</div></div>';
+}
+
+/* ---------- drawing the page ---------- */
+function render(){
+ var ae=document.activeElement,keep=ae&&ae.id?{id:ae.id,a:ae.selectionStart,b:ae.selectionEnd}:null;
+ var od=document.querySelector('.dlg'),ost=od?od.scrollTop:0;
+ var main='';
+ if(!S.divs.length)main=S.loading?'<div class="loading"><span class="spin"></span>Loading…</div>':'<div class="card empty">'+esc(S.err||'No divisions yet. Add one in Bid Scout.')+'</div>';
+ else if(S.view==='admin')main=renderAdmin();
+ else if(S.view==='scan'&&S.scanStage!==2)main=renderScan();
+ else if(S.view==='scan'||(S.view==='form'&&!S.modal))main=renderForm();
+ else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+'Vendors</button>'+renderVendor()+'</div>';
+ else{
+  var det=S.vid&&mq.matches;
+  main=renderToolbar()+'<div class="desk'+(det?'':' nodet')+'" style="margin-top:12px"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+renderVendor()+'</div>':'')+'</div>';
+ }
+ $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
+  (S.vm?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Edit vendor">'+renderVendorModal()+'</div></div>':'')+
+  (S.modal&&S.draft?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="'+(S.edit?'Edit contact':'New contact')+'">'+renderForm()+'</div></div>':'')+
+  (S.toast?'<div class="toast" role="status">'+esc(S.toast)+'</div>':'');
+ var c=$('count');if(c)c.textContent=S.results?S.results.length+' vendor'+(S.results.length===1?'':'s'):'';
+ var nd=document.querySelector('.dlg');if(nd)nd.scrollTop=ost;
+ if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
+ if(S.addItem&&$('newitem')&&(!keep||keep.id!=='newitem'))$('newitem').focus();
+}
+function toast(m){S.toast=m;render();clearTimeout(toast.t);toast.t=setTimeout(function(){S.toast='';render()},2400)}
+function fail(e){S.busy=false;toast(e.message||String(e))}
+function go(view){S.view=view;S.panel=null;window.scrollTo(0,0)}
+function openVendor(id){
+ S.vid=id;S.itemsOpen=false;S.addItem=false;if(!S.detail||S.detail.id!==id)S.detail=null;
+ S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
+ saveUrl();loadDetail();
+}
+function draftFrom(c){return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:c.phone,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
+function closeForm(){S.ctxV='';S.draft=null;S.edit=null;S.scan=null;S.scanStage=0;S.scanErr='';S.cardPath=null;S.confirmDel=false;S.dup=null;S.modal=false}
+function saveContact(){
+ var d=S.draft;
+ if(!d.name.trim()){toast('Add a name first');return}
+ if(!d.vendor.trim()){toast('Pick or type a vendor');return}
+ var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:d.phone,email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
+ if(S.view==='scan'&&S.cardPath)body.card_image_path=S.cardPath;
+ S.busy=true;render();
+ api(S.edit?'/api/vendors/contacts/'+encodeURIComponent(S.edit):'/api/vendors/contacts',{method:S.edit?'PATCH':'POST',body:body}).then(function(r){
+  var wasEdit=S.edit;S.busy=false;closeForm();S.view=mq.matches?'list':'vendor';
+  S.vid=r.vendor_id;S.detail=null;S.itemsOpen=false;window.scrollTo(0,0);saveUrl();refresh();
+  toast(wasEdit?'Contact updated':'Contact saved');
+ }).catch(fail);
+}
+
+/* ---------- what clicks do ---------- */
+var taps=[];
+var A={
+ title:function(){var n=Date.now();taps=taps.filter(function(x){return n-x<800});taps.push(n);if(taps.length>=3){taps=[];S.view='admin';S.panel=null;S.atab='review';S.admin={review:null,vendors:null};window.scrollTo(0,0);loadAdmin()}else return 'skip'},
+ adminback:function(){S.view='list';loadList()},
+ atab:function(el){S.atab=el.dataset.id},
+ approve:function(el){decide(el,true);return 'skip'},
+ reject:function(el){decide(el,false);return 'skip'},
+ retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
+ close:function(){S.panel=null},
+ 'p-div':function(){S.panel=S.panel==='div'?null:'div'},
+ 'p-apps':function(){S.panel=S.panel==='apps'?null:'apps'},
+ 'p-filter':function(){S.panel=S.panel==='filter'?null:'filter'},
+ 'p-add':function(){S.ctxV='';S.panel=S.panel==='add'?null:'add'},
+ div:function(el){S.div=el.dataset.id;S.panel=null;S.vid=null;S.detail=null;S.view=S.view==='admin'?'admin':'list';S.itemsOpen=false;S.results=null;S.loading=true;saveUrl();loadList()},
+ clear:function(){S.st='Any';S.wc=false;loadList()},
+ vendor:function(el){openVendor(el.dataset.id)},
+ back:function(){S.view='list';S.vid=null;saveUrl()},
+ items:function(){S.itemsOpen=!S.itemsOpen;S.addItem=false},
+ additem:function(){S.addItem=true;S.newItem=''},
+ rmitem:function(el){
+  var id=el.dataset.id,it=(S.detail.items||[]).filter(function(x){return x.id===id})[0];
+  if(!it)return;
+  if(S.armItem!==id){S.armItem=id;toast('Tap × again to remove '+it.name);return 'skip'}
+  S.armItem=null;S.detail.items=S.detail.items.filter(function(x){return x.id!==id});
+  api('/api/vendors/items/'+encodeURIComponent(id),{method:'DELETE'}).then(function(){toast('Removed '+it.name);loadList()}).catch(function(e){fail(e);loadDetail()});
+ },
+ editvendor:function(){var v=S.detail;S.vm={name:v.name,website:v.website,confirm:false}},
+ vpull:function(){S.busy='pull';api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'POST',body:{pull:true}}).then(function(d){S.busy=false;toast(d.ok?'Logo pulled from their site':(d.message||'No logo found'));loadDetail();loadList()}).catch(fail)},
+ vlogoclear:function(){api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'DELETE'}).then(function(){toast('Logo removed');loadDetail();loadList()}).catch(fail)},
+ vdelask:function(){S.vm.confirm=true},vdelno:function(){S.vm.confirm=false},
+ vdel:function(){var nm=S.detail.name;S.busy=true;api('/api/vendors/'+encodeURIComponent(S.vid),{method:'DELETE'}).then(function(){S.busy=false;S.vm=null;S.vid=null;S.detail=null;S.view='list';saveUrl();window.scrollTo(0,0);refresh();toast(nm+' deleted')}).catch(fail)},
+ scan:function(){closeForm();S.panel=null;S.ctxV=S._ctx||'';S._ctx='';go('scan');S.draft=blank(S.ctxV);tesseract().catch(function(){})},
+ skipscan:function(){var v=S.ctxV;closeForm();S.ctxV=v;S.draft=blank(v);S.view=S.vid&&!mq.matches?'vendor':'list';S.modal=true},
+ manual:function(){closeForm();S.ctxV=S._ctx||'';S._ctx='';S.draft=blank(S.ctxV);S.panel=null;S.modal=true},
+ addfor:function(){S._ctx=S.detail.name;S.panel=S.panel==='addv'?null:'addv'},
+ editc:function(el){var c=S.detail.contacts.filter(function(x){return x.id===el.dataset.id})[0];if(!c)return;closeForm();S.edit=c.id;S.draft=draftFrom(c);S.panel=null;S.modal=true},
+ cancel:function(){
+  if(S.vm){S.vm=null;return}
+  var wasScan=S.view==='scan';closeForm();
+  if(wasScan||S.view==='form')S.view=S.vid&&!mq.matches?'vendor':'list';
+ },
+ nat:function(){S.draft.nationwide=!S.draft.nationwide},
+ st:function(el){var s=el.dataset.id,a=S.draft.areas,i=a.map(function(x){return x.state}).indexOf(s);if(i>=0)a.splice(i,1);else{a.push({state:s,regions:[]});a.sort(function(x,y){return STATES.indexOf(x.state)-STATES.indexOf(y.state)})}},
+ addreg:function(el){var s=el.dataset.id,inp=document.querySelector('[data-reg="'+s+'"]'),val=inp.value.trim();if(!val)return;var ar=S.draft.areas.filter(function(x){return x.state===s})[0];if(ar.regions.indexOf(val)<0)ar.regions.push(val)},
+ rmreg:function(el){var p=el.dataset.id.split('|');S.draft.areas.filter(function(x){return x.state===p[0]})[0].regions.splice(+p[1],1)},
+ askdel:function(){S.confirmDel=true},nodel:function(){S.confirmDel=false},
+ del:function(){S.busy=true;api('/api/vendors/contacts/'+encodeURIComponent(S.edit),{method:'DELETE'}).then(function(){S.busy=false;closeForm();S.view=mq.matches?'list':(S.vid?'vendor':'list');window.scrollTo(0,0);refresh();toast('Contact deleted')}).catch(fail)}
+};
+function decide(el,ok){
+ el.disabled=true;
+ api('/api/vendors/admin/review',{method:'POST',body:{vendor_id:el.dataset.id,division_id:el.dataset.div,approve:ok}}).then(function(){toast(ok?'Approved. Items updated':'Rejected. List left as it was');loadAdmin()}).catch(fail);
+}
+function syncDraft(){document.querySelectorAll('[data-fld]').forEach(function(i){S.draft[i.dataset.fld]=i.value})}
+document.addEventListener('click',function(e){
+ var tile=e.target.closest('.tile[data-app]');
+ if(tile&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey){
+  e.preventDefault();var a=(CFG.APPS||[]).filter(function(x){return x.key===tile.dataset.app})[0];
+  S.panel=null;render();if(a&&a.key!=='vendors')openInTab(a.tab,appUrl(a),a.open);return;
+ }
+ var el=e.target.closest('[data-act]');if(!el)return;
+ var act=el.dataset.act;
+ if(act==='cancel-ov'){if(e.target!==el)return;act='cancel'}
+ if(S.draft)syncDraft();
+ if(S.armItem&&act!=='rmitem')S.armItem=null;
+ if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render()}
+});
+document.addEventListener('input',function(e){
+ var t=e.target;
+ if(t.id==='q'){S.q=t.value;loadList(220)}
+ else if(t.dataset&&t.dataset.fld){
+  S.draft[t.dataset.fld]=t.value;
+  if(t.dataset.fld==='vendor'){var h=$('vhint');if(h)h.textContent=vendorHint(t.value,vendorMatch(t.value))}
+  if(t.dataset.fld==='email')checkDup();
+ }
+ else if(t.id==='newitem')S.newItem=t.value;
+ else if(t.dataset&&t.dataset.vf)S.vm[t.dataset.vf]=t.value;
+});
+document.addEventListener('keydown',function(e){
+ if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.reg!==undefined){e.preventDefault();var b=document.querySelector('[data-act="addreg"][data-id="'+e.target.dataset.reg+'"]');if(b)b.click()}
+ if(e.key==='Escape'){
+  if(S.vm||S.modal){A.cancel();render()}
+  else if(S.panel){S.panel=null;render()}
+  else if(S.view==='scan'&&S.scanStage!==1){A.cancel();render()}
+ }
+});
+document.addEventListener('change',function(e){
+ var t=e.target;
+ if(t.dataset.chg==='st'){S.st=t.value;render();loadList()}
+ else if(t.dataset.chg==='wc'){S.wc=t.checked;render();loadList()}
+ else if(t.hasAttribute('data-vlogo')&&t.files[0]){
+  var fd=new FormData();fd.append('file',t.files[0]);t.value='';
+  api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'POST',body:fd}).then(function(){toast('Logo uploaded');loadDetail();loadList()}).catch(fail);
+ }
+ else if(t.dataset.web){
+  var vid=t.dataset.web;
+  api('/api/vendors/'+encodeURIComponent(vid),{method:'PATCH',body:{website:t.value.trim()}}).then(function(){toast('Web address saved')}).catch(fail);
+ }
+ else if(t.dataset.pdf!==undefined&&t.files[0]){
+  var fp=new FormData();fp.append('vendor_id',t.dataset.pdf);fp.append('file',t.files[0]);t.value='';
+  toast('Uploading the catalog…');
+  api('/api/vendors/admin/pdf',{method:'POST',body:fp}).then(function(d){toast(d.message||'Catalog uploaded. Its items show up in To review');setTimeout(loadAdmin,6000)}).catch(fail);
+ }
+ else if(t.hasAttribute('data-file')&&t.files[0]){var f=t.files[0];t.value='';readCard(f)}
+});
+document.addEventListener('submit',function(e){
+ e.preventDefault();var f=e.target.dataset.form;
+ if(f==='contact'){syncDraft();saveContact()}
+ else if(f==='vmodal'){
+  var nm=S.vm.name.trim();if(!nm){toast('Vendor needs a name');return}
+  S.busy=true;render();
+  api('/api/vendors/'+encodeURIComponent(S.vid),{method:'PATCH',body:{name:nm,website:S.vm.website.trim()}}).then(function(){S.busy=false;S.vm=null;toast('Vendor updated');refresh()}).catch(fail);
+ }
+ else if(f==='vendor'){
+  var nn=$('nv-n').value.trim(),ww=$('nv-w').value.trim();if(!nn){toast('Add a vendor name');return}
+  api('/api/vendors/admin/vendors',{method:'POST',body:{name:nn,website:ww,division:S.div}}).then(function(){toast(ww?'Vendor added. Pulling its items now':'Vendor added');loadAdmin();loadNames()}).catch(fail);
+ }
+ else if(f==='item'){
+  var n=S.newItem.trim();if(!n||S.busy)return;S.busy=true;
+  api('/api/vendors/'+encodeURIComponent(S.vid)+'/items',{method:'POST',body:{division:S.div,name:n}}).then(function(){S.busy=false;S.newItem='';S.addItem=true;loadDetail();loadList()}).catch(fail);
+ }
+});
+
+/* ---------- tabs and links from the other services ---------- */
+var tabRefs={};
+function openInTab(name,url,fn){
+ var w=tabRefs[name];
+ try{if(w&&!w.closed&&typeof w[fn]==='function'&&w[fn](url)){w.focus();return}}catch(e){}
+ var nw=window.open(url,name);if(nw){tabRefs[name]=nw;try{nw.focus()}catch(e){}}
+}
+window.vnOpenLink=function(href){
+ var u=new URL(href,location.href);if(u.pathname!==location.pathname||!S.divs.length)return false;
+ var d=u.searchParams.get('division'),v=u.searchParams.get('vendor');
+ if(d&&d!==S.div&&S.divs.some(function(x){return x.id===d})){S.div=d;S.vid=null;S.detail=null;S.results=null;S.loading=true;loadList()}
+ closeForm();S.vm=null;S.view='list';
+ if(v)openVendor(v);else saveUrl();
+ render();return true;
+};
+
+/* ---------- start ---------- */
+window.addEventListener('online',function(){S.offline=false;render();refresh()});
+window.addEventListener('offline',function(){S.offline=true;render()});
+mq.addEventListener&&mq.addEventListener('change',function(){if(S.view==='vendor'&&mq.matches)S.view='list';render()});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(){});
+render();
+api('/api/divisions').then(function(divs){
+ S.divs=divs.map(function(d){return {id:d.id,name:d.name}});
+ var p=new URLSearchParams(location.search),want=p.get('division'),saved='';
+ try{saved=localStorage.getItem('vendors.div')||''}catch(e){}
+ var has=function(id){return id&&S.divs.some(function(d){return d.id===id})};
+ S.div=has(want)?want:has(saved)?saved:(S.divs[0]||{}).id||'';
+ S.loading=false;render();
+ if(!S.div)return;
+ S.loading=true;loadList();loadNames();
+ if(p.get('vendor'))openVendor(p.get('vendor'));else saveUrl();
+ render();
+}).catch(function(e){S.loading=false;S.err='Couldn’t load the divisions: '+e.message;render()});
+})();
+</script>
+</body>
+</html>
