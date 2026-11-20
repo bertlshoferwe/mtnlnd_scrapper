@@ -330,7 +330,7 @@ function renderVendor(){
 /* ---------- edit vendor ---------- */
 function renderVendorModal(){
  var m=S.vm,v=S.detail||{};
- var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0;font-size:18px">Edit vendor</h2><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
+ var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h2 data-act="dlgtitle" style="margin:0;font-size:18px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none">Edit vendor</h2>'+saveStHTML()+'</div><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
  h+='<form data-form="vmodal" style="display:flex;flex-direction:column;gap:10px">';
  var src=v.logo_source==='site'?'Pulled from '+esc(v.website||'their website')+(v.logo_pulled_at?' on '+shortDate(v.logo_pulled_at):''):v.logo_source==='card'?'Taken from a business card':v.logo_source==='manual'?'Uploaded by you':'No logo found yet. Initials show until a business card or their website provides one.';
  h+='<div class="fld"><div class="lab">Logo</div><div style="display:flex;align-items:center;gap:14px">'+logoHTML({id:v.id,name:m.name||v.name,logo:v.logo},'lg')+'<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><span class="hint" style="font-size:13px;color:var(--ast)">'+src+'</span><div style="display:flex;gap:8px;flex-wrap:wrap">'+
@@ -340,7 +340,7 @@ function renderVendorModal(){
  h+='<div class="fld"><label class="lab" for="vm-w">Web address</label><input class="in" id="vm-w" data-vf="website" value="'+esc(m.website)+'" placeholder="example.com" autocomplete="off" inputmode="url"><span class="hint">Items they sell are pulled from this site each week.</span></div>';
  var n=(v.contacts||[]).length;
  if(m.confirm)h+='<div class="warn">Delete '+esc(v.name)+'? This also removes its '+n+' contact'+(n===1?'':'s')+' and items, for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="vdel">Delete vendor</button><button type="button" class="btn sm" data-act="vdelno">Keep</button></div></div>';
- h+=barIcons(m.confirm?'':'vdelask','Delete vendor','Save vendor')+'</form>';
+ h+=delBar(m.confirm?'':'vdelask','Delete vendor')+'</form>';
  return h;
 }
 
@@ -350,7 +350,7 @@ function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',email:'
 function renderForm(){
  var d=S.draft,v=vendorMatch(d.vendor);
  var h='<div class="page">';
- if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0;font-size:18px">'+(S.edit?'Edit contact':'New contact')+'</h2><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
+ if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h2 data-act="dlgtitle" style="margin:0;font-size:18px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none">'+(S.edit?'Edit contact':'New contact')+'</h2>'+(S.edit?saveStHTML():'')+'</div><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
  else h+='<button class="back" data-act="cancel">'+I.back+'Back</button>';
  if(S.view==='scan')h+='<div class="okb" style="margin-bottom:10px">Read from the card. Check each field, then save. Coverage is not on the card, so set it by hand.</div>';
  h+='<div id="dupbox">'+dupHTML()+'</div>';
@@ -370,14 +370,52 @@ function renderForm(){
  }
  h+='</div>';
  if(S.confirmDel)h+='<div class="warn">Delete '+esc(d.name||'this contact')+'? This removes it for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="del">Delete</button><button type="button" class="btn sm" data-act="nodel">Keep</button></div></div>';
- h+=barIcons(S.edit&&!S.confirmDel?'askdel':'','Delete contact','Save contact')+'</form></div>';
+ h+=(S.edit?delBar(S.confirmDel?'':'askdel','Delete contact'):'<div class="bar"><button class="btn pri"'+(S.busy?' disabled':'')+'>'+(S.busy?'Saving…':'Add contact')+'</button></div>')+'</form></div>';
  return h;
 }
-// A dialog's Delete (when del names its action) / Cancel / Save, as icons. Save submits the form.
-function barIcons(del,delLabel,saveLabel){
- return '<div class="bar icons">'+(del?'<button type="button" class="btn dng" data-act="'+del+'" aria-label="'+delLabel+'" title="'+delLabel+'">'+I.trash+'</button>':'')+
-  '<button type="button" class="btn" data-act="cancel" aria-label="Cancel" title="Cancel">'+I.x+'</button>'+
-  '<button class="btn pri" aria-label="'+saveLabel+'" title="'+saveLabel+'"'+(S.busy?' disabled':'')+'>'+(S.busy?'<span class="spin" style="width:18px;height:18px;border-width:2px"></span>':I.check)+'</button></div>';
+// An edit dialog saves itself, so its only button is Delete — and that stays hidden until the
+// dialog's title is triple-clicked (S.showDel), since it's rarely wanted.
+function delBar(del,label){
+ return S.showDel&&del?'<div class="bar icons"><button type="button" class="btn dng" data-act="'+del+'" aria-label="'+label+'" title="'+label+'">'+I.trash+'</button></div>':'';
+}
+function saveStHTML(){return '<span class="hint" id="savest" aria-live="polite"'+(S.saveBad?' style="color:var(--d)"':'')+'>'+esc(S.saveSt||'')+'</span>'}
+
+/* ---------- auto-save: an edited contact or vendor saves itself ---------- */
+// Each change takes a snapshot of what to send; it goes after a short pause (straight away for a
+// switch or a chip), one save at a time, the latest snapshot winning. Closing the dialog sends
+// anything still waiting. The vendor box saves when you leave it, so a half-typed name never
+// makes a new vendor.
+var autoT=null,autoPending=null,autoBusy=null;
+function snapshot(){
+ if(S.vm)return {url:'/api/vendors/'+encodeURIComponent(S.vid),body:{name:S.vm.name.trim(),website:S.vm.website.trim()},check:S.vm.name.trim()?'':'Add a vendor name'};
+ if(S.modal&&S.edit&&S.draft){
+  var d=S.draft,m=vendorMatch(d.vendor);
+  return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':'',
+   body:{division:S.div,name:d.name,title:d.title,phone:d.phone,email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
+ }
+ return null;
+}
+function autoSave(delay){var p=snapshot();if(!p)return;autoPending=p;clearTimeout(autoT);autoT=setTimeout(runAuto,delay==null?700:delay)}
+function runAuto(){
+ clearTimeout(autoT);
+ if(autoBusy)return autoBusy.then(runAuto);
+ var p=autoPending;autoPending=null;
+ if(!p)return Promise.resolve();
+ if(p.check){setSaveSt(p.check+' to save',true);return Promise.resolve()}
+ setSaveSt('Saving…');
+ autoBusy=api(p.url,{method:'PATCH',body:p.body}).then(function(r){setSaveSt('Saved');S.autoChanged=true;if(r&&r.vendor_id)S.autoVendor=r.vendor_id},
+  function(e){setSaveSt('Not saved: '+e.message,true)}).then(function(){autoBusy=null});
+ return autoBusy.then(function(){if(autoPending)return runAuto()});
+}
+function setSaveSt(t,bad){S.saveSt=t;S.saveBad=!!bad;var el=$('savest');if(el){el.textContent=t;el.style.color=bad?'var(--d)':''}}
+// After a dialog closes: send what's waiting, then show the saved result.
+function afterEdits(){
+ runAuto().then(function(){
+  if(!S.autoChanged)return;
+  S.autoChanged=false;
+  if(S.autoVendor&&S.autoVendor!==S.vid){S.vid=S.autoVendor;S.detail=null;saveUrl()}
+  S.autoVendor=null;refresh();
+ });
 }
 function vendorHint(name,v){
  if(!String(name||'').trim())return 'Pick an existing vendor or type a new one.';
@@ -639,7 +677,7 @@ function openVendor(id){
  saveUrl();loadDetail();
 }
 function draftFrom(c){return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:c.phone,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
-function closeForm(){S.ctxV='';S.draft=null;S.edit=null;S.scan=null;S.scanStage=0;S.scanErr='';S.cardPath=null;S.confirmDel=false;S.dup=null;S.modal=false}
+function closeForm(){S.showDel=false;S.saveSt='';S.saveBad=false;S.ctxV='';S.draft=null;S.edit=null;S.scan=null;S.scanStage=0;S.scanErr='';S.cardPath=null;S.confirmDel=false;S.dup=null;S.modal=false}
 function saveContact(){
  var d=S.draft;
  if(!d.name.trim()){toast('Add a name first');return}
@@ -682,7 +720,8 @@ var A={
   S.armItem=null;S.detail.items=S.detail.items.filter(function(x){return x.id!==id});
   api('/api/vendors/items/'+encodeURIComponent(id),{method:'DELETE'}).then(function(){toast('Removed '+it.name);loadList()}).catch(function(e){fail(e);loadDetail()});
  },
- editvendor:function(){var v=S.detail;S.vm={name:v.name,website:v.website,confirm:false}},
+ editvendor:function(){var v=S.detail;S.vm={name:v.name,website:v.website,confirm:false};S.showDel=false;S.saveSt='';S.saveBad=false},
+ dlgtitle:function(){var n=Date.now();taps=taps.filter(function(x){return n-x<800});taps.push(n);if(taps.length>=3){taps=[];S.showDel=true}else return 'skip'},
  vpull:function(){S.busy='pull';api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'POST',body:{pull:true}}).then(function(d){S.busy=false;toast(d.ok?'Logo pulled from their site':(d.message||'No logo found'));loadDetail();loadList()}).catch(fail)},
  vlogoclear:function(){api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'DELETE'}).then(function(){toast('Logo removed');loadDetail();loadList()}).catch(fail)},
  vdelask:function(){S.vm.confirm=true},vdelno:function(){S.vm.confirm=false},
@@ -693,7 +732,8 @@ var A={
  addfor:function(){S._ctx=S.detail.name;S.panel=S.panel==='addv'?null:'addv'},
  editc:function(el){var c=S.detail.contacts.filter(function(x){return x.id===el.dataset.id})[0];if(!c)return;closeForm();S.edit=c.id;S.draft=draftFrom(c);S.panel=null;S.modal=true},
  cancel:function(){
-  if(S.vm){S.vm=null;return}
+  if(S.vm){afterEdits();S.vm=null;return}
+  if(S.modal&&S.edit)afterEdits();
   var wasScan=S.view==='scan';closeForm();
   if(wasScan||S.view==='form')S.view=S.vid&&!mq.matches?'vendor':'list';
  },
@@ -731,7 +771,7 @@ document.addEventListener('click',function(e){
  if(act==='cardclose-ov'){if(e.target!==el)return;act='cardclose'}
  if(S.draft)syncDraft();
  if(S.armItem&&act!=='rmitem')S.armItem=null;
- if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render()}
+ if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render();if(/^(nat|st|addreg|rmreg)$/.test(act))autoSave(0)}
 });
 document.addEventListener('input',function(e){
  var t=e.target;
@@ -740,9 +780,10 @@ document.addEventListener('input',function(e){
   S.draft[t.dataset.fld]=t.value;
   if(t.dataset.fld==='vendor'){var h=$('vhint');if(h)h.textContent=vendorHint(t.value,vendorMatch(t.value))}
   if(t.dataset.fld==='email')checkDup();
+  if(t.dataset.fld!=='vendor')autoSave();
  }
  else if(t.id==='newitem')S.newItem=t.value;
- else if(t.dataset&&t.dataset.vf)S.vm[t.dataset.vf]=t.value;
+ else if(t.dataset&&t.dataset.vf){S.vm[t.dataset.vf]=t.value;autoSave()}
 });
 document.addEventListener('keydown',function(e){
  if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.reg!==undefined){e.preventDefault();var b=document.querySelector('[data-act="addreg"][data-id="'+e.target.dataset.reg+'"]');if(b)b.click()}
@@ -755,6 +796,7 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('change',function(e){
  var t=e.target;
+ if(t.dataset&&t.dataset.fld==='vendor'&&S.draft){S.draft.vendor=t.value;autoSave(0);return}
  if(t.dataset.chg==='st'){S.st=t.value;render();loadList()}
  else if(t.dataset.chg==='wc'){S.wc=t.checked;render();loadList()}
  else if(t.hasAttribute('data-vlogo')&&t.files[0]){
@@ -774,12 +816,8 @@ document.addEventListener('change',function(e){
 });
 document.addEventListener('submit',function(e){
  e.preventDefault();var f=e.target.dataset.form;
- if(f==='contact'){syncDraft();saveContact()}
- else if(f==='vmodal'){
-  var nm=S.vm.name.trim();if(!nm){toast('Vendor needs a name');return}
-  S.busy=true;render();
-  api('/api/vendors/'+encodeURIComponent(S.vid),{method:'PATCH',body:{name:nm,website:S.vm.website.trim()}}).then(function(){S.busy=false;S.vm=null;toast('Vendor updated');refresh()}).catch(fail);
- }
+ if(f==='contact'){syncDraft();if(S.edit&&S.modal){autoSave(0)}else saveContact()}
+ else if(f==='vmodal')autoSave(0);
  else if(f==='vendor'){
   var nn=$('nv-n').value.trim(),ww=$('nv-w').value.trim();if(!nn){toast('Add a vendor name');return}
   api('/api/vendors/admin/vendors',{method:'POST',body:{name:nn,website:ww,division:S.div}}).then(function(){toast(ww?'Vendor added. Pulling its items now':'Vendor added');loadAdmin();loadNames()}).catch(fail);
