@@ -12,3 +12,6 @@ self-host/supabase/.env
 self-host/supabase/volumes/
 self-host/supabase/dev/
 .DS_Store
+
+# graphify knowledge graph (rebuilt locally)
+graphify-out/
