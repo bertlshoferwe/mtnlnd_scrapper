@@ -842,7 +842,8 @@ textarea{min-height:90px;resize:vertical}
 .dtn.dir .tnm{font-weight:600}
 .dtn a.tnm{color:var(--ink);text-decoration:none}
 .dtn a.tnm:hover{text-decoration:underline}
-.dtn .tct{flex:0 0 auto;font-size:12px;color:var(--muted)}
+.dtn .tct,.dtrow>.tct{flex:0 0 auto;font-size:12px;color:var(--muted)}
+.dtrow>.tct{padding:0 10px 0 4px}
 .dtn .tic{flex:0 0 auto;color:var(--muted)}
 .dtn .tsp{flex:0 0 14px}
 .dtrow{display:flex;align-items:center}
@@ -4218,9 +4219,9 @@ img.who{object-fit:cover;background:var(--chip)}
   var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
   // A row's action buttons, and the ⋯ that shows them as a menu on a touch screen. Each button's
   // .rl is its label, shown only in that menu.
-  function rowActs(key,html){
+  function rowActs(key,html,after){   // after: shown between the buttons and the ⋯ (a folder's file count)
     var on=ui.rowMenu===key;
-    return '<span class="racts'+(on?' on':'')+'" role="menu">'+html+'</span><button class="rmore" data-rmenu="'+esc(key)+'" aria-haspopup="menu" aria-expanded="'+on+'" aria-label="More" title="More">'+ic("more",18)+'</button>';
+    return '<span class="racts'+(on?' on':'')+'" role="menu">'+html+'</span>'+(after||'')+'<button class="rmore" data-rmenu="'+esc(key)+'" aria-haspopup="menu" aria-expanded="'+on+'" aria-label="More" title="More">'+ic("more",18)+'</button>';
   }
   function attRow(f,depth){
     var nm=depth!=null?f.name.split("/").pop():f.name,img=isImg(f),ed=ui.attEdit&&ui.attEdit.id===f.id?ui.attEdit.f:"";
@@ -4388,10 +4389,11 @@ img.who{object-fit:cover;background:var(--chip)}
         h+='<div class="dtrow"><div class="dtn dir" style="--d:'+depth+'">'+CHEV+DIR_IC+'<input class="attin" data-dirname="'+esc(p)+'" value="'+esc(k)+'" aria-label="Folder name"></div></div>';
       }else{
         h+=(act?'<div class="dtrow">':'')+'<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
-          '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>'+
+          '<span class="tnm">'+esc(k)+'</span>'+(act?'':'<span class="tct">'+c.n+'</span>')+'</button>'+
           (act?rowActs("dir:"+p,(D.kind!=="src"&&HAS_FILES?'<label class="dlbtn" title="Add files to '+esc(k)+'" aria-label="Add files to '+esc(k)+'">'+ic("plus",14)+'<span class="rl">Add files</span><input type="file" multiple data-attinput="'+D.kind+'" data-attdir="'+esc(D.path)+'" hidden></label>':'')+
             '<button class="dlbtn" data-dirren="'+esc(p)+'" title="Rename '+esc(k)+'" aria-label="Rename '+esc(k)+'">'+ic("pencil",14)+'<span class="rl">Rename</span></button>'+
-            '<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Delete '+esc(k)+'" aria-label="Delete '+esc(k)+'">'+(ui.docArm===p?'Tap to delete':ic("trash",14)+'<span class="rl">Delete</span>')+'</button>')+'</div>':'');
+            '<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Delete '+esc(k)+'" aria-label="Delete '+esc(k)+'">'+(ui.docArm===p?'Tap to delete':ic("trash",14)+'<span class="rl">Delete</span>')+'</button>',
+            '<span class="tct">'+c.n+'</span>')+'</div>':'');
       }
       if(o)h+=treeHTML(c,p,depth+1,is,leaf);
     });
