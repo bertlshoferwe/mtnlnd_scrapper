@@ -36,6 +36,10 @@ Routes:
   POST /learn-cancel          body: {"division_id", "site_id"}
   POST /propose-rule          body: {"division_id", "site_id", "project",
                               "reason"} — a skip rule for a removed bid
+  POST /signin                body: {"division_id", "login_id", "url"} —
+                              "Sign in yourself" (see live_signin.py)
+  GET  /signin/<id>           its state; /frame a picture of the page
+  POST /signin/<id>/input     a click, typing, a key, scrolling, save, close
 
 Environment variables: same SUPABASE_URL / SUPABASE_SERVICE_KEY /
 AI_PROVIDER / ANTHROPIC_API_KEY / GEMINI_API_KEY / FIRECRAWL_API_KEY /
@@ -53,13 +57,14 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 import numpy as np
 
 import adapters
 import ai_provider
 import credentials
+import live_signin
 import scraper
 import site_agent
 import supabase_store
@@ -133,6 +138,15 @@ def _watchdog_loop():
 
 
 threading.Thread(target=_watchdog_loop, daemon=True).start()
+
+# A restart (Watchtower pulling a new image, 2026-11-19) kills scraper.py with
+# the container, leaving its scan_runs row "running" — the dashboard would
+# keep showing it until STALE_RUN_AFTER, 10 hours later. Nothing can be
+# running at startup (one gunicorn worker), so close any such row now.
+try:
+    supabase_store.fail_running_runs("error: interrupted — the scan worker restarted")
+except Exception as e:
+    print(f"[startup] couldn't clear interrupted runs: {e}", file=sys.stderr, flush=True)
 
 
 @app.route("/health", methods=["GET"])
@@ -421,6 +435,73 @@ def learn_cancel():
         learned.update(status="live" if learned.get("recipe") else "failed", message="Learning was stopped.")
         supabase_store.save_site_learned(division_id, site_id, learned)
     return jsonify({"ok": True})
+
+
+# "Sign in yourself" (live_signin.py). Every call names the division, and a
+# sign-in only answers to the division that started it.
+
+@app.route("/signin", methods=["POST"])
+def signin_start():
+    """Body: {division_id, login_id, url}. Returns the sign-in's state."""
+    body = request.get_json(silent=True) or {}
+    try:
+        s = live_signin.start((body.get("division_id") or "").strip(), body.get("login_id"),
+                              (body.get("url") or "").strip() or None)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(s.state())
+
+
+def _signin(sid):
+    s = live_signin.get(request.args.get("division_id") or "", sid)
+    if s is None:
+        return None, (jsonify({"error": "that sign-in has ended"}), 404)
+    return s, None
+
+
+@app.route("/signin/<sid>", methods=["GET"])
+def signin_state(sid):
+    s, err = _signin(sid)
+    return err or jsonify(s.state())
+
+
+@app.route("/signin/<sid>/frame", methods=["GET"])
+def signin_frame(sid):
+    s, err = _signin(sid)
+    if err:
+        return err
+    try:
+        return Response(s.frame(), mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
+    except RuntimeError as e:
+        return jsonify({"error": str(e), **s.state()}), 409
+
+
+@app.route("/signin/<sid>/input", methods=["POST"])
+def signin_input(sid):
+    """Body: {"click": [x, y]} | {"type": "text"} | {"key": "Enter"} | {"wheel": dy}
+    | {"save": true} | {"close": true}."""
+    s, err = _signin(sid)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        if "click" in body:
+            s.click(*body["click"][:2])
+        elif "type" in body:
+            s.type(body["type"])
+        elif "key" in body:
+            s.key(body["key"])
+        elif "wheel" in body:
+            s.wheel(body["wheel"])
+        elif body.get("save"):
+            s.save()
+        elif body.get("close"):
+            s.close()
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e), **s.state()}), 409
+    return jsonify(s.state())
 
 
 @app.route("/propose-rule", methods=["POST"])

@@ -261,6 +261,44 @@ def _bot_check_passed(page):
         return False
 
 
+# A sign-in form's "Remember me" box (Bidtracer's, and the usual "Keep me
+# signed in" variants) — ticked so the site hands out a long-lived session
+# instead of one that ends with the browser, since the session is kept.
+_REMEMBER_ME = re.compile(
+    r"remember|(keep|stay) (me )?(signed|logged) in|trust this (device|computer|browser)", re.I)
+
+
+def _tick_remember_me(page):
+    for box in page.query_selector_all("input[type=checkbox]"):
+        try:
+            if not box.is_visible() or box.is_checked():
+                continue
+            text = box.evaluate(
+                "e => [e.name, e.id, ...[...(e.labels || [])].map(l => l.textContent),"
+                " (e.nextSibling && e.nextSibling.textContent) || ''].join(' ')")
+            if _REMEMBER_ME.search(text or ""):
+                box.check(timeout=2000)
+        except Exception:
+            continue
+
+
+def _restore_session(ctx, cookies):
+    """Puts a saved session's cookies back. One at a time when the whole lot is
+    turned away, so a single cookie this Playwright can't take (Cloudflare's
+    cf_clearance carries a partitionKey older versions don't know) doesn't
+    lose the rest of the session with it."""
+    try:
+        ctx.add_cookies(cookies)
+        return
+    except Exception as e:
+        print(f"  Login: restoring the saved session cookie by cookie ({e})")
+    for c in cookies:
+        try:
+            ctx.add_cookies([{k: v for k, v in c.items() if k != "partitionKey"}])
+        except Exception as e:
+            print(f"  ! Login: couldn't restore the {c.get('name')} cookie ({e})")
+
+
 def _attempt_login(ctx, login, page=None):
     """Best-effort: open the login page, fill the first visible password
     field and a preceding username/email field, submit, and wait for the
@@ -285,10 +323,7 @@ def _attempt_login(ctx, login, page=None):
     afterward and has no such redirect) can leave this out."""
     owns_page = page is None
     if login.get("session"):
-        try:
-            ctx.add_cookies(login["session"])
-        except Exception as e:
-            print(f"  ! Login: couldn't restore the saved session ({e})")
+        _restore_session(ctx, login["session"])
     if page is None:
         page = ctx.new_page()
 
@@ -341,6 +376,7 @@ def _attempt_login(ctx, login, page=None):
             if user_input:
                 user_input.fill(login["username"])
             pw_input.fill(login["password"])
+            _tick_remember_me(page)
             if not _bot_check_passed(page):
                 msg = "the site's Cloudflare check never passed, so it wouldn't take the sign-in"
                 print(f"  ! Login: {msg}")

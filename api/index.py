@@ -23,6 +23,8 @@ Routes:
   DEL  /api/<division_id>/sites/<site_id>     remove a site for every division (or clear a request)
   GET/POST /api/<division_id>/logins         the division's logins for sites behind a sign-in (write-only: add or replace)
   DEL  /api/<division_id>/logins/<login_id>  remove one
+  POST /api/<division_id>/logins/<login_id>/signin   "Sign in yourself" in the scan worker's browser
+  GET  /api/<division_id>/signin/<id>[/frame], POST .../input   its state, picture, and the person's input
   POST /api/<division_id>/site-requests      request a site (name, url, note)
   GET  /api/site-requests                    every division's requests (the hidden menu)
   POST /api/site-requests/<site_id>/accept   add a request to the list (on for the division that asked)
@@ -477,6 +479,54 @@ def api_delete_site_login(division_id, login_id):
         return err
     supabase_store.delete_site_login(division_id, login_id)
     return jsonify({"ok": True})
+
+
+# "Sign in yourself" (the scan worker's live_signin.py): a sign-in the worker
+# can't do alone (a Cloudflare check) done by a person in the worker's own
+# browser, shown here as a picture. These just pass the calls along.
+
+def _signin_proxy(method, path, body=None, timeout=35):
+    sid = request.view_args.get("sid")
+    if sid is not None and not re.fullmatch(r"[0-9a-f]{32}", sid):
+        return jsonify({"error": "that sign-in has ended"}), 404
+    base, err = _scanner_url()
+    if err:
+        return err
+    try:
+        resp = requests.request(method, f"{base}{path}", json=body, timeout=timeout,
+                                params={"division_id": request.view_args["division_id"]})
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to reach the scan worker: {e}"}), 424
+    out = Response(resp.content, status=resp.status_code,
+                   mimetype=resp.headers.get("content-type", "application/json"))
+    out.headers["Cache-Control"] = "no-store"
+    return out
+
+
+@app.route("/api/<division_id>/logins/<login_id>/signin", methods=["POST"])
+def api_signin_start(division_id, login_id):
+    """Body: optional {"url"} — where to sign in when the login has no sign-in page saved."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    return _signin_proxy("POST", "/signin", {"division_id": division_id, "login_id": login_id,
+                                             "url": data.get("url") or ""}, timeout=60)
+
+
+@app.route("/api/<division_id>/signin/<sid>", methods=["GET"])
+def api_signin_state(division_id, sid):
+    return _signin_proxy("GET", f"/signin/{sid}")
+
+
+@app.route("/api/<division_id>/signin/<sid>/frame", methods=["GET"])
+def api_signin_frame(division_id, sid):
+    return _signin_proxy("GET", f"/signin/{sid}/frame")
+
+
+@app.route("/api/<division_id>/signin/<sid>/input", methods=["POST"])
+def api_signin_input(division_id, sid):
+    return _signin_proxy("POST", f"/signin/{sid}/input", request.get_json(force=True, silent=True) or {})
 
 
 @app.route("/api/<division_id>/site-requests", methods=["POST"])

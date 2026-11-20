@@ -2043,10 +2043,13 @@ def delete_site_login(division_id, login_id):
 
 
 def record_site_login(login_id, ok, message=None, session_enc=None):
-    """How the last sign-in went; a good one keeps the browser session for next time."""
+    """How the last sign-in went; a good one keeps the browser session for next time.
+    A failed one leaves the saved session alone: one kept from a sign-in by hand
+    (live_signin.py) mustn't be lost to an automatic try that Cloudflare stopped,
+    and a session that has ended just fails again until a good sign-in replaces it."""
     patch = {"last_ok": bool(ok), "last_checked_at": datetime.now(timezone.utc).isoformat(),
              "last_error": None if ok else (message or "login failed")}
-    if session_enc is not None or not ok:
+    if session_enc is not None:
         patch["session_enc"] = session_enc
     try:
         get_client().table("site_logins").update(patch).eq("id", login_id).execute()

@@ -545,8 +545,11 @@ def division_login(division_id, url):
     no sign-in page saved, `url` itself is opened to sign in: a link behind a
     login sends the browser to the sign-in page, then back to the link."""
     row = supabase_store.site_login_for(division_id, url)
-    if row is None:
-        return None
+    return login_from_row(row, url) if row else None
+
+
+def login_from_row(row, url=None):
+    """A site_logins row, decrypted, as division_login() returns it."""
     try:
         password = credentials.decrypt_password(row["password_enc"])
         session = json.loads(credentials.decrypt_password(row["session_enc"])) if row.get("session_enc") else None
@@ -554,7 +557,7 @@ def division_login(division_id, url):
         print(f"  ! Could not decrypt the saved login for {row['domain']}: {e}")
         return None
     return {"id": row["id"], "domain": row["domain"], "username": row["username"], "password": password,
-            "url": row.get("login_url") or url, "session": session}
+            "url": row.get("login_url") or url or f"https://{row['domain']}/", "session": session}
 
 
 def keep_login_result(login_id, result):
