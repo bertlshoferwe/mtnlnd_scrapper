@@ -18,8 +18,11 @@ started it, so each sign-in's browser lives on a thread of its own and the
 web requests hand it jobs.
 """
 
+import os
 import queue
 import re
+import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -27,7 +30,6 @@ from datetime import datetime, timezone
 
 import browser_crawl
 import scraper
-import site_agent
 import supabase_store
 
 VIEWPORT = {"width": 1100, "height": 760}
@@ -116,12 +118,15 @@ class SignIn:
     # --- the browser's own thread ---
 
     def _run(self):
-        pw = browser = None
+        pw = browser = xvfb = None
         try:
             from playwright.sync_api import sync_playwright
             pw = sync_playwright().start()
-            browser = _launch(pw)
-            self._ctx = browser.new_context(viewport=VIEWPORT, user_agent=site_agent.UA)
+            xvfb, display = _virtual_screen()
+            browser = _launch(pw, display)
+            # The browser's own user agent: a made-up one (site_agent.UA claims Windows
+            # Chrome 128) that doesn't match what the browser really is gives it away.
+            self._ctx = browser.new_context(viewport=VIEWPORT)
             # Same as ConstructConnect's sign-in (adapters.py): a browser that says
             # it's automated can be refused the check even with a person doing it.
             self._ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -157,7 +162,7 @@ class SignIn:
                 if job:
                     job[2]["error"] = RuntimeError("this sign-in has ended")
                     job[1].set()
-            for closer in (browser and browser.close, pw and pw.stop):
+            for closer in (browser and browser.close, pw and pw.stop, xvfb and xvfb.kill):
                 try:
                     closer and closer()
                 except Exception:
@@ -185,7 +190,7 @@ class SignIn:
                 user_input.fill(self.login["username"])
             if pw_input:
                 pw_input.fill(self.login["password"])
-                browser_crawl._tick_remember_me(page)
+                print(f"  Sign-in for {self.login['domain']}: Remember me {browser_crawl._tick_remember_me(page)}", flush=True)
         except Exception as e:
             print(f"  ! Sign-in for {self.login['domain']}: couldn't fill the form in ({e})", flush=True)
 
@@ -221,8 +226,32 @@ class SignIn:
               f"({_lifetimes(cookies, self.login['domain'])})", flush=True)
 
 
-def _launch(pw):
+def _virtual_screen():
+    """(Xvfb process, ":n") — a screen for a real, windowed browser. Cloudflare's
+    check failed a person in the headless one ("Verification failed", 600010,
+    2026-11-19). (None, None) when there's no Xvfb, or it won't start."""
+    if not shutil.which("Xvfb"):
+        return None, None
+    for n in range(99, 110):
+        if os.path.exists(f"/tmp/.X11-unix/X{n}"):
+            continue
+        proc = subprocess.Popen(["Xvfb", f":{n}", "-screen", "0", "1280x900x24", "-nolisten", "tcp"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(30):
+            if os.path.exists(f"/tmp/.X11-unix/X{n}"):
+                return proc, f":{n}"
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+        proc.kill()
+    print("  ! Sign-in: no virtual screen — using a headless browser", flush=True)
+    return None, None
+
+
+def _launch(pw, display=None):
     args = ["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"]
+    if display:
+        return pw.chromium.launch(headless=False, args=args, env={**os.environ, "DISPLAY": display})
     try:
         # The full browser's own headless mode, closer to a real Chrome than
         # Playwright's default headless shell.

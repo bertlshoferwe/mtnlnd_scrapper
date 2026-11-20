@@ -269,17 +269,29 @@ _REMEMBER_ME = re.compile(
 
 
 def _tick_remember_me(page):
+    """Ticks the form's "Remember me" box, if it has one. The box's words are
+    looked for in its name and id, its <label>s, the text just after it, and
+    a short parent — Bidtracer's wasn't caught by the label alone. A styled
+    box often hides the real input, so it's ticked with force. Returns what
+    it did, for the log."""
+    seen = []
     for box in page.query_selector_all("input[type=checkbox]"):
         try:
-            if not box.is_visible() or box.is_checked():
-                continue
             text = box.evaluate(
-                "e => [e.name, e.id, ...[...(e.labels || [])].map(l => l.textContent),"
-                " (e.nextSibling && e.nextSibling.textContent) || ''].join(' ')")
-            if _REMEMBER_ME.search(text or ""):
-                box.check(timeout=2000)
-        except Exception:
-            continue
+                "e => { const p = e.parentElement, pt = p ? p.textContent : '';"
+                " return [e.name, e.id, ...[...(e.labels || [])].map(l => l.textContent),"
+                " (e.nextSibling && e.nextSibling.textContent) || '',"
+                " (e.nextElementSibling && e.nextElementSibling.textContent) || '',"
+                " pt.length < 80 ? pt : ''].join(' ').replace(/\\s+/g, ' ').trim() }")
+            seen.append(text[:60])
+            if not _REMEMBER_ME.search(text or ""):
+                continue
+            if not box.is_checked():
+                box.check(timeout=2000, force=True)
+            return f"ticked ({text[:60]})"
+        except Exception as e:
+            seen.append(f"error: {e}")
+    return "no Remember me box" + (f" among {seen}" if seen else "")
 
 
 def _restore_session(ctx, cookies):
