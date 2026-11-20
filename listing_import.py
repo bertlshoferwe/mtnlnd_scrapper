@@ -322,7 +322,7 @@ def _read_bidtracer(url, fetcher, run):
                          f" (“{_try(page.title) or ''}”)")
             _bidtracer_debug(page, "bid_page")
             return None
-        bid_when = field("bid date")
+        bid_when = _bidtracer_when(field("bid date"))
         address = field("address") or None
         folders = next((f for fr in page.frames for f in [_try(fr.evaluate, _FOLDERS_JS, list(BIDTRACER_FOLDERS))] if f), [])
         folders = [f for f in folders if f[2] > 0]
@@ -337,6 +337,16 @@ def _read_bidtracer(url, fetcher, run):
             "bid_date": site_agent.parse_date(bid_when) if bid_when else None,
             "bid_time": site_agent.parse_time(bid_when) if bid_when else None,
             "location": address, "holders": None}
+
+
+def _bidtracer_when(text):
+    """Bid Date's field holds '2026-11-30-17-00-00' (the page shows it as
+    '11/30/2026 5:00 PM') — made into the shown form for the date/time parsers."""
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})", text or "")
+    if not m:
+        return text
+    h = int(m[4])
+    return f"{m[2]}/{m[3]}/{m[1]} {h % 12 or 12}:{m[5]} {'PM' if h >= 12 else 'AM'}"
 
 
 def _try(fn, *args):
@@ -359,14 +369,14 @@ def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):
     page.on("download", lambda d: caught.append(d))
     page.context.on("page", lambda p: p.on("download", lambda d: caught.append(d)))   # a download that opens its own tab
     try:
-        toggle = page.locator("button, a").filter(has_text=re.compile(r"^\s*Download\s*$"))
-        toggle = next((toggle.nth(i) for i in range(toggle.count()) if toggle.nth(i).is_visible()), None)
-        if toggle is None:
-            raise ValueError("no Download menu on the folder page")
-        toggle.hover()
-        toggle.click(timeout=5000)
-        item = page.get_by_text("Download All", exact=True).first
-        item.click(timeout=5000, force=not item.is_visible())
+        # "Download All" is a submit button in a menu that opens on hover
+        # (ctl00_contentPlaceHolderBid_btnDownloadAll); hovering then clicking
+        # the menu closed it again, so the button itself is pressed instead.
+        button = (page.query_selector("input[type=submit][id$=btnDownloadAll]")
+                  or page.query_selector("input[type=submit][value='Download All']"))
+        if button is None:
+            raise ValueError("no Download All button on the folder page")
+        button.evaluate("e => e.click()")
         deadline = time.time() + BIDTRACER_DOWNLOAD_S
         while not caught and time.time() < deadline:
             page.wait_for_timeout(500)
@@ -386,13 +396,14 @@ def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):
         page.close()
     fn = (dl.suggested_filename or f"{folder}.zip").strip()
     if data[:2] != b"PK":   # a folder with one file may come as just that file
-        return [(f"{bid_url}#{folder}/{fn}", fn[:200], data)] if fn.lower().endswith(browser_crawl.DOC_EXT) else []
+        return [(f"{bid_url}#{folder}/{fn}", f"Bidtracer/{folder}/{fn}"[:200], data)] if fn.lower().endswith(browser_crawl.DOC_EXT) else []
     out = []
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for member in zf.namelist():
                 if member.lower().endswith(browser_crawl.DOC_EXT):
-                    out.append((f"{bid_url}#{folder}/{member}", member.rsplit("/", 1)[-1][:200], zf.read(member)))
+                    base = member.rsplit("/", 1)[-1]
+                    out.append((f"{bid_url}#{folder}/{member}", f"Bidtracer/{folder}/{base}"[:200], zf.read(member)))
     except zipfile.BadZipFile as e:
         run.progress(f"{folder}'s zip couldn't be opened ({e})")
     run.progress(f"{folder}: {len(out)} file(s)")
@@ -483,8 +494,14 @@ def run_import(row):
         _needs_login(run, url, login or shared, tried)
         return
 
-    # Keep the project it was read into before (a re-read), so files add to it.
-    key = row.get("project_key") or f"{got['site']} — {got['name']}"
+    # The project the bid already shows, if it has one (its files go in with the
+    # rest, in a folder named for the site — "Bidtracer/Plans/..."); else the one
+    # it was read into before (a re-read), so files add to it; else a new one.
+    linked = (supabase_store.workflow_bid_due(bid_id) or {}).get("source_project_id")
+    key = linked or row.get("project_key") or f"{got['site']} — {got['name']}"
+    if linked:
+        folder = re.sub(r"[/\\]+", " ", got["site"]).strip() + "/"
+        got["docs"] = [(u, fn if fn.startswith(folder) else folder + fn, c) for u, fn, c in got["docs"]]
     have = {f["url"] for f in supabase_store.load_project_files(division_id, key, with_duplicates=False)}
     new_docs = [d for d in got["docs"] if d[0] not in have]
     run.progress(f"Found {len(got['docs'])} document(s)" + (f", {len(new_docs)} new" if have else ""))
