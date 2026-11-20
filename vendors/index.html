@@ -281,7 +281,7 @@ function vcard(r,T){
  var body=sh.map(function(c){return '<div class="sm-row"><b>'+hl(c.name,T)+'</b><span class="ti">'+hl(c.title,T)+'</span>'+srvLine(c)+'</div>'}).join('');
  if(!r.contacts.length)body='<div class="hint">No contacts yet</div>';
  if(more>0)body+='<div class="more">+'+more+' more</div>';
- var items=r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
+ var items=!T.length?(r.item_count?'<div class="hint">'+r.item_count+' item'+(r.item_count===1?'':'s')+' they sell</div>':''):r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
  return '<button class="card vcard'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'"><div class="vhead">'+logoHTML(r)+'<div style="min-width:0"><div class="vname">'+hl(r.name,T)+'</div><div class="vweb">'+hl(r.website,T)+'</div></div></div>'+body+items+'</button>';
 }
 function renderResults(){
@@ -289,9 +289,7 @@ function renderResults(){
  if(S.err&&!S.results)return '<div class="card empty">Couldn’t load vendors: '+esc(S.err)+'</div>';
  var T=toks(),res=S.results||[],h='';
  if(!res.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
- if(T.length)h='<div class="grid">'+res.map(function(r){return vcard(r,T)}).join('')+'</div>';
- else h='<div class="card scroll">'+res.map(function(r){
-  return '<button class="row'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'">'+logoHTML(r,'sm')+'<span style="flex:1;min-width:0"><b>'+esc(r.name)+'</b><div class="sub">'+r.contact_count+' salesm'+(r.contact_count===1?'an':'en')+(r.states.length?' · '+esc(r.states.join(', ')):'')+'</div></span></button>'}).join('')+'</div>';
+ h='<div class="grid">'+res.map(function(r){return vcard(r,T)}).join('')+'</div>';
  return (T.length?'<div class="h2">'+res.length+' vendor'+(res.length===1?'':'s')+'</div>':'<div class="h2">Vendors · A to Z</div>')+h;
 }
 function paintResults(){
