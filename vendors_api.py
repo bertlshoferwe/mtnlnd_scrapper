@@ -11,6 +11,7 @@ by every division; what a vendor sells is kept per division.
   POST /api/vendors/contacts, PATCH/DELETE /api/vendors/contacts/<id>
   GET  /api/vendors/contacts/email?email=&not=            who already has this email
   POST /api/vendors/cards                                a scanned card's photo (kept with the contact)
+  POST /api/vendors/contacts/<id>/card                   a re-cropped photo for a saved contact's card
   GET  /api/vendors/cards/<contact_id>                   that photo
   /api/vendors/admin/...                                 catalog review, failed pulls, vendor websites
 
@@ -124,7 +125,8 @@ def _area_text(c):
 def _contact_out(c):
     return {"id": c["id"], "name": c["name"], "title": c.get("title") or "", "phone": c.get("phone") or "",
             "email": c.get("email") or "", "nationwide": c["nationwide"], "areas": c["areas"],
-            "unset": _unset(c), "area_text": _area_text(c), "has_card": bool(c.get("card_image_path"))}
+            "unset": _unset(c), "area_text": _area_text(c), "has_card": bool(c.get("card_image_path")),
+            "card_v": re.sub(r"\D", "", str(c.get("updated_at") or ""))[:14]}
 
 
 def _vendor_out(v):
@@ -431,6 +433,23 @@ def api_card_upload():
     return jsonify({"ok": True, "path": out["file"], "logo_path": out.get("logo")})
 
 
+@bp.route("/api/vendors/contacts/<contact_id>/card", methods=["POST"])
+def api_contact_card(contact_id):
+    """A new photo for a contact's saved card (cropped on the page)."""
+    if not _can_edit():
+        return _forbidden()
+    if not vs.get_contact(contact_id):
+        return _err("that contact is gone", 404)
+    f = request.files.get("file")
+    data = f.read(MAX_IMAGE + 1) if f else b""
+    ext = _IMAGE_TYPES.get(f.mimetype) if f else None
+    if not ext or ext == "svg" or not data or len(data) > MAX_IMAGE:
+        return _err("send a photo (JPEG or PNG, 8 MB at most)")
+    path = vs.put_file(f"cards/card-{uuid.uuid4().hex}.{ext}", data, f.mimetype)
+    vs.set_contact_card(contact_id, path, _actor())
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/vendors/cards/<contact_id>", methods=["GET"])
 def api_card_get(contact_id):
     """The contact's scanned card. Sent through here rather than a signed
@@ -527,6 +546,14 @@ def api_admin_pull():
     if not vs.get_vendor(data.get("vendor_id") or ""):
         return _err("that vendor is gone", 404)
     return _scanner("/vendor-pull", {"vendor_id": data["vendor_id"], "what": "all"})
+
+
+@bp.route("/api/vendors/admin/pull-all", methods=["POST"])
+def api_admin_pull_all():
+    """Pull now: every vendor with a website, whenever they were last pulled."""
+    if not _is_admin():
+        return _forbidden()
+    return _scanner("/vendor-pull-all", {})
 
 
 @bp.route("/api/vendors/admin/pdf", methods=["POST"])

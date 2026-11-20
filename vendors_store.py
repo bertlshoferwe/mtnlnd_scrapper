@@ -222,6 +222,15 @@ def get_contact(contact_id):
     return r[0] if r and not r[0].get("deleted_at") else None
 
 
+def set_contact_card(contact_id, path, actor=None):
+    """Swap a contact's card photo (a re-crop), removing the old one."""
+    old = (get_contact(contact_id) or {}).get("card_image_path")
+    _db().table("vendor_contacts").update({"card_image_path": path, "updated_at": _now()}).eq("id", contact_id).execute()
+    if old and old != path:
+        remove_file(old)
+    audit(actor, "update", "vendor_contacts", contact_id, {"card_image_path": path})
+
+
 def delete_contact(contact_id, actor=None):
     _db().table("vendor_contacts").update({"deleted_at": _now()}).eq("id", contact_id).execute()
     audit(actor, "delete", "vendor_contacts", contact_id)

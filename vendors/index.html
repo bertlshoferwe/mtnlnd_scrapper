@@ -145,6 +145,14 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .tabs{display:flex;gap:4px;margin:2px 0 0;flex-wrap:wrap}
 .offline{background:#2c2418;color:#f0cfa0;border-bottom:1px solid var(--w);text-align:center;font-size:14px;padding:8px 12px}
 .loading{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--m);padding:36px 16px}
+/* cropping a card photo: the frame's four corners drag; outside it is dimmed */
+.crop{position:relative;margin:0 auto;max-width:100%;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden;border-radius:12px;background:#000}
+.crop img{display:block;width:100%;height:100%;pointer-events:none}
+.cr{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(3,6,14,.6);cursor:move;touch-action:none}
+.hd{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;touch-action:none}
+.hd::after{content:"";position:absolute;left:13px;top:13px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+.hd.tl{left:0;top:0;cursor:nwse-resize}.hd.tr{left:100%;top:0;cursor:nesw-resize}.hd.bl{left:0;top:100%;cursor:nesw-resize}.hd.br{left:100%;top:100%;cursor:nwse-resize}
+.cardview{display:block;max-width:100%;max-height:68vh;margin:0 auto;border-radius:10px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 @media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
@@ -304,7 +312,7 @@ function renderVendor(){
  cs.forEach(function(c){
   h+='<div class="crow"><div style="flex:1;min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint" style="margin-bottom:6px">'+esc(c.title)+'</div>':'')+
    '<div style="display:flex;flex-direction:column;gap:4px">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
-   (c.has_card?'<a class="kv" href="/api/vendors/cards/'+esc(c.id)+'" target="_blank" rel="noopener">'+I.card+'Business card</a>':'')+'</div><div style="margin-top:8px">'+srvLine(c)+'</div></div><button class="ib pen" aria-label="Edit '+esc(c.name)+'" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>';
+   (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'</div><div style="margin-top:8px">'+srvLine(c)+'</div></div><button class="ib pen" aria-label="Edit '+esc(c.name)+'" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>';
  });
  h+='<div class="sec"><button class="row" style="padding:0;border:0;min-height:44px" data-act="items" aria-expanded="'+S.itemsOpen+'"><span style="flex:1"><b>Items they sell · '+its.length+'</b><div class="sub">'+(v.website?'From their website, ':'')+esc(divName(S.div))+' division</div></span><span class="btn sm">'+(S.itemsOpen?'Hide':'Show')+'</span></button>';
  if(S.itemsOpen){
@@ -440,9 +448,19 @@ function parseCard(text){
  var name=plain.filter(function(l){return l!==title&&l!==company&&!CO_RE.test(l)&&/^[A-Z][a-zA-Z'.-]+(\s+[A-Z][a-zA-Z'.-]*){1,3}$/.test(l)})[0]||'';
  return {name:name,title:title,vendor:company,phone:ph?ph.n:'',email:email,website:known?'':web};
 }
+// The photo is cropped to the card by itself (detectCard), then read. A crop that missed can be
+// fixed afterwards from the card's pop-up.
 function readCard(file){
- S.scanErr='';S.scanStage=1;S.scanMsg='Reading card…';S.cardPath=null;render();
- shrink(file).then(function(sh){
+ S.scanErr='';S.cardPath=null;S.scanStage=1;S.scanMsg='Finding the card…';render();
+ shrink(file).then(function(sh){return loadImg(sh.dataUrl)}).then(function(img){
+  S.crop={img:img,w:img.naturalWidth,h:img.naturalHeight,r:detectCard(img),mode:'auto'};
+  return cropped(false);
+ }).then(readCropped).catch(function(e){S.crop=null;S.scanStage=0;S.scanErr='Couldn’t open that photo ('+e.message+'). Try another.';render()});
+}
+// After the crop: the card is read, and its photo uploaded to keep with the contact.
+function readCropped(sh){
+ S.scanErr='';S.scanStage=1;S.scanMsg='Reading card…';S.cardPath=null;S.crop=null;render();
+ Promise.resolve(sh).then(function(sh){
   S.scan=sh.dataUrl;render();
   var fd=new FormData();fd.append('file',sh.blob,'card.jpg');
   var up=api('/api/vendors/cards',{method:'POST',body:fd}).then(function(d){S.cardPath=d.path}).catch(function(){S.cardPath=null});
@@ -457,15 +475,102 @@ function readCard(file){
  }).catch(function(e){S.scanStage=0;S.scanErr='Couldn’t read the card ('+e.message+'). Try another photo, or enter it by hand.';render()});
 }
 
+/* ---------- cropping a card photo ---------- */
+function loadImg(src){return new Promise(function(res,rej){var i=new Image();i.onload=function(){res(i)};i.onerror=function(){rej(new Error('couldn’t open the photo'))};i.src=src})}
+// A first guess at where the card is: shrink the photo, take the colour around its edge as the
+// background, and keep the rows and columns where enough pixels differ from it. Keeps the whole
+// photo when nothing stands out (a card filling the photo, or a busy background).
+function detectCard(img){
+ var W=img.naturalWidth,H=img.naturalHeight,k=Math.min(1,220/Math.max(W,H)),w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+ var fallback={x:0,y:0,w:W,h:H};
+ try{
+  var c=document.createElement('canvas');c.width=w;c.height=h;var g=c.getContext('2d');g.drawImage(img,0,0,w,h);
+  var d=g.getImageData(0,0,w,h).data,b=Math.max(2,Math.round(Math.min(w,h)*.04)),sum=[0,0,0],n=0;
+  for(var y=0;y<h;y++)for(var x=0;x<w;x++){if(x>=b&&x<w-b&&y>=b&&y<h-b)continue;var i=(y*w+x)*4;sum[0]+=d[i];sum[1]+=d[i+1];sum[2]+=d[i+2];n++}
+  var bg=sum.map(function(s){return s/n}),rows=new Array(h).fill(0),cols=new Array(w).fill(0);
+  for(y=0;y<h;y++)for(x=0;x<w;x++){i=(y*w+x)*4;if(Math.abs(d[i]-bg[0])+Math.abs(d[i+1]-bg[1])+Math.abs(d[i+2]-bg[2])>90){rows[y]++;cols[x]++}}
+  var y0=rows.findIndex(function(v){return v>w*.15}),y1=h-1-rows.slice().reverse().findIndex(function(v){return v>w*.15});
+  var x0=cols.findIndex(function(v){return v>h*.15}),x1=w-1-cols.slice().reverse().findIndex(function(v){return v>h*.15});
+  if(y0<0||x0<0||y1-y0<h*.2||x1-x0<w*.2||(x1-x0>w*.97&&y1-y0>h*.97))return fallback;
+  var m=Math.round(Math.min(w,h)*.01);x0=Math.max(0,x0-m);y0=Math.max(0,y0-m);x1=Math.min(w-1,x1+m);y1=Math.min(h-1,y1+m);
+  return {x:x0/k,y:y0/k,w:(x1-x0+1)/k,h:(y1-y0+1)/k};
+ }catch(e){return fallback}
+}
+function startCrop(src,mode,cid){
+ return loadImg(src).then(function(img){
+  S.crop={src:src,img:img,w:img.naturalWidth,h:img.naturalHeight,r:detectCard(img),mode:mode,cid:cid};render();
+ });
+}
+function cropHTML(){
+ var C=S.crop,r=C.r,pc=function(v,t){return (100*v/t).toFixed(3)+'%'};
+ return '<div class="crop" id="cropbox" style="aspect-ratio:'+C.w+'/'+C.h+';width:min(100%,calc(58vh * '+(C.w/C.h).toFixed(4)+'))"><img src="'+esc(C.src)+'" alt="The photo">'+
+  '<div class="cr" id="cropr" data-h="move" style="left:'+pc(r.x,C.w)+';top:'+pc(r.y,C.h)+';width:'+pc(r.w,C.w)+';height:'+pc(r.h,C.h)+'">'+
+  ['tl','tr','bl','br'].map(function(k){return '<span class="hd '+k+'" data-h="'+k+'"></span>'}).join('')+'</div></div>';
+}
+var drag=null;
+document.addEventListener('pointerdown',function(e){
+ var hd=e.target.closest&&e.target.closest('[data-h]');if(!hd||!S.crop)return;
+ e.preventDefault();var box=$('cropbox').getBoundingClientRect();
+ drag={h:hd.dataset.h,x:e.clientX,y:e.clientY,r:Object.assign({},S.crop.r),k:S.crop.w/box.width};
+ try{hd.setPointerCapture(e.pointerId)}catch(x){}
+});
+document.addEventListener('pointermove',function(e){
+ if(!drag||!S.crop)return;
+ var C=S.crop,o=drag.r,dx=(e.clientX-drag.x)*drag.k,dy=(e.clientY-drag.y)*drag.k,min=Math.min(C.w,C.h)*.08;
+ var x0=o.x,y0=o.y,x1=o.x+o.w,y1=o.y+o.h;
+ if(drag.h==='move'){var mx=Math.min(Math.max(-x0,dx),C.w-x1),my=Math.min(Math.max(-y0,dy),C.h-y1);x0+=mx;x1+=mx;y0+=my;y1+=my}
+ else{
+  if(/l/.test(drag.h))x0=Math.min(Math.max(0,x0+dx),x1-min);
+  if(/r/.test(drag.h))x1=Math.max(Math.min(C.w,x1+dx),x0+min);
+  if(/t/.test(drag.h))y0=Math.min(Math.max(0,y0+dy),y1-min);
+  if(/b/.test(drag.h))y1=Math.max(Math.min(C.h,y1+dy),y0+min);
+ }
+ C.r={x:x0,y:y0,w:x1-x0,h:y1-y0};
+ var el=$('cropr');if(el){el.style.left=(100*x0/C.w)+'%';el.style.top=(100*y0/C.h)+'%';el.style.width=(100*(x1-x0)/C.w)+'%';el.style.height=(100*(y1-y0)/C.h)+'%'}
+});
+document.addEventListener('pointerup',function(){drag=null});
+document.addEventListener('pointercancel',function(){drag=null});
+// The cropped part (or the whole photo) as a JPEG of at most 1600px: {blob, dataUrl}.
+function cropped(whole){
+ var C=S.crop,r=whole?{x:0,y:0,w:C.w,h:C.h}:C.r,k=Math.min(1,1600/Math.max(r.w,r.h)),c=document.createElement('canvas');
+ c.width=Math.max(1,Math.round(r.w*k));c.height=Math.max(1,Math.round(r.h*k));
+ c.getContext('2d').drawImage(C.img,r.x,r.y,r.w,r.h,0,0,c.width,c.height);
+ return new Promise(function(res,rej){c.toBlob(function(b){b?res({blob:b,dataUrl:c.toDataURL('image/jpeg',.9)}):rej(new Error('couldn’t crop the photo'))},'image/jpeg',.9)});
+}
+
+/* ---------- a saved contact's card, in a pop-up ---------- */
+function cardUrl(c){return '/api/vendors/cards/'+encodeURIComponent(c.id)+(c.card_v?'?v='+c.card_v:'')}
+function renderCardView(){
+ var V=S.cardView,c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===V.cid})[0];
+ var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px"><h2 style="margin:0;font-size:18px;min-width:0;overflow-wrap:anywhere">Business card'+(c?' · '+esc(c.name):'')+'</h2><button type="button" class="ib" aria-label="Close" data-act="cardclose" style="font-size:22px">×</button></div>';
+ if(S.crop&&S.crop.mode==='card')
+  return h+'<div class="hint" style="margin-bottom:8px">Drag the corners to fit the card.</div>'+cropHTML()+'<div class="bar"><button type="button" class="btn" data-act="cropcancel">Cancel</button><button type="button" class="btn pri" data-act="cardcropsave"'+(S.busy?' disabled':'')+'>'+(S.busy?'Saving…':'Save crop')+'</button></div>';
+ if(!c)return h+'<div class="empty">That contact is gone.</div>';
+ return h+'<img class="cardview" src="'+esc(cardUrl(c))+'" alt="'+esc(c.name)+'’s business card">'+
+  '<div class="bar"><button type="button" class="btn" data-act="cardcrop">Crop</button><a class="btn" href="'+esc(cardUrl(c))+'" download="'+esc(c.name)+' card.jpg">Download</a><button type="button" class="btn pri" data-act="cardclose">Close</button></div>';
+}
+
 /* ---------- admin: catalog review ---------- */
 function loadAdmin(){
  api('/api/vendors/admin/review').then(function(d){S.admin.review=d;render()}).catch(function(e){S.admin.review={error:e.message};render()});
  api('/api/vendors/admin/vendors').then(function(d){S.admin.vendors=d;render()}).catch(function(e){S.admin.vendors={error:e.message};render()});
 }
+// While pulls run, check every few seconds so each vendor's row updates as it finishes.
+var adminTimer=null;
+function pollAdmin(){
+ clearTimeout(adminTimer);
+ adminTimer=setTimeout(function(){
+  if(S.view!=='admin')return;
+  loadAdmin();
+  setTimeout(function(){var vv=Array.isArray(S.admin.vendors)?S.admin.vendors:[];if(vv.some(function(v){return v.last_pull&&v.last_pull.status==='running'}))pollAdmin()},1500);
+ },4000);
+}
 function renderAdmin(){
  var A=S.admin,rv=Array.isArray(A.review)?A.review:[],vv=Array.isArray(A.vendors)?A.vendors:[];
  var failed=vv.filter(function(v){return v.last_pull&&v.last_pull.status==='failed'});
- var h='<div class="page" style="max-width:820px"><button class="back" data-act="adminback">'+I.back+'Vendors</button>';
+ var pulling=vv.filter(function(v){return v.last_pull&&v.last_pull.status==='running'}).length;
+ var h='<div class="page" style="max-width:820px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><button class="back" data-act="adminback">'+I.back+'Vendors</button>'+
+  '<button class="btn sm" data-act="pullall"'+(pulling?' disabled':'')+'>'+(pulling?'<span class="spin" style="width:16px;height:16px;border-width:2px"></span>Pulling '+pulling+'…':'Pull now')+'</button></div>';
  h+='<div class="tabs" role="tablist">'+[['review','To review ('+rv.length+')'],['failed','Failed pulls ('+failed.length+')'],['vendors','Vendors']].map(function(x){return '<button class="chip tog'+(S.atab===x[0]?' on':'')+'" role="tab" aria-selected="'+(S.atab===x[0])+'" data-act="atab" data-id="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">';
  var err=(A.review&&A.review.error)||(A.vendors&&A.vendors.error);
  if(err)h+='<div class="errb">'+esc(err)+'</div>';
@@ -505,6 +610,7 @@ function render(){
   main=renderToolbar()+'<div class="desk'+(det?'':' nodet')+'" style="margin-top:12px"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+renderVendor()+'</div>':'')+'</div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
+  (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
   (S.vm?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Edit vendor">'+renderVendorModal()+'</div></div>':'')+
   (S.modal&&S.draft?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="'+(S.edit?'Edit contact':'New contact')+'">'+renderForm()+'</div></div>':'')+
   (S.toast?'<div class="toast" role="status">'+esc(S.toast)+'</div>':'');
@@ -545,6 +651,7 @@ var A={
  atab:function(el){S.atab=el.dataset.id},
  approve:function(el){decide(el,true);return 'skip'},
  reject:function(el){decide(el,false);return 'skip'},
+ pullall:function(){api('/api/vendors/admin/pull-all',{method:'POST'}).then(function(d){toast(d.message||'Pulling every vendor now');pollAdmin()}).catch(fail);return 'skip'},
  retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
  close:function(){S.panel=null},
  'p-div':function(){S.panel=S.panel==='div'?null:'div'},
@@ -579,6 +686,16 @@ var A={
   var wasScan=S.view==='scan';closeForm();
   if(wasScan||S.view==='form')S.view=S.vid&&!mq.matches?'vendor':'list';
  },
+ cardview:function(el){S.cardView={cid:el.dataset.id};S.crop=null},
+ cardclose:function(){S.cardView=null;S.crop=null},
+ cardcrop:function(){var c=S.detail.contacts.filter(function(x){return x.id===S.cardView.cid})[0];if(c)startCrop(cardUrl(c),'card',c.id).catch(fail);return 'skip'},
+ cropcancel:function(){S.crop=null},
+ cardcropsave:function(){
+  var cid=S.crop.cid;S.busy=true;render();
+  cropped(false).then(function(sh){var fd=new FormData();fd.append('file',sh.blob,'card.jpg');return api('/api/vendors/contacts/'+encodeURIComponent(cid)+'/card',{method:'POST',body:fd})})
+   .then(function(){S.busy=false;S.crop=null;toast('Card cropped');loadDetail()}).catch(fail);
+  return 'skip';
+ },
  nat:function(){S.draft.nationwide=!S.draft.nationwide},
  st:function(el){var s=el.dataset.id,a=S.draft.areas,i=a.map(function(x){return x.state}).indexOf(s);if(i>=0)a.splice(i,1);else{a.push({state:s,regions:[]});a.sort(function(x,y){return STATES.indexOf(x.state)-STATES.indexOf(y.state)})}},
  addreg:function(el){var s=el.dataset.id,inp=document.querySelector('[data-reg="'+s+'"]'),val=inp.value.trim();if(!val)return;var ar=S.draft.areas.filter(function(x){return x.state===s})[0];if(ar.regions.indexOf(val)<0)ar.regions.push(val)},
@@ -600,6 +717,7 @@ document.addEventListener('click',function(e){
  var el=e.target.closest('[data-act]');if(!el)return;
  var act=el.dataset.act;
  if(act==='cancel-ov'){if(e.target!==el)return;act='cancel'}
+ if(act==='cardclose-ov'){if(e.target!==el)return;act='cardclose'}
  if(S.draft)syncDraft();
  if(S.armItem&&act!=='rmitem')S.armItem=null;
  if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render()}
@@ -618,7 +736,8 @@ document.addEventListener('input',function(e){
 document.addEventListener('keydown',function(e){
  if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.reg!==undefined){e.preventDefault();var b=document.querySelector('[data-act="addreg"][data-id="'+e.target.dataset.reg+'"]');if(b)b.click()}
  if(e.key==='Escape'){
-  if(S.vm||S.modal){A.cancel();render()}
+  if(S.cardView){if(S.crop)S.crop=null;else S.cardView=null;render()}
+  else if(S.vm||S.modal){A.cancel();render()}
   else if(S.panel){S.panel=null;render()}
   else if(S.view==='scan'&&S.scanStage!==1){A.cancel();render()}
  }

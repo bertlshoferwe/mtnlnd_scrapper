@@ -433,15 +433,31 @@ def _pull(vendor_id, what, pdf_path, force):
         return {"ok": False, "message": str(e)}
 
 
-def run_due():
-    """Pull every vendor with a website not pulled in a week, one at a time."""
+_all_lock = threading.Lock()
+
+
+def pull_all():
+    """Pull Now: every vendor with a website, one at a time, whenever they were
+    last pulled. False if one is already going."""
+    if not _all_lock.acquire(blocking=False):
+        return False
+    try:
+        run_due(force=True)
+    finally:
+        _all_lock.release()
+    return True
+
+
+def run_due(force=False):
+    """Pull every vendor with a website not pulled in a week (every one, with
+    force), one at a time."""
     runs = vs.last_runs()
     now = time.time()
     for v in vs.all_vendors():
         last = runs.get(v["id"])
         if not v.get("website"):
             continue
-        if last:
+        if last and not force:
             from datetime import datetime
             started = datetime.fromisoformat(last["started_at"].replace("Z", "+00:00")).timestamp()
             if now - started < WEEK_S:

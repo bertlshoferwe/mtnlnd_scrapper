@@ -432,6 +432,15 @@ def vendor_pull():
     return jsonify({"ok": True, "message": "Pull started. Its result shows up in Catalog review."})
 
 
+@app.route("/vendor-pull-all", methods=["POST"])
+def vendor_pull_all():
+    """Vendors' Pull now: every vendor with a website, in the background."""
+    if vendor_catalog._all_lock.locked():
+        return jsonify({"ok": False, "error": "a pull of every vendor is already running"}), 409
+    threading.Thread(target=vendor_catalog.pull_all, daemon=True).start()
+    return jsonify({"ok": True, "message": "Pulling every vendor now. Each one's result shows up here as it finishes."})
+
+
 @app.route("/learn-cancel", methods=["POST"])
 def learn_cancel():
     """Stop a site's learning. Body: {division_id, site_id}."""
