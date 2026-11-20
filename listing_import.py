@@ -7,6 +7,8 @@ into Bid Scout, so the bid's Bid Docs, Plan Holders and due date fill in.
                                            (scraper.main runs this after the daily scan)
 
 How a link is read, first that works:
+  0. Bidtracer: its bid page and Plans / Specs / Addenda folders, read
+     directly (_read_bidtracer).
   1. Its site is one Bid Scout scans with a portal adapter (UDOT, IDOT, ...):
      the adapter's listing, cut down to this project. Same project key as
      the daily scan, so the bid follows the project the scan keeps current.
@@ -22,10 +24,13 @@ different one from the listing is kept as result.conflict for the board to offer
 State lives in listing_imports (migrations/002_listing_imports.sql).
 """
 
+import io
 import json
+import os
 import re
 import sys
 import time
+import zipfile
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urljoin, urlparse
 
@@ -264,6 +269,134 @@ def _read_generic(url, fetcher, ai, run, site_name):
             "location": info.get("location"), "holders": holders or None}
 
 
+# Bidtracer (bidtracer.com/secure/bidmain.aspx?bidid=...), read the way a person
+# does it (walked through by the user, 2026-11-19), no AI needed: the name, bid
+# date and address are form fields on the bid page; its left menu has Plans,
+# Specs and Addenda, each with a count badge when it holds files; each opens a
+# folder page whose Download menu has "Download All", which downloads a zip.
+BIDTRACER_FOLDERS = ("Plans", "Specs", "Addenda")
+BIDTRACER_DOWNLOAD_S = 300     # the zip is built when asked for; a big plan set takes a while
+BIDTRACER_MAX_ZIP = 500 * 1024 * 1024
+
+_FIELD_JS = """label => {
+  const norm = s => (s || '').replace(/[*]/g, '').replace(/\\s+/g, ' ').trim().toLowerCase();
+  for (const e of document.querySelectorAll('label, span, div, td, th, b, strong')) {
+    if (norm(e.textContent) !== label) continue;
+    for (let p = e, i = 0; p && i < 3; p = p.parentElement, i++) {
+      const f = p.querySelector('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea');
+      if (f && f.value) return f.value;
+    }
+  }
+  return null;
+}"""
+
+# The left menu's folder links, with their badge counts: [[text, href, count]],
+# the first link of each name ("Plans 1" -> ["Plans", href, 1]).
+_FOLDERS_JS = """names => {
+  const seen = {};
+  return [...document.querySelectorAll('a')].map(a => {
+    const t = a.textContent || '';
+    return [t.replace(/\\d+/g, '').replace(/\\s+/g, ' ').trim(), a.href, parseInt((t.match(/\\d+/g) || ['0']).pop(), 10)];
+  }).filter(x => names.includes(x[0]) && !seen[x[0]] && (seen[x[0]] = true));
+}"""
+
+
+def _read_bidtracer(url, fetcher, run):
+    """{"name", "site", "docs", "bid_date", ...} like _read_generic, or None
+    when the page isn't a Bidtracer bid page this understands."""
+    run.progress("Opening the bid on Bidtracer")
+    page = fetcher._open_page(url)
+    try:
+        if _on_sign_in(page):
+            return {"name": "", "site": "Bidtracer", "docs": [], "sign_in": True}
+        name = (page.evaluate(_FIELD_JS, "project name") or "").strip()
+        if not name:
+            head = page.query_selector("h1, h2, h3")
+            name = re.sub(r"\s*\(S?\d+\)\s*$", "", (head.inner_text() if head else "") or "").strip()
+        bid_when = page.evaluate(_FIELD_JS, "bid date") or ""
+        address = (page.evaluate(_FIELD_JS, "address") or "").strip() or None
+        folders = [f for f in page.evaluate(_FOLDERS_JS, list(BIDTRACER_FOLDERS)) if f[2] > 0]
+        if not name:
+            _bidtracer_debug(page, "bid_page")
+            return None
+        run.progress(f"{name}: bid date {bid_when or 'not shown'}; files in "
+                     + (", ".join(f"{t} ({n})" for t, _h, n in folders) or "no folder"))
+        docs = []
+        for text, href, _n in folders:
+            docs += _bidtracer_folder(fetcher, page, url, text, href, run)
+    finally:
+        page.close()
+    return {"name": name[:200], "site": "Bidtracer", "docs": docs,
+            "bid_date": site_agent.parse_date(bid_when) if bid_when else None,
+            "bid_time": site_agent.parse_time(bid_when) if bid_when else None,
+            "location": address, "holders": None}
+
+
+def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):
+    """One folder's files, from its Download -> Download All zip:
+    [(key, filename, bytes)]. The key is stable across re-reads (the bid's
+    link + folder/filename), so a re-read only checks new files."""
+    run.progress(f"Downloading {folder} — Download All")
+    page = fetcher._open_page(href) if href.startswith("http") else None
+    if page is None:   # a script link: click it from a fresh copy of the bid page
+        page = fetcher._open_page(bid_url)
+        site_agent._click_text(page, folder)
+    caught = []
+    page.on("download", lambda d: caught.append(d))
+    page.context.on("page", lambda p: p.on("download", lambda d: caught.append(d)))   # a download that opens its own tab
+    try:
+        toggle = page.locator("button, a").filter(has_text=re.compile(r"^\s*Download\s*$"))
+        toggle = next((toggle.nth(i) for i in range(toggle.count()) if toggle.nth(i).is_visible()), None)
+        if toggle is None:
+            raise ValueError("no Download menu on the folder page")
+        toggle.hover()
+        toggle.click(timeout=5000)
+        item = page.get_by_text("Download All", exact=True).first
+        item.click(timeout=5000, force=not item.is_visible())
+        deadline = time.time() + BIDTRACER_DOWNLOAD_S
+        while not caught and time.time() < deadline:
+            page.wait_for_timeout(500)
+        if not caught:
+            raise ValueError(f"no download came within {BIDTRACER_DOWNLOAD_S // 60} minutes")
+        dl = caught[0]
+        path = dl.path()
+        if not path or os.path.getsize(path) > BIDTRACER_MAX_ZIP:
+            raise ValueError("the download was empty or too large")
+        with open(path, "rb") as f:
+            data = f.read()
+    except Exception as e:
+        run.progress(f"Couldn't download {folder}: {e}"[:200])
+        _bidtracer_debug(page, f"{folder.lower()}_folder")
+        return []
+    finally:
+        page.close()
+    fn = (dl.suggested_filename or f"{folder}.zip").strip()
+    if data[:2] != b"PK":   # a folder with one file may come as just that file
+        return [(f"{bid_url}#{folder}/{fn}", fn[:200], data)] if fn.lower().endswith(browser_crawl.DOC_EXT) else []
+    out = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for member in zf.namelist():
+                if member.lower().endswith(browser_crawl.DOC_EXT):
+                    out.append((f"{bid_url}#{folder}/{member}", member.rsplit("/", 1)[-1][:200], zf.read(member)))
+    except zipfile.BadZipFile as e:
+        run.progress(f"{folder}'s zip couldn't be opened ({e})")
+    run.progress(f"{folder}: {len(out)} file(s)")
+    return out
+
+
+def _bidtracer_debug(page, what):
+    """A screenshot and the page's HTML in debug/, for when Bidtracer's pages change."""
+    try:
+        os.makedirs("debug", exist_ok=True)
+        page.screenshot(path=f"debug/bidtracer_{what}.png", full_page=True)
+        with open(f"debug/bidtracer_{what}.html", "w") as f:
+            f.write(page.content())
+        print(f"  [listing] saved debug/bidtracer_{what}.png/.html")
+    except Exception:
+        pass
+
+
 def _explore(url, fetcher, ai, run):
     run.progress("No document links on the page — looking around the site for them")
     history = []
@@ -320,7 +453,12 @@ def run_import(row):
         if tried and not tried["ok"]:
             run.progress(f"Signing in to {site['name'] if login else shared['domain']} didn't work: {tried['message']}")
         got = None
-        if site:
+        if _host(url).endswith("bidtracer.com"):
+            try:
+                got = _read_bidtracer(url, fetcher, run)
+            except Exception as e:
+                run.progress(f"Reading it as a Bidtracer bid didn't work ({e}) — reading the page itself"[:200])
+        if got is None and site:
             got = _read_with_adapter(site, url, run) or _read_learned(site, url, fetcher, run)
         if got is None:
             got = _read_generic(url, fetcher, ai, run, site["name"] if site else _host(url))
