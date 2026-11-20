@@ -309,16 +309,23 @@ def _read_bidtracer(url, fetcher, run):
     try:
         if _on_sign_in(page):
             return {"name": "", "site": "Bidtracer", "docs": [], "sign_in": True}
-        name = (page.evaluate(_FIELD_JS, "project name") or "").strip()
+        try:   # the bid's form can come in after the page itself
+            page.wait_for_selector("text=Project Name", timeout=15000)
+        except Exception:
+            pass
+        # Every frame: the bid's form may sit in one.
+        def field(label):
+            return next((v.strip() for fr in page.frames for v in [_try(fr.evaluate, _FIELD_JS, label)] if v), "")
+        name = field("project name")
         if not name:
-            head = page.query_selector("h1, h2, h3")
-            name = re.sub(r"\s*\(S?\d+\)\s*$", "", (head.inner_text() if head else "") or "").strip()
-        bid_when = page.evaluate(_FIELD_JS, "bid date") or ""
-        address = (page.evaluate(_FIELD_JS, "address") or "").strip() or None
-        folders = [f for f in page.evaluate(_FOLDERS_JS, list(BIDTRACER_FOLDERS)) if f[2] > 0]
-        if not name:
+            run.progress(f"This doesn't look like a Bidtracer bid page — it opened {page.url[:120]}"
+                         f" (“{_try(page.title) or ''}”)")
             _bidtracer_debug(page, "bid_page")
             return None
+        bid_when = field("bid date")
+        address = field("address") or None
+        folders = next((f for fr in page.frames for f in [_try(fr.evaluate, _FOLDERS_JS, list(BIDTRACER_FOLDERS))] if f), [])
+        folders = [f for f in folders if f[2] > 0]
         run.progress(f"{name}: bid date {bid_when or 'not shown'}; files in "
                      + (", ".join(f"{t} ({n})" for t, _h, n in folders) or "no folder"))
         docs = []
@@ -330,6 +337,13 @@ def _read_bidtracer(url, fetcher, run):
             "bid_date": site_agent.parse_date(bid_when) if bid_when else None,
             "bid_time": site_agent.parse_time(bid_when) if bid_when else None,
             "location": address, "holders": None}
+
+
+def _try(fn, *args):
+    try:
+        return fn(*args)
+    except Exception:
+        return None
 
 
 def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):

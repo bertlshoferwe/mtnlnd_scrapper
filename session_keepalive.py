@@ -1,8 +1,10 @@
 """
-Keeps saved sign-in sessions alive. Bidtracer's sign-in lasts a day even
-with "Remember me" (2026-11-19), and signing in again means its Cloudflare
-check — so instead, every few hours, each login with a kept session opens a
-page on its site with that session, the way a listing read would. A site
+Keeps saved sign-in sessions alive. Bidtracer's sign-in cookie lasts an
+hour from its last use, even with "Remember me" (2026-11-19), and signing in
+again means its Cloudflare check — so instead each login with a kept session
+opens a page on its site with that session, the way a listing read would:
+when the session's soonest-ending cookie has under DUE_WITHIN_S left, and
+otherwise every MAX_GAP_S. A site
 that slides its expiry along with use hands back fresher cookies, which are
 kept; the session then never runs out. Nothing here ever fills in a sign-in
 form.
@@ -27,8 +29,10 @@ import scraper
 import site_agent
 import supabase_store
 
-INTERVAL_S = int(float(os.environ.get("SESSION_KEEPALIVE_HOURS") or "4") * 3600)
-FIRST_RUN_AFTER_S = 15 * 60
+CHECK_EVERY_S = 15 * 60
+DUE_WITHIN_S = 45 * 60
+MAX_GAP_S = int(float(os.environ.get("SESSION_KEEPALIVE_HOURS") or "4") * 3600)
+FIRST_RUN_AFTER_S = 60
 ENDED = "the saved session has ended — sign in again (Sign in yourself)"
 
 
@@ -51,6 +55,19 @@ def _targets():
         out.append((site.get("name") or login["domain"], login, login["url"],
                     lambda r, s=site: scraper.keep_site_login_result(s.get("requested_by"), s["id"], r)))
     return out
+
+
+_last_visit = {}   # label -> when it was last visited, this process
+
+
+def _due(label, login):
+    """Visit now? When a cookie for the site with an end date has under
+    DUE_WITHIN_S left (Bidtracer's hour), or it's been MAX_GAP_S."""
+    now = time.time()
+    ends = [c["expires"] for c in login.get("session") or []
+            if (c.get("expires") or -1) > 0 and c.get("domain", "").lstrip(".").endswith(login.get("domain") or "")]
+    soonest = min((e for e in ends if e > now - 86400), default=None)
+    return (soonest is not None and soonest - now < DUE_WITHIN_S) or now - _last_visit.get(label, 0) > MAX_GAP_S
 
 
 def _visit(ctx, login, url):
@@ -77,7 +94,7 @@ def _visit(ctx, login, url):
 
 
 def run_once():
-    targets = _targets()
+    targets = [t for t in _targets() if _due(t[0], t[1])]
     if not targets:
         return
     from playwright.sync_api import sync_playwright
@@ -86,6 +103,7 @@ def run_once():
         ctx = browser.new_context(user_agent=site_agent.UA)
         try:
             for label, login, url, keep in targets:
+                _last_visit[label] = time.time()
                 try:
                     result = _visit(ctx, login, url)
                 except Exception as e:
@@ -106,4 +124,4 @@ def loop():
             run_once()
         except Exception as e:
             print(f"  ! [keepalive] {e}", flush=True)
-        time.sleep(INTERVAL_S)
+        time.sleep(CHECK_EVERY_S)
