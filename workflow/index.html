@@ -850,6 +850,9 @@ textarea{min-height:90px;resize:vertical}
 .dtrow .dlbtn{margin-right:6px}
 .dtrow .dlbtn.arm{width:auto;padding:0 8px;font-size:12px;color:var(--high)}
 .dtrow .dlbtn+.dlbtn{margin-left:-4px}
+.dtrow .dlbtn:not(.arm),.dtn .dlbtn{opacity:0}
+.dtrow:hover .dlbtn,.dtrow:focus-within .dlbtn,.dtn:hover .dlbtn,.dtn:focus-within .dlbtn{opacity:1}
+@media (hover:none){.dtrow .dlbtn,.dtn .dlbtn{opacity:1}}
 .dtrow label.dlbtn{cursor:pointer;margin-bottom:0}
 .dtn .attin{flex:1;min-width:0;font-weight:600}
 .ftabbar .fnew{margin-left:auto}
