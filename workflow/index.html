@@ -845,6 +845,12 @@ textarea{min-height:90px;resize:vertical}
 .dtn .tct{flex:0 0 auto;font-size:12px;color:var(--muted)}
 .dtn .tic{flex:0 0 auto;color:var(--muted)}
 .dtn .tsp{flex:0 0 14px}
+.dtrow{display:flex;align-items:center}
+.dtrow .dtn{flex:1;min-width:0}
+.dtrow .dlbtn{margin-right:6px}
+.dtrow .dlbtn.arm{width:auto;padding:0 8px;font-size:12px;color:var(--high)}
+.dtrow .dlbtn:not(.arm){opacity:0}
+.dtrow:hover .dlbtn,.dtrow .dlbtn:focus-visible{opacity:1}
 .phwrap{overflow:auto;max-height:456px;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
 .phwrap::-webkit-scrollbar{width:10px;height:10px}
 .phwrap::-webkit-scrollbar-corner{background:transparent}
@@ -4298,8 +4304,10 @@ img.who{object-fit:cover;background:var(--chip)}
     var open=ui.docOpen||{},h="",nat=function(a,b){return a.localeCompare(b,undefined,{numeric:true})};
     Object.keys(node.dirs).sort(nat).forEach(function(k){
       var c=node.dirs[k],p=path+"/"+k,o=!!open[p];
-      h+='<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
-        '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>';
+      var del=!leaf&&is&&canAct()&&!/^\/From /.test(p);   // a duplicate project's "From <site>" folder isn't this project's to remove
+      h+=(del?'<div class="dtrow">':'')+'<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
+        '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>'+
+        (del?'<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Remove '+esc(k)+' from Bid Docs" aria-label="Remove '+esc(k)+' from Bid Docs">'+(ui.docArm===p?'Tap to remove':ic("trash",14))+'</button></div>':'');
       if(o)h+=treeHTML(c,p,depth+1,is,leaf);
     });
     node.files.slice().sort(function(a,b){return nat(a.name,b.name)}).forEach(function(x){
@@ -5773,6 +5781,17 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");ui.fmenu=false;renderAttach();return}
     if((el=t.closest("[data-upretry]"))){upRetry(ui.issueId);return}
     if((el=t.closest("[data-upclear]"))){upClear(ui.issueId);return}
+    if((el=t.closest("[data-docdel]"))){   // take a folder out of Bid Docs: tap twice
+      var dd=el.getAttribute("data-docdel"),db=byId(ui.issueId);
+      if(!db)return;
+      if(ui.docArm!==dd){ui.docArm=dd;renderAttach();return}
+      ui.docArm=null;
+      fetch("/api/"+encodeURIComponent(db.divisionId)+"/projects/remove-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:srcKey(db),folder:dd.slice(1)})})
+        .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})
+        .then(function(d){toast(d.removed+(d.removed===1?" file":" files")+" removed");delete ui.bs[db.id];bsLoad(db);renderAttach()})
+        .catch(function(e){toast("Couldn’t remove it: "+e.message,3500)});
+      return;
+    }
     if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
     if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
     if(t.closest("[data-fmore]")){ui.fmenu=!ui.fmenu;renderAttach();return}

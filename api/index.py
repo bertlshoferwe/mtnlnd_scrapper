@@ -21,6 +21,7 @@ Routes:
   POST /api/<division_id>/sites/<site_id>/active   turn a site on or off for this division
   POST /api/<division_id>/sites/reorder      persist this division's drag-to-reorder (also its scan order)
   DEL  /api/<division_id>/sites/<site_id>     remove a site for every division (or clear a request)
+  POST /api/<division_id>/projects/remove-folder   take a folder out of a project's Bid Docs: {"key", "folder"}
   GET/POST /api/<division_id>/logins         the division's websites behind a sign-in (kept as sessions, no passwords)
   DEL  /api/<division_id>/logins/<login_id>  remove one
   POST /api/<division_id>/logins/<login_id>/signin   "Sign in" in the scan worker's browser
@@ -1506,6 +1507,20 @@ def api_project_bid_info(division_id):
         "files": supabase_store.load_project_files(division_id, key),
         "holders": holders, "holders_refreshed_at": refreshed_at,
     })
+
+
+@app.route("/api/<division_id>/projects/remove-folder", methods=["POST"])
+def api_project_remove_folder(division_id):
+    """Body: {"key", "folder"} — take a folder out of the project's Bid Docs
+    (see supabase_store.remove_project_folder). Returns {"removed": n}."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    key, folder = (data.get("key") or "").strip(), (data.get("folder") or "").strip().strip("/")
+    if not key or not folder:
+        return jsonify({"error": "key and folder are required"}), 400
+    return jsonify({"ok": True, "removed": supabase_store.remove_project_folder(division_id, key, folder)})
 
 
 @app.route("/api/<division_id>/projects/plan-holders", methods=["GET"])

@@ -396,14 +396,14 @@ def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):
         page.close()
     fn = (dl.suggested_filename or f"{folder}.zip").strip()
     if data[:2] != b"PK":   # a folder with one file may come as just that file
-        return [(f"{bid_url}#{folder}/{fn}", f"Bidtracer/{folder}/{fn}"[:200], data)] if fn.lower().endswith(browser_crawl.DOC_EXT) else []
+        return [(f"{bid_url}#{folder}/{fn}", f"{folder}/{fn}"[:200], data)] if fn.lower().endswith(browser_crawl.DOC_EXT) else []
     out = []
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for member in zf.namelist():
                 if member.lower().endswith(browser_crawl.DOC_EXT):
                     base = member.rsplit("/", 1)[-1]
-                    out.append((f"{bid_url}#{folder}/{member}", f"Bidtracer/{folder}/{base}"[:200], zf.read(member)))
+                    out.append((f"{bid_url}#{folder}/{member}", f"{folder}/{base}"[:200], zf.read(member)))
     except zipfile.BadZipFile as e:
         run.progress(f"{folder}'s zip couldn't be opened ({e})")
     run.progress(f"{folder}: {len(out)} file(s)")
@@ -495,14 +495,12 @@ def run_import(row):
         return
 
     # The project the bid already shows, if it has one (its files go in with the
-    # rest, in a folder named for the site — "Bidtracer/Plans/..."); else the one
-    # it was read into before (a re-read), so files add to it; else a new one.
+    # rest); else the one it was read into before (a re-read), so files add to
+    # it; else a new one. Files removed from Bid Docs count as had, so they stay gone.
     linked = (supabase_store.workflow_bid_due(bid_id) or {}).get("source_project_id")
     key = linked or row.get("project_key") or f"{got['site']} — {got['name']}"
-    if linked:
-        folder = re.sub(r"[/\\]+", " ", got["site"]).strip() + "/"
-        got["docs"] = [(u, fn if fn.startswith(folder) else folder + fn, c) for u, fn, c in got["docs"]]
-    have = {f["url"] for f in supabase_store.load_project_files(division_id, key, with_duplicates=False)}
+    have = {f["url"] for f in supabase_store.load_project_files(division_id, key, with_duplicates=False,
+                                                                include_removed=True)}
     new_docs = [d for d in got["docs"] if d[0] not in have]
     run.progress(f"Found {len(got['docs'])} document(s)" + (f", {len(new_docs)} new" if have else ""))
 

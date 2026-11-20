@@ -2228,13 +2228,14 @@ def duplicate_keys(division_id, project_key):
             if d.get("decision") == "duplicate" and d.get("duplicate_of") == project_key]
 
 
-def load_project_files(division_id, project_key, with_duplicates=True):
+def load_project_files(division_id, project_key, with_duplicates=True, include_removed=False):
     """[{"filename", "url", "status", "keywords"}] — one project's documents,
     newest row per filename (shown without the leading "<project> - "), for
     the bid board's Bid Docs tab. Paged, since a ConstructConnect project can
     have hundreds of files. Projects marked as its duplicates add theirs
-    under a "From <site>/" folder."""
-    out = _load_project_files(division_id, project_key)
+    under a "From <site>/" folder. Files removed from Bid Docs
+    (remove_project_folder) are left out unless `include_removed`."""
+    out = _load_project_files(division_id, project_key, include_removed)
     if with_duplicates:
         for dk in duplicate_keys(division_id, project_key):
             site, name = _split_site(dk)
@@ -2243,7 +2244,12 @@ def load_project_files(division_id, project_key, with_duplicates=True):
     return out
 
 
-def _load_project_files(division_id, project_key):
+def _project_file_name(project, fn):
+    """Filenames are stored as "<project> - <path>"; the bid already says which project."""
+    return fn[len(project) + 3:] if project and fn.startswith(project + " - ") else fn
+
+
+def _load_project_files(division_id, project_key, include_removed=False):
     rows, start, step = [], 0, 1000
     while True:
         res = (
@@ -2263,13 +2269,35 @@ def _load_project_files(division_id, project_key):
         if not fn or fn in seen or not r.get("document_url"):
             continue
         seen.add(fn)
-        # Filenames are stored as "<project> - <path>"; the bid already says which project.
-        name = fn[len(project) + 3:] if project and fn.startswith(project + " - ") else fn
+        if r.get("status") == "Removed" and not include_removed:
+            continue
+        name = _project_file_name(project, fn)
         out.append({
             "filename": name, "url": r["document_url"], "status": r.get("status") or "",
             "keywords": [k.strip() for k in (r.get("matched_keywords") or "").split(",") if k.strip()],
         })
     return out
+
+
+def remove_project_folder(division_id, project_key, folder):
+    """Take a folder out of a project's Bid Docs: its files' rows are marked
+    "Removed" (kept, so a listing re-read or the daily scan doesn't bring
+    them back). `folder` is a path as Bid Docs shows it ("Plans",
+    "Plans/Civil"). Returns how many files were removed."""
+    _, project = _split_site(project_key)
+    prefix = folder.strip("/") + "/"
+    ids, start, step = [], 0, 1000
+    while True:
+        res = (get_client().table("scan_results").select("id,filename")
+               .eq("division_id", division_id).eq("site", project_key)
+               .range(start, start + step - 1).execute())
+        ids += [r["id"] for r in res.data if _project_file_name(project, r.get("filename") or "").startswith(prefix)]
+        if len(res.data) < step:
+            break
+        start += step
+    for i in range(0, len(ids), 200):
+        get_client().table("scan_results").update({"status": "Removed"}).in_("id", ids[i:i + 200]).execute()
+    return len(ids)
 
 
 def fit_training_stats(division_id):
