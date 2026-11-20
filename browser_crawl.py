@@ -264,8 +264,8 @@ def _bot_check_passed(page):
 # A sign-in form's "Remember me" box (Bidtracer's, and the usual "Keep me
 # signed in" variants) — ticked so the site hands out a long-lived session
 # instead of one that ends with the browser, since the session is kept.
-_REMEMBER_ME = re.compile(
-    r"remember|(keep|stay) (me )?(signed|logged) in|trust this (device|computer|browser)", re.I)
+_REMEMBER_ME = re.compile(   # "persist": ASP.NET's name for it (Bidtracer's is chkPersist)
+    r"remember|persist|(keep|stay) (me )?(signed|logged) in|trust this (device|computer|browser)", re.I)
 
 
 def _tick_remember_me(page):
