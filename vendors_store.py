@@ -315,6 +315,14 @@ def finish_run(run_id, ok, method=None, reason=None):
                                               "finished_at": _now()}).eq("id", run_id).execute()
 
 
+def fail_running(reason):
+    """Mark pulls still 'running' as failed — for when the worker starts, since
+    one that was running when it stopped can't be running now."""
+    rows = _db().table("vendor_scrape_runs").update({"status": "failed", "failure_reason": reason, "finished_at": _now()}) \
+        .eq("status", "running").execute().data or []
+    return len(rows)
+
+
 def last_runs():
     """{vendor_id: its most recent pull}."""
     out = {}

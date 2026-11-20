@@ -39,6 +39,7 @@ TIMEOUT_S = 20
 MAX_PAGES = 20
 MAX_PRODUCTS = 600
 WEEK_S = 7 * 86400
+DAY_S = 86400   # Pull now skips a vendor pulled this recently
 CHECK_EVERY_S = 3600
 FIRST_RUN_AFTER_S = 300
 _PRODUCTISH = re.compile(r"/(products?|catalog|shop|store|category|categories|collections?|items?|equipment|supplies)(/|$|\?)", re.I)
@@ -449,23 +450,33 @@ def pull_all():
 
 
 def run_due(force=False):
-    """Pull every vendor with a website not pulled in a week (every one, with
-    force), one at a time."""
+    """Pull every vendor with a website not pulled in a week, one at a time.
+    With force (Pull now): every one not pulled in the last day — a pull that
+    failed in that time is tried again."""
+    from datetime import datetime
     runs = vs.last_runs()
     now = time.time()
     for v in vs.all_vendors():
         last = runs.get(v["id"])
         if not v.get("website"):
             continue
-        if last and not force:
-            from datetime import datetime
-            started = datetime.fromisoformat(last["started_at"].replace("Z", "+00:00")).timestamp()
-            if now - started < WEEK_S:
+        if last:
+            age = now - datetime.fromisoformat(last["started_at"].replace("Z", "+00:00")).timestamp()
+            if force and last["status"] != "failed" and age < DAY_S:
+                print(f"  [vendors] {v['name']}: pulled in the last day — skipped", flush=True)
+                continue
+            if not force and age < WEEK_S:
                 continue
         pull(v["id"])
 
 
 def loop():
+    try:
+        n = vs.fail_running("The pull stopped partway: the scan worker restarted")
+        if n:
+            print(f"  [vendors] {n} pull(s) cut off by the restart marked failed", flush=True)
+    except Exception as e:
+        print(f"  ! [vendors] couldn't tidy up interrupted pulls: {e}", flush=True)
     time.sleep(FIRST_RUN_AFTER_S)
     while True:
         try:

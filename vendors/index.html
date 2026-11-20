@@ -726,7 +726,7 @@ var A={
  atab:function(el){S.atab=el.dataset.id},
  approve:function(el){decide(el,true);return 'skip'},
  reject:function(el){decide(el,false);return 'skip'},
- pullall:function(){api('/api/vendors/admin/pull-all',{method:'POST'}).then(function(d){toast(d.message||'Pulling every vendor now');pollAdmin()}).catch(fail);return 'skip'},
+ pullall:function(){api('/api/vendors/admin/pull-all',{method:'POST'}).then(function(d){toast(d.message||'Pulling every vendor not pulled in the last day');pollAdmin()}).catch(fail);return 'skip'},
  retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
  close:function(){S.panel=null},
  'p-div':function(){S.panel=S.panel==='div'?null:'div'},
