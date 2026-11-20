@@ -1,10 +1,10 @@
 """
-"Sign in yourself": for a saved login the scan worker can't sign in with on
-its own (Bidtracer's Cloudflare check turns the automatic sign-in away), the
-sign-in page is opened in a browser here, on the scan worker, and the bid
-board shows it as a live picture, passing the person's clicks and typing
-through. The username and password are filled in and "Remember me" ticked
-first, so usually all that's left is the check and the sign-in button.
+"Sign in": the sign-in page is opened in a browser here, on the scan worker,
+and the bid board shows it as a live picture, passing the person's clicks
+and typing through. Settings → Logins keeps no username or password, so the
+person signs in as they normally would; for a site's own login (which has
+them) they're filled in and "Remember me" ticked first, so usually all
+that's left is a Cloudflare check and the sign-in button.
 
 Once they're signed in, the browser's cookies are kept as the login's
 session (the same session_enc an automatic sign-in keeps), so later reads
@@ -70,7 +70,7 @@ class SignIn:
 
     def state(self):
         return {"id": self.id, "status": self.status, "message": self.message, "url": self.url,
-                "domain": self.login["domain"], "username": self.login["username"]}
+                "domain": self.login["domain"], "username": self.login.get("username")}
 
     def call(self, fn):
         """Runs fn(page) on the browser's thread and returns what it returns."""
@@ -177,9 +177,12 @@ class SignIn:
         return self._page
 
     def _open(self):
-        """The sign-in page, filled in as far as it can be without pressing the button."""
+        """The sign-in page, filled in as far as it can be without pressing the
+        button — when the login has a username and password to fill in."""
         page = self._page
         page.goto(self.url, wait_until="domcontentloaded", timeout=browser_crawl.PAGE_TIMEOUT_MS)
+        if not self.login.get("password"):
+            return
         browser_crawl._wait_visible(page, "input[type=password], " + browser_crawl._EMAIL_SELECTOR, 10000)
         pw_input = browser_crawl._visible(page, "input[type=password]")
         user_input = browser_crawl._visible(
@@ -221,7 +224,7 @@ class SignIn:
         else:
             scraper.keep_login_result(self.login["id"], result)
         self.status, self.message = "saved", None
-        print(f"  Sign-in for {self.login['domain']} as {self.login['username']}: session saved "
+        print(f"  Sign-in for {self.login['domain']}: session saved "
               f"({browser_crawl.session_lifetimes(cookies, self.login['domain'])})", flush=True)
 
 
@@ -263,23 +266,29 @@ def start(division_id, login_id=None, url=None):
     """Opens a sign-in (closing any other that's open): for one of the
     division's saved logins by id, or — with just `url`, a listing link that
     needed signing in — the login reading that link uses, the way
-    listing_import.run_import picks it (the site's own login first). `url` is
-    also where to sign in when the login has no sign-in page saved."""
+    listing_import.run_import picks it (the site's own login first; else the
+    division's for its domain, added to Settings → Logins if it isn't there).
+    `url` is also where to sign in when the login has no sign-in page saved;
+    with neither, the last listing read on that site, which sends the browser
+    through its sign-in and back."""
     global _current
     if login_id:
         row = next((r for r in supabase_store.load_site_logins(division_id) if r["id"] == login_id), None)
         if row is None:
             raise ValueError("no such login")
-        login = scraper.login_from_row(row, url)
+        login = scraper.login_from_row(row, url or supabase_store.last_listing_url(division_id, row["domain"]))
     elif url:
         import listing_import
         site = listing_import._site_for(division_id, url)
         login = (scraper._site_login(site) if site and site.get("login_username")
                  else scraper.division_login(division_id, url))
+        if login is None and supabase_store.login_domain(url):
+            domain = ".".join(supabase_store.login_domain(url).split(".")[-2:])
+            login = scraper.login_from_row(supabase_store.save_site_login(division_id, domain), url)
     else:
         raise ValueError("a login or a link is needed")
     if login is None:
-        raise ValueError("there's no saved login for that site, or it couldn't be decrypted")
+        raise ValueError("there's no saved login for that site, or its session couldn't be decrypted")
     with _lock:
         if _current:
             _current.close("Another sign-in was started.")

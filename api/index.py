@@ -21,9 +21,9 @@ Routes:
   POST /api/<division_id>/sites/<site_id>/active   turn a site on or off for this division
   POST /api/<division_id>/sites/reorder      persist this division's drag-to-reorder (also its scan order)
   DEL  /api/<division_id>/sites/<site_id>     remove a site for every division (or clear a request)
-  GET/POST /api/<division_id>/logins         the division's logins for sites behind a sign-in (write-only: add or replace)
+  GET/POST /api/<division_id>/logins         the division's websites behind a sign-in (kept as sessions, no passwords)
   DEL  /api/<division_id>/logins/<login_id>  remove one
-  POST /api/<division_id>/logins/<login_id>/signin   "Sign in yourself" in the scan worker's browser
+  POST /api/<division_id>/logins/<login_id>/signin   "Sign in" in the scan worker's browser
   POST /api/<division_id>/signin                     the same for whichever login reads a link: {"url"}
   GET  /api/<division_id>/signin/<id>[/frame], POST .../input   its state, picture, and the person's input
   POST /api/<division_id>/site-requests      request a site (name, url, note)
@@ -436,17 +436,18 @@ def api_add_site(division_id):
 
 
 def _public_login(row):
-    """A saved login without its secrets — they never go back to the browser."""
-    return {k: row.get(k) for k in ("id", "domain", "username", "login_url", "last_ok", "last_checked_at",
-                                    "last_error", "updated_at")}
+    """A saved login without its session — it never goes back to the browser."""
+    return {**{k: row.get(k) for k in ("id", "domain", "login_url", "last_ok", "last_checked_at",
+                                       "last_error", "updated_at")},
+            "signed_in": bool(row.get("session_enc"))}
 
 
 @app.route("/api/<division_id>/logins", methods=["GET", "POST"])
 def api_site_logins(division_id):
     """The division's logins for sites behind a sign-in (BuildingConnected,
-    PlanHub, ...). POST {"domain", "username", "password", "login_url"} adds
-    one, or replaces the one saved for that domain — write-only, so a change
-    is always a whole new username and password."""
+    PlanHub, ...). POST {"domain", "login_url"} adds a website (or changes its
+    sign-in page). No username or password is kept: a person signs in through
+    .../signin and the session it leaves is what's kept."""
     _, err = _require_division(division_id)
     if err:
         return err
@@ -455,21 +456,14 @@ def api_site_logins(division_id):
             return jsonify([_public_login(r) for r in supabase_store.load_site_logins(division_id)])
         data = request.get_json(force=True, silent=True) or {}
         domain = supabase_store.login_domain(data.get("domain"))
-        username = (data.get("username") or "").strip()
-        password = data.get("password") or ""
         login_url = (data.get("login_url") or "").strip() or None
         if not domain:
             raise ValueError("that doesn't look like a website — e.g. buildingconnected.com")
-        if not username or not password:
-            raise ValueError("a username and password are both needed")
         if login_url and not re.match(r"^https?://[^\s/]+\.[^\s]+$", login_url):
             raise ValueError("the sign-in page doesn't look like a link")
-        row = supabase_store.save_site_login(division_id, domain, username,
-                                             credentials.encrypt_password(password), login_url)
+        row = supabase_store.save_site_login(division_id, domain, login_url)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except RuntimeError as e:   # CREDENTIALS_KEY not set
-        return jsonify({"error": str(e)}), 500
     return jsonify({"ok": True, "login": _public_login(row)})
 
 
@@ -482,7 +476,7 @@ def api_delete_site_login(division_id, login_id):
     return jsonify({"ok": True})
 
 
-# "Sign in yourself" (the scan worker's live_signin.py): a sign-in the worker
+# "Sign in" (the scan worker's live_signin.py): a sign-in the worker
 # can't do alone (a Cloudflare check) done by a person in the worker's own
 # browser, shown here as a picture. These just pass the calls along.
 

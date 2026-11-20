@@ -4747,6 +4747,7 @@ function buildFileRow(f, displayName) {
     m.className = 'f-meta';
     m.textContent = f.status === 'Download failed'
       ? "Couldn't download this file."
+      : f.status === 'Saved' ? 'Saved from the listing — not checked for keywords.'
       : (f.status === 'No text extracted' ? 'No readable text in this file.' : 'No keywords matched.');
     body.appendChild(m);
   }

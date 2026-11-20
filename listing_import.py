@@ -17,9 +17,9 @@ How a link is read, first that works:
      reads the project name, bid date and time, location and plan holders.
      When that finds no documents, the AI clicks around for a few steps
      (tabs, "Documents", "Download") to find them.
-Documents go through scraper.process_document like any scan (downloaded,
-keyword-checked, logged under the project), then the bid is linked to the
-project. A due date or time the bid already has is never overwritten; a
+Documents go through scraper.process_document like any scan, but are only
+downloaded and saved under the project — not read or keyword-checked — then
+the bid is linked to the project. A due date or time the bid already has is never overwritten; a
 different one from the listing is kept as result.conflict for the board to offer.
 State lives in listing_imports (migrations/002_listing_imports.sql).
 """
@@ -189,11 +189,11 @@ def _needs_login(run, url, login, tried):
     host = _host(url)
     domain = login["domain"] if login and login.get("domain") else ".".join(host.split(".")[-2:])
     if not login:
-        msg = f"This listing is behind a sign-in. Add a login for {domain} to read it."
+        msg = f"This listing is behind a sign-in. Sign in to {domain} to read it."
     elif tried and not tried["ok"]:
-        msg = f"Signing in to {domain} didn't work: {tried['message']}."
+        msg = f"Not signed in to {domain}: {tried['message']}."
     else:
-        msg = f"Signed in to {domain}, but the listing still shows a sign-in page."
+        msg = f"Signed in to {domain}, but the listing still shows a sign-in page — sign in again."
     run.progress(msg)
     run.save(status="failed", message=msg, result={"needs_login": domain, "has_login": bool(login)},
              last_read_at=_now())
@@ -466,7 +466,7 @@ def run_import(row):
     login = scraper._site_login(site) if site and site.get("login_username") else None
     shared = None if login else scraper.division_login(division_id, url)
     if shared:
-        run.progress(f"Signing in to {shared['domain']} as {shared['username']}")
+        run.progress(f"Using the saved sign-in for {shared['domain']}")
     ai = ai_provider.get_provider()
     fetcher = site_agent.Fetcher(login or shared)
     try:
@@ -516,15 +516,11 @@ def run_import(row):
         supabase_store.save_project_plan_holders(division_id, {key: got["holders"]})
 
     if new_docs:
-        embedder = ai_provider.get_embedder()
-        keywords = supabase_store.load_keywords(division_id)
-        ctx = {"keywords": keywords, "embedder": embedder, "ai_client": ai,
-               "keyword_vectors": scraper.ensure_keyword_embeddings(division_id, embedder) if keywords else {}}
         run_date = _now()
         for i, (doc_url, filename, content) in enumerate(new_docs, start=1):
-            run.progress(f"Checking {i} of {len(new_docs)}: {filename}"[:200])
-            scraper.process_document(division_id, ctx, run_date, key, doc_url, doc_url, filename,
-                                     content=content, source_url=url, cookies=cookies)
+            run.progress(f"Saving {i} of {len(new_docs)}: {filename}"[:200])
+            scraper.process_document(division_id, None, run_date, key, doc_url, doc_url, filename,
+                                     content=content, source_url=url, cookies=cookies, check=False)
     elif not got["docs"] and not have:
         # Still a project in Bid Scout (so the bid can link and show its date / plan holders).
         supabase_store.log_scan_row(division_id, _now(), key, url, "", "", 0, "", "No documents found", "",

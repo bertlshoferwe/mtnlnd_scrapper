@@ -554,14 +554,16 @@ def division_login(division_id, url):
 
 
 def login_from_row(row, url=None):
-    """A site_logins row, decrypted, as division_login() returns it."""
+    """A site_logins row, decrypted, as division_login() returns it. These keep
+    no username or password (migrations/005), only the session a person's
+    sign-in left: with none, or one that has ended, the read finds itself
+    signed out and says to sign in again."""
     try:
-        password = credentials.decrypt_password(row["password_enc"])
         session = json.loads(credentials.decrypt_password(row["session_enc"])) if row.get("session_enc") else None
     except Exception as e:
-        print(f"  ! Could not decrypt the saved login for {row['domain']}: {e}")
+        print(f"  ! Could not decrypt the saved session for {row['domain']}: {e}")
         return None
-    return {"id": row["id"], "domain": row["domain"], "username": row["username"], "password": password,
+    return {"id": row["id"], "domain": row["domain"], "username": None, "password": None,
             "url": row.get("login_url") or url or f"https://{row['domain']}/", "session": session}
 
 
@@ -1009,14 +1011,13 @@ def ai_semantic_keyword_scan(client, filename, pages, keywords):
 # ---------------------------------------------------------------------------
 
 def process_document(division_id, ctx, run_date, row_site_name, doc_key, doc_url, filename,
-                     content=None, source_url=None, cookies=None):
+                     content=None, source_url=None, cookies=None, check=True):
     """Download one document (unless its bytes were captured already), pull
     its text, check it against the keywords (literal, then the AI pass) and
     log the row. Returns the logged row. `ctx` holds keywords,
     keyword_vectors, embedder and ai_client for the division. Shared by the
-    daily scan and listing_import.py (a link pasted on a bid)."""
-    keywords, keyword_vectors = ctx["keywords"], ctx["keyword_vectors"]
-    embedder, ai_client = ctx["embedder"], ctx["ai_client"]
+    daily scan and listing_import.py (a link pasted on a bid), which passes
+    check=False: its files are just saved ("Saved"), not read — `ctx` unused."""
     raw = content if content is not None else download_document(doc_url, cookies=cookies)
     if raw is None:
         row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Download failed", ""]
@@ -1024,15 +1025,22 @@ def process_document(division_id, ctx, run_date, row_site_name, doc_key, doc_url
         return row
 
     # Browser-captured content (no real per-document URL, e.g.
-    # ConstructConnect) can't be viewed later via a live re-fetch —
-    # persist the bytes once, now, while we actually have them
-    # ("already scanned" skipping means we'll never see them again
-    # after this run).
+    # ConstructConnect, or one out of a zip like Bidtracer's) can't be
+    # viewed later via a live re-fetch — persist the bytes once, now,
+    # while we actually have them ("already scanned" skipping means we'll
+    # never see them again after this run).
     storage_path = (
         supabase_store.upload_document_bytes(division_id, doc_key, raw)
-        if not doc_url else None
+        if not doc_url or content is not None else None
     )
 
+    if not check:
+        row = [run_date, row_site_name, doc_key, filename, "", 0, "", "Saved", ""]
+        supabase_store.log_scan_row(division_id, *row, source_url=source_url, storage_path=storage_path)
+        return row
+
+    keywords, keyword_vectors = ctx["keywords"], ctx["keyword_vectors"]
+    embedder, ai_client = ctx["embedder"], ctx["ai_client"]
     pages, page_numbers_are_real = extract_pages(raw, filename)
 
     # Literal substring pass — the deterministic baseline, always runs.

@@ -328,6 +328,9 @@ def session_lifetimes(cookies, domain):
     return ", ".join(out) or "no cookies for the site"
 
 
+SESSION_ENDED = "the saved sign-in has ended"
+
+
 def _attempt_login(ctx, login, page=None):
     """Best-effort: open the login page, fill the first visible password
     field and a preceding username/email field, submit, and wait for the
@@ -384,9 +387,14 @@ def _attempt_login(ctx, login, page=None):
         # and it was taken for a two-step sign-in's first screen).
         if not pw_input and login.get("session") and not (user_input and _SIGN_IN_URL.search(page.url)):
             cookies = ctx.cookies()
-            print(f"  Still signed in as {login['username']} (saved session: "
+            print(f"  Still signed in as {login.get('username') or login.get('domain')} (saved session: "
                   f"{session_lifetimes(cookies, re.sub(r'^www[.]', '', urlparse(page.url).hostname or ''))})")
             return {"ok": True, "message": None, "session": cookies}
+        if not login.get("password"):
+            # A session-only login (Settings → Logins): signing in is a person's job.
+            msg = (SESSION_ENDED if login.get("session") else "not signed in yet") + " — sign in again"
+            print(f"  ! Login: {msg}")
+            return {"ok": False, "message": msg}
         two_step = not pw_input and user_input
         if two_step:
             # The email first, then the password on the next screen.

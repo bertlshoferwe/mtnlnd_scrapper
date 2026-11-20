@@ -2036,16 +2036,17 @@ def site_login_for(division_id, url):
     return max(hits, key=lambda r: len(r["domain"])) if hits else None
 
 
-def save_site_login(division_id, domain, username, password_enc, login_url=None):
-    """Add a login, or replace the one saved for that domain (a new password
-    clears the old session and status)."""
-    row = {"division_id": division_id, "domain": domain, "username": username, "password_enc": password_enc,
-           "login_url": login_url, "session_enc": None, "last_ok": None, "last_checked_at": None,
-           "last_error": None, "updated_at": datetime.now(timezone.utc).isoformat()}
+def save_site_login(division_id, domain, login_url=None):
+    """Add a website to sign in to, or update the sign-in page of the one saved
+    for that domain (its kept session and status stay). No username or
+    password: the session comes from a person signing in (live_signin.py)."""
+    row = {"division_id": division_id, "domain": domain, "login_url": login_url,
+           "updated_at": datetime.now(timezone.utc).isoformat()}
     try:
         return get_client().table("site_logins").upsert(row, on_conflict="division_id,domain").execute().data[0]
     except Exception as e:
-        raise ValueError(f"couldn't save the login — {SITE_LOGINS_HINT}") from e
+        raise ValueError(f"couldn't save the login — run migrations/005_site_logins_session_only.sql "
+                         f"(and 003 before it) in Supabase") from e
 
 
 def delete_site_login(division_id, login_id):

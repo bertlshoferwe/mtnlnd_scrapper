@@ -1322,7 +1322,7 @@ img.who{object-fit:cover;background:var(--chip)}
   </div>
 </div>
 
-<!-- "Sign in yourself": the scan worker's browser on a site's sign-in page, as a live picture -->
+<!-- "Sign in": the scan worker's browser on a site's sign-in page, as a live picture -->
 <div class="overlay" id="ov-signin" role="dialog" aria-modal="true" aria-labelledby="siTitle">
   <div class="sheet signin">
     <h3 id="siTitle">Sign in</h3>
@@ -2636,10 +2636,9 @@ img.who{object-fit:cover;background:var(--chip)}
       if((cd||ct)&&canAct())h+='<div class="lsrow lsconf">The listing says '+esc([cd&&shortDate(cd),ct&&fmtTime(ct)].filter(Boolean).join(" · "))+' <button class="btn small" data-lsuse>Use it</button></div>';
       if(canAct())h+='<button class="linkbtn" data-lsread style="font-size:12px">Read it again</button>';
     }else{
-      var need=!im.stale&&(im.result||{}).needs_login;   // behind a sign-in: add (or replace) the division's login for it
+      var need=!im.stale&&(im.result||{}).needs_login;   // behind a sign-in: sign in (adds the website to Settings → Logins if it isn't there)
       h+='<div class="fine lsbad">'+esc(im.stale?"Reading it stopped partway.":(im.message||"Couldn’t read the listing."))+'</div>'+
-        (canAct()&&need&&im.result.has_login?'<button class="btn small primary" data-lssign style="margin:6px 8px 0 0">Sign in yourself</button>':'')+
-        (canAct()&&need?'<button class="btn small" data-lsneed="'+esc(need)+'" style="margin:6px 8px 0 0">'+(im.result.has_login?'Replace the login for ':'Add a login for ')+esc(need)+'</button>':'')+
+        (canAct()&&need?'<button class="btn small primary" data-lssign style="margin:6px 8px 0 0">Sign in to '+esc(need)+'</button>':'')+
         (canAct()?'<button class="linkbtn" data-lsread style="font-size:12px">Try again</button>':'');
     }
     return h+'</div>';
@@ -5184,69 +5183,61 @@ img.who{object-fit:cover;background:var(--chip)}
     if(G.maybe.length){h+='<h4 style="margin:14px 0 4px">Maybe the same · '+G.maybe.length+'</h4><p class="fine" style="margin:0 0 8px">One name has every important word of the other.</p>';G.maybe.slice(0,100).forEach(function(l){h+=dupGroupHTML(l)})}
     return h+disH+'</section>';
   }
-  /* Logins for sites whose documents sit behind a sign-in (BuildingConnected, PlanHub, SmartBid), one per
-     domain for the division. The scan worker signs in with one when it reads a link on that domain. Kept
-     encrypted on the server and never sent back: a login is replaced (a whole new username and password)
-     or removed, not shown. ui.lg={div,list,loading,err,form:{domain,username,password,login_url,lock},busy,arm,reread} */
+  /* Websites whose documents sit behind a sign-in (BuildingConnected, PlanHub, Bidtracer), one per domain
+     for the division. No username or password is kept: a person signs in through the sign-in window below,
+     the scan worker keeps that browser session and keeps it fresh, and reads a link on that domain with it.
+     A website whose session has ended (or never had one) shows a Sign in button.
+     ui.lg={div,list,loading,err,form:{domain,login_url},busy,arm} */
   function lgApi(div,path,opts){return fetch("/api/"+encodeURIComponent(div)+"/logins"+(path||""),opts||{}).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})}
   function lgLoad(div){
     var L=ui.lg=ui.lg&&ui.lg.div===div?ui.lg:{div:div};L.loading=true;L.err="";
     lgApi(div).then(function(d){if(ui.lg!==L)return;L.list=d;L.loading=false;render()})
       .catch(function(e){if(ui.lg!==L)return;L.loading=false;L.err="Couldn’t load the logins: "+e.message;render()});
   }
-  function lgOpen(div,domain,bid){   // from a bid whose listing needs a login: Settings → Logins, the form started
-    ui.setTab="logins";if(!ui.lg||ui.lg.div!==div)lgLoad(div);
-    ui.lg.form={domain:domain||"",username:"",password:"",login_url:"",lock:false};ui.lg.reread=bid||null;ui.lg.err="";
-    closeOv("ov-issue");openOrgSettings();
-    setTimeout(function(){var f=document.querySelector('[data-lgf="'+(domain?"username":"domain")+'"]');if(f)f.focus()},0);
-  }
+  function lgOk(r){return r.signed_in&&r.last_ok!==false}
   function lgStatus(r){
     var at=r.last_checked_at?shortDate(r.last_checked_at.slice(0,10)):"";
-    if(r.last_ok===true)return '<span>Signed in '+esc(at)+'</span>';
-    if(r.last_ok===false)return '<span class="lsbad">Didn’t sign in '+esc(at)+(r.last_error?': '+esc(r.last_error):'')+'</span>';
-    return '<span>Not used yet</span>';
+    if(lgOk(r))return '<span>Signed in'+(at?' · checked '+esc(at):'')+'</span>';
+    if(r.signed_in)return '<span class="lsbad">Signed out'+(at?' '+esc(at):'')+' — sign in again</span>';
+    return '<span class="lsbad">Not signed in yet</span>';
   }
   function loginsHTML(d){
     if(!ui.lg||ui.lg.div!==d.id)lgLoad(d.id);
     var L=ui.lg,F=L.form;
-    var h='<section class="panel"><div class="phead"><h3>Site logins</h3>'+(canAct()&&!F?'<button class="addbtn" data-lgnew aria-label="Add a login" title="Add a login">'+ic("plus",16)+'</button>':'')+'</div>'+
-      '<p class="fine" style="margin:4px 0 12px">For sites whose documents sit behind a sign-in, like BuildingConnected, PlanHub and SmartBid. A listing link on that site is read signed in, for everyone in '+esc(d.name)+'. Saved passwords can be replaced, never shown.</p>';
+    var h='<section class="panel"><div class="phead"><h3>Site logins</h3>'+(canAct()&&!F?'<button class="addbtn" data-lgnew aria-label="Add a website" title="Add a website">'+ic("plus",16)+'</button>':'')+'</div>'+
+      '<p class="fine" style="margin:4px 0 12px">For sites whose documents sit behind a sign-in, like BuildingConnected, PlanHub and Bidtracer. Sign in once and Bid Scout keeps the sign-in fresh, reading listing links on that site for everyone in '+esc(d.name)+'. No passwords are saved.</p>';
     if(F){
       h+='<div class="lgform">'+
-        '<label for="lg-domain">Website</label><input id="lg-domain" data-lgf="domain" placeholder="buildingconnected.com" autocomplete="off" value="'+esc(F.domain)+'"'+(F.lock?' readonly':'')+'>'+
-        '<label for="lg-user">Username or email</label><input id="lg-user" data-lgf="username" autocomplete="off" value="'+esc(F.username)+'">'+
-        '<label for="lg-pass">Password</label><input id="lg-pass" type="password" data-lgf="password" autocomplete="new-password" value="'+esc(F.password)+'">'+
-        '<label for="lg-url">Sign-in page <span style="font-weight:400">(optional)</span></label><input id="lg-url" data-lgf="login_url" type="url" placeholder="Blank: sign in from the link being read" autocomplete="off" value="'+esc(F.login_url)+'">'+
+        '<label for="lg-domain">Website</label><input id="lg-domain" data-lgf="domain" placeholder="buildingconnected.com" autocomplete="off" value="'+esc(F.domain)+'">'+
+        '<label for="lg-url">Sign-in page <span style="font-weight:400">(optional)</span></label><input id="lg-url" data-lgf="login_url" type="url" placeholder="Blank: the website’s last listing link, or its home page" autocomplete="off" value="'+esc(F.login_url)+'">'+
         (L.err?'<p class="fine lsbad" style="margin:8px 0 0">'+esc(L.err)+'</p>':'')+
-        '<div class="actions" style="margin-top:10px"><button class="btn primary small" data-lgsave'+(L.busy?' disabled':'')+'>'+(L.busy?'Saving…':F.lock?'Replace login':'Save login')+'</button><button class="btn small" data-lgcancel>Cancel</button></div></div>';
+        '<div class="actions" style="margin-top:10px"><button class="btn primary small" data-lgsave'+(L.busy?' disabled':'')+'>'+(L.busy?'Adding…':'Sign in')+'</button><button class="btn small" data-lgcancel>Cancel</button></div></div>';
     }
     if(L.loading&&!L.list)return h+'<p class="fine">Loading…</p></section>';
     if(L.err&&!F)h+='<p class="fine lsbad">'+esc(L.err)+'</p>';
     var list=L.list||[];
-    if(!list.length&&!F&&!L.err)h+='<p class="fine">No logins yet.</p>';
+    if(!list.length&&!F&&!L.err)h+='<p class="fine">No websites yet.</p>';
     list.forEach(function(r){
-      h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(r.domain)+'</b><div class="fine" style="margin:2px 0 0">'+esc(r.username)+' · '+lgStatus(r)+'</div></div>'+
-        (canAct()?'<button class="btn small" data-lgsign="'+esc(r.id)+'">Sign in</button><button class="btn small" data-lgreplace="'+esc(r.id)+'">Replace</button><button class="btn small danger" data-lgdel="'+esc(r.id)+'">'+(L.arm===r.id?'Tap to remove':'Remove')+'</button>':'')+'</div>';
+      h+='<div class="srow"><div style="flex:1 1 200px;min-width:0"><b>'+esc(r.domain)+'</b><div class="fine" style="margin:2px 0 0">'+lgStatus(r)+'</div></div>'+
+        (canAct()?(lgOk(r)?'':'<button class="btn small primary" data-lgsign="'+esc(r.id)+'">Sign in</button>')+'<button class="btn small danger" data-lgdel="'+esc(r.id)+'">'+(L.arm===r.id?'Tap to remove':'Remove')+'</button>':'')+'</div>';
     });
     return h+'</section>';
   }
-  function lgSave(){
+  function lgSave(){   // add the website, then sign in to it
     var L=ui.lg,F=L&&L.form;if(!F||L.busy)return;
-    if(!F.domain.trim()||!F.username.trim()||!F.password){L.err="Fill in the website, username and password.";render();return}
+    if(!F.domain.trim()){L.err="Fill in the website.";render();return}
     L.busy=true;L.err="";render();
-    lgApi(L.div,"",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain:F.domain,username:F.username,password:F.password,login_url:F.login_url})})
+    lgApi(L.div,"",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain:F.domain,login_url:F.login_url})})
       .then(function(d){
         L.busy=false;L.form=null;
         L.list=(L.list||[]).filter(function(r){return r.domain!==d.login.domain}).concat([d.login]).sort(function(a,b){return a.domain.localeCompare(b.domain)});
-        toast("Login saved for "+d.login.domain);
-        var is=L.reread&&byId(L.reread),ls=is&&listingOf(is);L.reread=null;
-        if(is&&ls&&ls.own){closeOv("ov-settings");openIssue(is.id);lsRead(is,ls.url)}else render();   // back to the bid, reading its listing again
+        render();
+        siOpen(L.div,"/logins/"+encodeURIComponent(d.login.id)+"/signin","",null);
       })
-      .catch(function(e){L.busy=false;L.err="Couldn’t save it: "+e.message;render()});
+      .catch(function(e){L.busy=false;L.err="Couldn’t add it: "+e.message;render()});
   }
-  /* "Sign in yourself": for a saved login the scan worker can't sign in with by itself (Bidtracer's
-     Cloudflare check), the worker opens the sign-in page in its own browser with the username and
-     password filled in and Remember me ticked. This shows that page as a picture, refreshed a few times
+  /* "Sign in": the worker opens the sign-in page in its own browser (for a site's own login, with the
+     username and password filled in and Remember me ticked; Settings → Logins keeps neither). This shows that page as a picture, refreshed a few times
      a second, and passes clicks, typing and scrolling through. Once the page leaves the sign-in form the
      worker keeps the session for the login, and reads on that site go straight in from then on.
      ui.si={div,id,state,bid,stopped,q,tb} — q keeps the person's input in order. */
@@ -5270,7 +5261,7 @@ img.who{object-fit:cover;background:var(--chip)}
     $("siTitle").textContent="Sign in to "+st.domain;
     $("siUrl").textContent=st.url||"";
     if(st.status==="starting"||st.status==="open"){
-      $("siMsg").textContent="As "+st.username+" — it’s filled in. Pass the “verify you are human” check if there is one, then press the site’s sign-in button. Click into the page to type.";
+      $("siMsg").textContent=(st.username?"As "+st.username+" — it’s filled in. Pass the “verify you are human” check if there is one, then press the site’s sign-in button.":"Sign in the way you normally would, ticking “Remember me” if there is one. It’s saved once you’re in.")+" Click into the page to type.";
       if(st.status==="open")siCover("");
     }else if(st.status==="saved")siDone(S);
     else{S.stopped=true;siCover(st.message||"This sign-in has ended.")}
@@ -5659,13 +5650,8 @@ img.who{object-fit:cover;background:var(--chip)}
     if(t.closest("[data-adclear]")){var ai2=byId(ui.issueId);if(ai2&&addendumOn(ai2)){clearAddendum(ai2);save();renderIssue();render()}return}
     if(t.closest("[data-reloadpage]")){location.reload();return}
     if(t.closest("[data-dupcancel]")){ui.dupMerge=null;render();return}
-    if(t.closest("[data-lgnew]")&&ui.lg){ui.lg.form={domain:"",username:"",password:"",login_url:"",lock:false};ui.lg.err="";ui.lg.arm=null;render();var lf=$("lg-domain");if(lf)lf.focus();return}
-    if((el=t.closest("[data-lgreplace]"))&&ui.lg){
-      var lr=(ui.lg.list||[]).filter(function(r){return r.id===el.getAttribute("data-lgreplace")})[0];
-      if(lr){ui.lg.form={domain:lr.domain,username:lr.username,password:"",login_url:lr.login_url||"",lock:true};ui.lg.err="";ui.lg.arm=null;render();var lp=$("lg-pass");if(lp)lp.focus()}
-      return;
-    }
-    if(t.closest("[data-lgcancel]")&&ui.lg){ui.lg.form=null;ui.lg.err="";ui.lg.reread=null;render();return}
+    if(t.closest("[data-lgnew]")&&ui.lg){ui.lg.form={domain:"",login_url:""};ui.lg.err="";ui.lg.arm=null;render();var lf=$("lg-domain");if(lf)lf.focus();return}
+    if(t.closest("[data-lgcancel]")&&ui.lg){ui.lg.form=null;ui.lg.err="";render();return}
     if(t.closest("[data-lgsave]")){lgSave();return}
     if((el=t.closest("[data-lgdel]"))&&ui.lg){
       var lid=el.getAttribute("data-lgdel"),LG=ui.lg;
@@ -5680,7 +5666,6 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-lgsign]"))&&ui.lg){siOpen(ui.lg.div,"/logins/"+encodeURIComponent(el.getAttribute("data-lgsign"))+"/signin","",null);return}
     if(t.closest("[data-sisave]")){siQueue({save:true});return}
     if(t.closest("[data-siclose]")){closeOv("ov-signin");return}
-    if((el=t.closest("[data-lsneed]"))){var lb=byId(ui.issueId);if(lb)lgOpen(lb.divisionId,el.getAttribute("data-lsneed"),lb.id);return}
     if((el=t.closest("[data-dupnot]"))){
       var nid=el.getAttribute("data-dupnot"),nb=byId(nid.split(",")[0]),nsp=nb&&spaceOf(nb);
       if(nsp){nsp.marks=(nsp.marks||[]).concat([{id:"notdup-"+uid("m"),kind:"mark",notdup:nid}]);save();render();toast("Marked not the same")}

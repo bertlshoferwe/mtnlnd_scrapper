@@ -37,7 +37,7 @@ Routes:
   POST /propose-rule          body: {"division_id", "site_id", "project",
                               "reason"} — a skip rule for a removed bid
   POST /signin                body: {"division_id", "login_id" or "url"} —
-                              "Sign in yourself" (see live_signin.py)
+                              "Sign in" (see live_signin.py)
   GET  /signin/<id>           its state; /frame a picture of the page
   POST /signin/<id>/input     a click, typing, a key, scrolling, save, close
 
@@ -437,7 +437,7 @@ def learn_cancel():
     return jsonify({"ok": True})
 
 
-# "Sign in yourself" (live_signin.py). Every call names the division, and a
+# "Sign in" (live_signin.py). Every call names the division, and a
 # sign-in only answers to the division that started it.
 
 @app.route("/signin", methods=["POST"])

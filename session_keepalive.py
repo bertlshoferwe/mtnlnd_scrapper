@@ -10,7 +10,7 @@ kept; the session then never runs out. Nothing here ever fills in a sign-in
 form.
 
 A visit that lands on a sign-in form means the session has ended: the login
-is marked failed with a note to sign in again ("Sign in yourself"), and its
+is marked failed with a note to sign in again ("Sign in"), and its
 kept cookies are left as they were (see supabase_store.record_site_login).
 
 The page opened: a site login's own sign-in page or site link (the
@@ -33,7 +33,7 @@ CHECK_EVERY_S = 15 * 60
 DUE_WITHIN_S = 45 * 60
 MAX_GAP_S = int(float(os.environ.get("SESSION_KEEPALIVE_HOURS") or "4") * 3600)
 FIRST_RUN_AFTER_S = 60
-ENDED = "the saved session has ended — sign in again (Sign in yourself)"
+ENDED = browser_crawl.SESSION_ENDED + " — sign in again"
 
 
 def _targets():
@@ -86,7 +86,7 @@ def _visit(ctx, login, url):
             return {"ok": False, "message": ENDED}
         cookies = ctx.cookies()
         host = re.sub(r"^www[.]", "", urlparse(page.url).hostname or "")
-        print(f"  [keepalive] {login['username']}: still signed in "
+        print(f"  [keepalive] {login.get('username') or login['domain']}: still signed in "
               f"({browser_crawl.session_lifetimes(cookies, host)})", flush=True)
         return {"ok": True, "message": None, "session": cookies}
     finally:
