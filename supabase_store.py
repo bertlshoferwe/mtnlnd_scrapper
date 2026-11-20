@@ -2067,6 +2067,29 @@ def record_site_login(login_id, ok, message=None, session_enc=None):
         print(f"  ! Could not record login result: {e}")
 
 
+def logins_with_sessions():
+    """Every saved login holding a kept browser session, for keeping them
+    alive (session_keepalive.py): (site_logins rows, sites rows)."""
+    shared = get_client().table("site_logins").select("*").not_.is_("session_enc", "null").execute().data
+    try:
+        own = (get_client().table("sites").select("*").not_.is_("login_session_enc", "null")
+               .not_.is_("login_username", "null").execute().data)
+    except Exception:
+        own = []   # migrations/004 not run yet
+    return shared, own
+
+
+def last_listing_url(division_id, domain):
+    """The most recently read listing link on `domain` (or a subdomain), or None."""
+    rows = (get_client().table("listing_imports").select("url").eq("division_id", division_id)
+            .order("updated_at", desc=True).limit(200).execute().data)
+    for r in rows:
+        host = login_domain(r["url"])
+        if host == domain or host.endswith("." + domain):
+            return r["url"]
+    return None
+
+
 BID_FILES_BUCKET = "bid-files"
 
 

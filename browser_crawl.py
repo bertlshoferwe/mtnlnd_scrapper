@@ -40,6 +40,7 @@ the site's saved credentials are working.
 import os
 import re
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 DOC_EXT = (".pdf", ".docx", ".doc")
@@ -241,6 +242,9 @@ def _wait_visible(page, selector, ms):
 # Cloudflare's "verify you are human" box on a sign-in form (Bidtracer's): it
 # puts its token in a hidden cf-turnstile-response field once it passes, and
 # a form sent before then is turned away.
+# A page whose address says it's for signing in.
+_SIGN_IN_URL = re.compile(r"log-?[io]n|sign-?in|auth|sso|account", re.I)
+
 _BOT_CHECK = "input[name=cf-turnstile-response], .cf-turnstile, iframe[src*='challenges.cloudflare.com']"
 BOT_CHECK_WAIT_MS = 30000
 # Sign-in tries before giving up. Not more: a wrong password tried over and
@@ -311,6 +315,19 @@ def _restore_session(ctx, cookies):
             print(f"  ! Login: couldn't restore the {c.get('name')} cookie ({e})")
 
 
+def session_lifetimes(cookies, domain):
+    """How long a kept session's cookies for `domain` last, for the log —
+    names and dates, never values."""
+    out = []
+    for c in cookies:
+        if not c.get("domain", "").lstrip(".").endswith(domain):
+            continue
+        exp = c.get("expires") or -1
+        out.append(f"{c['name']} until " + (
+            datetime.fromtimestamp(exp, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if exp > 0 else "the browser closes"))
+    return ", ".join(out) or "no cookies for the site"
+
+
 def _attempt_login(ctx, login, page=None):
     """Best-effort: open the login page, fill the first visible password
     field and a preceding username/email field, submit, and wait for the
@@ -362,9 +379,14 @@ def _attempt_login(ctx, login, page=None):
             _wait_visible(page, "input[type=password], " + _EMAIL_SELECTOR, 10000)
             pw_input = _visible(page, "input[type=password]")
         user_input = _visible(page, _USERNAME_SELECTOR) if pw_input else _visible(page, _EMAIL_SELECTOR)
-        if not pw_input and login.get("session") and not user_input:
-            print(f"  Still signed in as {login['username']} (saved session)")
-            return {"ok": True, "message": None, "session": ctx.cookies()}
+        # A restored session that lands off any sign-in page is signed in, even
+        # with a username-ish box in sight (Bidtracer's project page has one,
+        # and it was taken for a two-step sign-in's first screen).
+        if not pw_input and login.get("session") and not (user_input and _SIGN_IN_URL.search(page.url)):
+            cookies = ctx.cookies()
+            print(f"  Still signed in as {login['username']} (saved session: "
+                  f"{session_lifetimes(cookies, re.sub(r'^www[.]', '', urlparse(page.url).hostname or ''))})")
+            return {"ok": True, "message": None, "session": cookies}
         two_step = not pw_input and user_input
         if two_step:
             # The email first, then the password on the next screen.

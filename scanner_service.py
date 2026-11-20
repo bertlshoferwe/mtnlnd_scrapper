@@ -618,3 +618,7 @@ threading.Thread(target=notifier.loop, daemon=True).start()
 # The Monday email draft for the bid board, built Mondays at 6 AM — see weekly_email.py.
 import weekly_email  # noqa: E402
 threading.Thread(target=weekly_email.loop, daemon=True).start()
+
+# Saved sign-in sessions (Bidtracer's lasts a day) visited every few hours so they don't run out — see session_keepalive.py.
+import session_keepalive  # noqa: E402
+threading.Thread(target=session_keepalive.loop, daemon=True).start()

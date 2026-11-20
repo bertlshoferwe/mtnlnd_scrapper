@@ -26,7 +26,6 @@ import subprocess
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
 
 import browser_crawl
 import scraper
@@ -223,7 +222,7 @@ class SignIn:
             scraper.keep_login_result(self.login["id"], result)
         self.status, self.message = "saved", None
         print(f"  Sign-in for {self.login['domain']} as {self.login['username']}: session saved "
-              f"({_lifetimes(cookies, self.login['domain'])})", flush=True)
+              f"({browser_crawl.session_lifetimes(cookies, self.login['domain'])})", flush=True)
 
 
 def _virtual_screen():
@@ -258,18 +257,6 @@ def _launch(pw, display=None):
         return pw.chromium.launch(headless=True, channel="chromium", args=args)
     except Exception:
         return pw.chromium.launch(headless=True, args=args)
-
-
-def _lifetimes(cookies, domain):
-    """How long the saved cookies last, for the log — names and dates, never values."""
-    out = []
-    for c in cookies:
-        if not c.get("domain", "").lstrip(".").endswith(domain):
-            continue
-        exp = c.get("expires") or -1
-        out.append(f"{c['name']} until " + (
-            datetime.fromtimestamp(exp, timezone.utc).strftime("%Y-%m-%d") if exp > 0 else "the browser closes"))
-    return ", ".join(out) or "no cookies for the site"
 
 
 def start(division_id, login_id=None, url=None):
