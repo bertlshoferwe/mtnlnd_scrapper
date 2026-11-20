@@ -852,7 +852,18 @@ textarea{min-height:90px;resize:vertical}
 .dtrow .dlbtn+.dlbtn{margin-left:-4px}
 .dtrow .dlbtn:not(.arm),.dtn .dlbtn{opacity:0}
 .dtrow:hover .dlbtn,.dtrow:focus-within .dlbtn,.dtn:hover .dlbtn,.dtn:focus-within .dlbtn{opacity:1}
-@media (hover:none){.dtrow .dlbtn,.dtn .dlbtn{opacity:1}}
+/* a row's buttons: icons on hover with a mouse; on a touch screen, a ⋯ menu (see rowActs) */
+.dtrow,.dtree .dtn,.att{position:relative}
+.racts{display:contents}
+.racts .rl,.rmore{display:none}
+@media (hover:none){
+  .racts{display:none}
+  .rmore{display:grid;place-items:center;flex:0 0 auto;width:32px;height:32px;border:0;border-radius:6px;background:none;color:var(--muted)}
+  .racts.on{display:flex;flex-direction:column;position:absolute;right:6px;top:calc(100% - 4px);z-index:20;min-width:170px;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:4px}
+  .racts.on .dlbtn,.racts.on .linkbtn{display:flex;align-items:center;gap:8px;width:100%;height:auto;padding:9px 10px;margin:0;opacity:1;color:var(--ink);font-size:14px;justify-content:flex-start;text-align:left}
+  .racts.on .danger,.racts.on .arm,.racts.on [data-docdel] .rl,.racts.on [data-attdel] .rl{color:var(--high)}
+  .racts.on .rl{display:inline}
+}
 .dtrow label.dlbtn{cursor:pointer;margin-bottom:0}
 .dtn .attin{flex:1;min-width:0;font-weight:600}
 .ftabbar .fnew{margin-left:auto}
@@ -4205,6 +4216,12 @@ img.who{object-fit:cover;background:var(--chip)}
   // kind "doc"; Attachments = other uploads; Plan Holders = the project's list from Bid Scout.
   var DL_IC='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
   var FILE_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+  // A row's action buttons, and the ⋯ that shows them as a menu on a touch screen. Each button's
+  // .rl is its label, shown only in that menu.
+  function rowActs(key,html){
+    var on=ui.rowMenu===key;
+    return '<span class="racts'+(on?' on':'')+'" role="menu">'+html+'</span><button class="rmore" data-rmenu="'+esc(key)+'" aria-haspopup="menu" aria-expanded="'+on+'" aria-label="More" title="More">'+ic("more",18)+'</button>';
+  }
   function attRow(f,depth){
     var nm=depth!=null?f.name.split("/").pop():f.name,img=isImg(f),ed=ui.attEdit&&ui.attEdit.id===f.id?ui.attEdit.f:"";
     var lead=img?'<button class="attth" data-attopen="'+esc(f.id)+'" title="View '+esc(f.name)+'" aria-label="View '+esc(f.name)+'">'+(thumbUrl(f)?'<img src="'+esc(thumbUrl(f))+'" alt="" loading="lazy">':ic("image",18))+'</button>':FILE_IC;
@@ -4215,10 +4232,10 @@ img.who{object-fit:cover;background:var(--chip)}
     return '<div class="att'+(depth!=null?' in" style="--d:'+depth:'')+'">'+lead+'<div class="attb">'+body+'</div>'+
       (f.quote?'<span class="qchip">Quote</span>':'')+
       '<span class="atm">'+fsize(f.size||0)+' · '+ago(f.at)+'</span>'+
-      '<button class="dlbtn" data-attren="'+esc(f.id)+'" title="Rename '+esc(f.name)+'" aria-label="Rename '+esc(f.name)+'">'+ic("pencil",15)+'</button>'+
-      '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'</button>'+
-      (ui.armAtt===f.id?'<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">Tap to confirm</button>':
-        '<button class="dlbtn attdel" data-attdel="'+esc(f.id)+'" title="Remove '+esc(f.name)+'" aria-label="Remove '+esc(f.name)+'">'+ic("trash",15)+'</button>')+'</div>';
+      rowActs("att:"+f.id,'<button class="dlbtn" data-attren="'+esc(f.id)+'" title="Rename '+esc(f.name)+'" aria-label="Rename '+esc(f.name)+'">'+ic("pencil",15)+'<span class="rl">Rename</span></button>'+
+        '<button class="dlbtn" data-attdl="'+esc(f.id)+'" title="Download '+esc(f.name)+'" aria-label="Download '+esc(f.name)+'">'+DL_IC+'<span class="rl">Download</span></button>'+
+        (ui.armAtt===f.id?'<button class="linkbtn danger" data-attdel="'+esc(f.id)+'">Tap to confirm</button>':
+          '<button class="dlbtn attdel" data-attdel="'+esc(f.id)+'" title="Remove '+esc(f.name)+'" aria-label="Remove '+esc(f.name)+'">'+ic("trash",15)+'<span class="rl">Remove</span></button>'))+'</div>';
   }
   // Uploaded files; ones that came in a folder ("Plans/Civil/C-101.pdf") nest
   // under closed folders like Bid Scout's documents.
@@ -4372,9 +4389,9 @@ img.who{object-fit:cover;background:var(--chip)}
       }else{
         h+=(act?'<div class="dtrow">':'')+'<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
           '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>'+
-          (act?(D.kind!=="src"&&HAS_FILES?'<label class="dlbtn" title="Add files to '+esc(k)+'" aria-label="Add files to '+esc(k)+'">'+ic("plus",14)+'<input type="file" multiple data-attinput="'+D.kind+'" data-attdir="'+esc(D.path)+'" hidden></label>':'')+
-            '<button class="dlbtn" data-dirren="'+esc(p)+'" title="Rename '+esc(k)+'" aria-label="Rename '+esc(k)+'">'+ic("pencil",14)+'</button>'+
-            '<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Delete '+esc(k)+'" aria-label="Delete '+esc(k)+'">'+(ui.docArm===p?'Tap to delete':ic("trash",14))+'</button></div>':'');
+          (act?rowActs("dir:"+p,(D.kind!=="src"&&HAS_FILES?'<label class="dlbtn" title="Add files to '+esc(k)+'" aria-label="Add files to '+esc(k)+'">'+ic("plus",14)+'<span class="rl">Add files</span><input type="file" multiple data-attinput="'+D.kind+'" data-attdir="'+esc(D.path)+'" hidden></label>':'')+
+            '<button class="dlbtn" data-dirren="'+esc(p)+'" title="Rename '+esc(k)+'" aria-label="Rename '+esc(k)+'">'+ic("pencil",14)+'<span class="rl">Rename</span></button>'+
+            '<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Delete '+esc(k)+'" aria-label="Delete '+esc(k)+'">'+(ui.docArm===p?'Tap to delete':ic("trash",14)+'<span class="rl">Delete</span>')+'</button>')+'</div>':'');
       }
       if(o)h+=treeHTML(c,p,depth+1,is,leaf);
     });
@@ -4383,7 +4400,7 @@ img.who{object-fit:cover;background:var(--chip)}
       var f=x.f,href="/api/"+encodeURIComponent(is.divisionId)+"/pdf?url="+encodeURIComponent(f.url);
       h+='<div class="dtn" style="--d:'+depth+'" role="treeitem"><span class="tsp"></span>'+DOC_IC+
         '<a class="tnm" href="'+esc(href)+'" target="_blank" rel="noopener" title="Open '+esc(f.filename)+'">'+esc(x.name)+'</a>'+
-        '<a class="dlbtn" href="'+esc(href)+'&amp;download=1" download title="Download '+esc(x.name)+'" aria-label="Download '+esc(x.name)+'">'+DL_IC+'</a></div>';
+        rowActs("doc:"+f.url,'<a class="dlbtn" href="'+esc(href)+'&amp;download=1" download title="Download '+esc(x.name)+'" aria-label="Download '+esc(x.name)+'">'+DL_IC+'<span class="rl">Download</span></a>')+'</div>';
     });
     return h;
   }
@@ -5457,6 +5474,13 @@ img.who{object-fit:cover;background:var(--chip)}
   /* ---------- events ---------- */
   document.addEventListener("click",function(e){
     var el,t=e.target;
+    // a tap outside a row's ⋯ menu closes it; Rename closes it too (the row turns into a name box).
+    // Add files and Download leave it open: redrawing would drop the file picker or the link mid-tap.
+    if(ui.rowMenu&&!t.closest("[data-rmenu]")){
+      if(!t.closest(".racts.on")){ui.rowMenu=null;renderAttach()}
+      else if(t.closest("[data-dirren],[data-attren]"))ui.rowMenu=null;
+    }
+    if((el=t.closest("[data-rmenu]"))){var rk=el.getAttribute("data-rmenu");ui.rowMenu=ui.rowMenu===rk?null:rk;renderAttach();return}
     if((el=t.closest("a[data-scout]"))&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey){e.preventDefault();openInTab("bidscout",el.href,"bsOpenLink");return}
     if((el=t.closest("[data-ledit]"))&&!t.closest("[data-open]")&&!t.closest("[data-lf]")){
       var lp=el.getAttribute("data-ledit").split("|");
