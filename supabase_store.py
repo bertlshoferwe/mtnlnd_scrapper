@@ -2300,6 +2300,29 @@ def remove_project_folder(division_id, project_key, folder):
     return len(ids)
 
 
+def rename_project_folder(division_id, project_key, folder, to):
+    """Rename a folder in a project's Bid Docs: every file under `folder`
+    ("Plans", "Plans/Civil") moves under `to`. Returns how many files moved."""
+    _, project = _split_site(project_key)
+    old, new = folder.strip("/") + "/", to.strip("/") + "/"
+    moves, start, step = [], 0, 1000
+    while True:
+        res = (get_client().table("scan_results").select("id,filename")
+               .eq("division_id", division_id).eq("site", project_key)
+               .range(start, start + step - 1).execute())
+        for r in res.data:
+            fn = r.get("filename") or ""
+            name = _project_file_name(project, fn)
+            if name.startswith(old):
+                moves.append((r["id"], fn[:len(fn) - len(name)] + new + name[len(old):]))
+        if len(res.data) < step:
+            break
+        start += step
+    for rid, fn in moves:
+        get_client().table("scan_results").update({"filename": fn}).eq("id", rid).execute()
+    return len(moves)
+
+
 def fit_training_stats(division_id):
     """{"decisions", "needed", "enabled", "sure_at", "active", "agreed",
     "compared"} for the dashboard: how many decisions the suggestions can learn from (same rules

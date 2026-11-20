@@ -849,8 +849,11 @@ textarea{min-height:90px;resize:vertical}
 .dtrow .dtn{flex:1;min-width:0}
 .dtrow .dlbtn{margin-right:6px}
 .dtrow .dlbtn.arm{width:auto;padding:0 8px;font-size:12px;color:var(--high)}
-.dtrow .dlbtn:not(.arm){opacity:0}
-.dtrow:hover .dlbtn,.dtrow .dlbtn:focus-visible{opacity:1}
+.dtrow .dlbtn+.dlbtn{margin-left:-4px}
+.dtrow label.dlbtn{cursor:pointer;margin-bottom:0}
+.dtn .attin{flex:1;min-width:0;font-weight:600}
+.ftabbar .fnew{margin-left:auto}
+.ftabbar .fnew+.fadd{margin-left:8px}
 .phwrap{overflow:auto;max-height:456px;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
 .phwrap::-webkit-scrollbar{width:10px;height:10px}
 .phwrap::-webkit-scrollbar-corner{background:transparent}
@@ -4217,13 +4220,66 @@ img.who{object-fit:cover;background:var(--chip)}
   // Uploaded files; ones that came in a folder ("Plans/Civil/C-101.pdf") nest
   // under closed folders like Bid Scout's documents.
   function attListHTML(list,kind,is){
-    var h="",t=docTree(list,function(f){return f.name});
+    var h="",t=docTree(list,function(f){return f.name},dirsOf(is,kind));
+    if(ui.dirNew===kind)h+='<div class="dtree"><div class="dtn dir">'+CHEV+DIR_IC+'<input class="attin" data-dirnew="'+kind+'" placeholder="Folder name" aria-label="New folder name"></div></div>';
     if(Object.keys(t.dirs).length){
       var only={dirs:t.dirs,files:[],n:0};
       h+='<div class="dtree" role="tree">'+treeHTML(only,"/"+kind+":",0,is,function(f,d){return attRow(f,d)})+'</div>';
     }
     t.files.forEach(function(x){h+=attRow(x.f)});
     return h;
+  }
+  /* Folders. A tree path is "/Plans" for the Bid Scout project's documents (renamed and deleted on the
+     server, see /projects/rename-folder and remove-folder), "/doc:/Plans" or "/att:/Plans" for files
+     uploaded to Bid Docs or Supporting Docs (their names carry the folder). A folder made with New folder
+     that has no files yet is kept in the bid's fields under "_folders", one "doc:Plans" per line. */
+  function dirOf(p){var m=/^\/(doc|att):\/(.*)$/.exec(p);return m?{kind:m[1],path:m[2]}:{kind:"src",path:p.slice(1)}}
+  function dirsOf(is,kind){
+    return String((is.fields||{})._folders||"").split("\n").filter(function(l){return l.indexOf(kind+":")===0}).map(function(l){return l.slice(kind.length+1)});
+  }
+  function setDirs(is,fn){   // fn(lines) -> lines
+    is.fields=is.fields||{};
+    var L=fn(String(is.fields._folders||"").split("\n").filter(Boolean)).filter(function(l,i,a){return l&&a.indexOf(l)===i});
+    if(L.length)is.fields._folders=L.join("\n");else delete is.fields._folders;
+  }
+  function inDir(name,path){return name.indexOf(path+"/")===0}
+  function kindFiles(is,kind){return (is.attachments||[]).filter(function(f){return kind==="doc"?f.kind==="doc":f.kind!=="doc"})}
+  function addDir(is,kind,name){
+    name=name.trim().replace(/\/+/g,"-");if(!name)return;
+    setDirs(is,function(L){return L.concat([kind+":"+name])});
+    logH(is,"Folder","",name);is.updated=Date.now();save();
+  }
+  function renameDir(is,p,name){
+    var D=dirOf(p),parts=D.path.split("/"),old=parts.pop();name=name.trim().replace(/\/+/g,"-");
+    if(!name||name===old)return;
+    var to=parts.concat([name]).join("/");
+    if(D.kind==="src"){
+      fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/rename-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:srcKey(is),folder:D.path,to:to})})
+        .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})
+        .then(function(){delete ui.bs[is.id];bsLoad(is);renderAttach()})
+        .catch(function(e){toast("Couldn’t rename it: "+e.message,3500)});
+      return;
+    }
+    kindFiles(is,D.kind).forEach(function(f){if(inDir(f.name,D.path))f.name=to+f.name.slice(D.path.length)});
+    setDirs(is,function(L){return L.map(function(l){var pre=D.kind+":";return l===pre+D.path?pre+to:l.indexOf(pre+D.path+"/")===0?pre+to+l.slice(pre.length+D.path.length):l})});
+    if(ui.docOpen&&ui.docOpen[p]){delete ui.docOpen[p];ui.docOpen["/"+D.kind+":/"+to]=1}
+    logH(is,"Folder",D.path,to);is.updated=Date.now();save();
+  }
+  function deleteDir(is,p){
+    var D=dirOf(p);
+    if(D.kind==="src"){
+      fetch("/api/"+encodeURIComponent(is.divisionId)+"/projects/remove-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:srcKey(is),folder:D.path})})
+        .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})
+        .then(function(d){toast(d.removed+(d.removed===1?" file":" files")+" deleted");delete ui.bs[is.id];bsLoad(is);renderAttach()})
+        .catch(function(e){toast("Couldn’t delete it: "+e.message,3500)});
+      return;
+    }
+    var gone=kindFiles(is,D.kind).filter(function(f){return inDir(f.name,D.path)}),ids=gone.map(function(f){return f.id});
+    is.attachments=(is.attachments||[]).filter(function(f){return ids.indexOf(f.id)<0});
+    setDirs(is,function(L){var pre=D.kind+":";return L.filter(function(l){return l!==pre+D.path&&l.indexOf(pre+D.path+"/")!==0})});
+    logH(is,"Folder",D.path,"");is.updated=Date.now();save();
+    if(gone.length&&sb)sb.storage.from(FILE_BUCKET).remove(gone.map(function(f){return f.path})).then(function(r){if(r&&r.error)console.warn("files not removed from storage",r.error)});
+    toast(gone.length+(gone.length===1?" file":" files")+" deleted");
   }
   // The whole files half takes drops for the tab that's showing (see the ov-issue drop handler);
   // this is only the upload progress, plus a hint when the tab has nothing yet.
@@ -4254,6 +4310,7 @@ img.who{object-fit:cover;background:var(--chip)}
     var h=bsLinkHTML(is)+'<div class="ftabbar"><div class="seg ftabs" role="group" aria-label="Show">'+tabs.map(function(t){
       return '<button data-ftab="'+t[0]+'" aria-pressed="'+(tab===t[0])+'">'+t[1]+(t[2]?'<span class="pt">'+t[2]+'</span>':'')+'</button>';
     }).join("")+'</div>'+
+      (HAS_FILES&&canAct()&&(tab==="att"||tab==="docs")?'<button class="fadd fnew" data-dirnewbtn="'+(tab==="att"?"att":"doc")+'" title="New folder">'+ic("plus",14)+'New folder</button>':'')+
       (HAS_FILES&&(tab==="att"||tab==="docs")?'<label class="fadd" title="Add files to '+(tab==="att"?'Supporting Docs':'Bid Docs')+'">'+ic("plus",14)+'Add files<input type="file" multiple data-attinput="'+(tab==="att"?"att":"doc")+'" hidden></label>':'')+
       (n?'<button class="fmore" data-fmore aria-haspopup="menu" aria-expanded="'+!!ui.fmenu+'" aria-label="More" title="More">'+ic("more",18)+'</button>'+
         (ui.fmenu?'<div class="fmenu" role="menu"><a role="menuitem" data-dlall href="/api/'+encodeURIComponent(is.divisionId)+'/bids/'+encodeURIComponent(is.id)+'/zip?tab='+tab+'" download>'+DL_IC+'Download all</a></div>':''):'')+'</div>';
@@ -4284,8 +4341,9 @@ img.who{object-fit:cover;background:var(--chip)}
   }
   // Bid Docs as a folder tree built from the file paths ("plans/Civil/C-101.pdf").
   // Folders start closed and show how many files they hold.
-  function docTree(files,nameOf){
+  function docTree(files,nameOf,empty){
     var root={dirs:{},files:[],n:0};
+    (empty||[]).forEach(function(d){var node=root;d.split("/").forEach(function(k){k=k.trim();if(k)node=node.dirs[k]=node.dirs[k]||{dirs:{},files:[],n:0}})});
     files.forEach(function(f){
       var parts=(nameOf?nameOf(f):f.filename).split("/"),node=root;
       root.n++;
@@ -4305,10 +4363,16 @@ img.who{object-fit:cover;background:var(--chip)}
     var open=ui.docOpen||{},h="",nat=function(a,b){return a.localeCompare(b,undefined,{numeric:true})};
     Object.keys(node.dirs).sort(nat).forEach(function(k){
       var c=node.dirs[k],p=path+"/"+k,o=!!open[p];
-      var del=!leaf&&is&&canAct()&&!/^\/From /.test(p);   // a duplicate project's "From <site>" folder isn't this project's to remove
-      h+=(del?'<div class="dtrow">':'')+'<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
-        '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>'+
-        (del?'<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Remove '+esc(k)+' from Bid Docs" aria-label="Remove '+esc(k)+' from Bid Docs">'+(ui.docArm===p?'Tap to remove':ic("trash",14))+'</button></div>':'');
+      var act=is&&canAct()&&!/^\/From /.test(p),D=dirOf(p);   // a duplicate project's "From <site>" folder isn't this project's to change
+      if(act&&ui.dirEdit===p){
+        h+='<div class="dtrow"><div class="dtn dir" style="--d:'+depth+'">'+CHEV+DIR_IC+'<input class="attin" data-dirname="'+esc(p)+'" value="'+esc(k)+'" aria-label="Folder name"></div></div>';
+      }else{
+        h+=(act?'<div class="dtrow">':'')+'<button class="dtn dir" style="--d:'+depth+'" role="treeitem" aria-expanded="'+o+'" data-docdir="'+esc(p)+'">'+CHEV+DIR_IC+
+          '<span class="tnm">'+esc(k)+'</span>'+'<span class="tct">'+c.n+'</span></button>'+
+          (act?(D.kind!=="src"&&HAS_FILES?'<label class="dlbtn" title="Add files to '+esc(k)+'" aria-label="Add files to '+esc(k)+'">'+ic("plus",14)+'<input type="file" multiple data-attinput="'+D.kind+'" data-attdir="'+esc(D.path)+'" hidden></label>':'')+
+            '<button class="dlbtn" data-dirren="'+esc(p)+'" title="Rename '+esc(k)+'" aria-label="Rename '+esc(k)+'">'+ic("pencil",14)+'</button>'+
+            '<button class="dlbtn'+(ui.docArm===p?' arm':'')+'" data-docdel="'+esc(p)+'" title="Delete '+esc(k)+'" aria-label="Delete '+esc(k)+'">'+(ui.docArm===p?'Tap to delete':ic("trash",14))+'</button></div>':'');
+      }
       if(o)h+=treeHTML(c,p,depth+1,is,leaf);
     });
     node.files.slice().sort(function(a,b){return nat(a.name,b.name)}).forEach(function(x){
@@ -5782,17 +5846,15 @@ img.who{object-fit:cover;background:var(--chip)}
     if((el=t.closest("[data-ftab]"))){ui.fileTab=el.getAttribute("data-ftab");ui.fmenu=false;renderAttach();return}
     if((el=t.closest("[data-upretry]"))){upRetry(ui.issueId);return}
     if((el=t.closest("[data-upclear]"))){upClear(ui.issueId);return}
-    if((el=t.closest("[data-docdel]"))){   // take a folder out of Bid Docs: tap twice
+    if((el=t.closest("[data-docdel]"))){   // delete a folder: tap twice
       var dd=el.getAttribute("data-docdel"),db=byId(ui.issueId);
       if(!db)return;
       if(ui.docArm!==dd){ui.docArm=dd;renderAttach();return}
-      ui.docArm=null;
-      fetch("/api/"+encodeURIComponent(db.divisionId)+"/projects/remove-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:srcKey(db),folder:dd.slice(1)})})
-        .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d})})
-        .then(function(d){toast(d.removed+(d.removed===1?" file":" files")+" removed");delete ui.bs[db.id];bsLoad(db);renderAttach()})
-        .catch(function(e){toast("Couldn’t remove it: "+e.message,3500)});
+      ui.docArm=null;deleteDir(db,dd);renderAttach();renderIssueAct();
       return;
     }
+    if((el=t.closest("[data-dirren]"))){ui.dirEdit=el.getAttribute("data-dirren");ui.docArm=null;renderAttach();return}
+    if((el=t.closest("[data-dirnewbtn]"))){ui.dirNew=el.getAttribute("data-dirnewbtn");renderAttach();return}
     if((el=t.closest("[data-docdir]"))){var dp=el.getAttribute("data-docdir");ui.docOpen=ui.docOpen||{};if(ui.docOpen[dp])delete ui.docOpen[dp];else ui.docOpen[dp]=1;renderAttach();return}
     if((el=t.closest("[data-attdl]"))){var adl=byId(ui.issueId);if(adl)downloadAttachment(adl,el.getAttribute("data-attdl"));return}
     if(t.closest("[data-fmore]")){ui.fmenu=!ui.fmenu;renderAttach();return}
@@ -6094,7 +6156,7 @@ img.who{object-fit:cover;background:var(--chip)}
     },0);
   });
   document.addEventListener("keydown",function(e){
-    var ain=e.target.hasAttribute&&(e.target.hasAttribute("data-attname")||e.target.hasAttribute("data-attnotein"));
+    var ain=e.target.hasAttribute&&(e.target.hasAttribute("data-attname")||e.target.hasAttribute("data-attnotein")||e.target.hasAttribute("data-dirname")||e.target.hasAttribute("data-dirnew"));
     if(ain&&(e.key==="Enter"||e.key==="Escape")){
       e.preventDefault();e.stopPropagation();
       if(e.key==="Escape"){e.target.value=e.target.defaultValue;if(e.target.id==="lbx-note"){closeLbx();return}}
@@ -6250,6 +6312,8 @@ img.who{object-fit:cover;background:var(--chip)}
     var t=e.target;if(!t.hasAttribute||ui.attRedraw)return;
     var is=(ui.lbx&&t.id==="lbx-note")?byId(ui.lbx.bid):byId(ui.issueId);if(!is)return;
     if(t.hasAttribute("data-attname")){saveAttName(is,t.getAttribute("data-attname"),t.value);setTimeout(renderAttach,0)}
+    else if(t.hasAttribute("data-dirname")){ui.dirEdit=null;renameDir(is,t.getAttribute("data-dirname"),t.value);setTimeout(function(){renderAttach();renderIssueAct()},0)}
+    else if(t.hasAttribute("data-dirnew")){ui.dirNew=null;addDir(is,t.getAttribute("data-dirnew"),t.value);setTimeout(function(){renderAttach();renderIssueAct()},0)}
     else if(t.hasAttribute("data-attnotein")){
       var nid=t.getAttribute("data-attnotein");saveAttNote(is,nid,t.value);
       if(ui.attEdit&&ui.attEdit.id===nid)ui.attEdit=null;
@@ -6291,7 +6355,7 @@ img.who{object-fit:cover;background:var(--chip)}
   document.addEventListener("change",function(e){
     if(e.target.hasAttribute&&e.target.hasAttribute("data-cfileinput")){var cfk=e.target.getAttribute("data-cfileinput");cfk=cfk.slice(cfk.indexOf("|")+1);
       var cfl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.name}}).filter(notHidden);uploadFiles(cfl,"att",cfk);e.target.value="";return}
-    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:f.webkitRelativePath||f.name}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
+    if(e.target.hasAttribute&&e.target.hasAttribute("data-attinput")){var adir=e.target.getAttribute("data-attdir"),fl=Array.prototype.map.call(e.target.files,function(f){return {file:f,rel:(adir?adir+"/":"")+(f.webkitRelativePath||f.name)}}).filter(notHidden);uploadFiles(fl,e.target.getAttribute("data-attinput"));e.target.value=""}
   });
   (function(){
     var box=$("ov-ask");
