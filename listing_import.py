@@ -315,6 +315,8 @@ def run_import(row):
         tried = fetcher.login_result
         if shared and tried:
             scraper.keep_login_result(shared["id"], tried)
+        elif login and tried and site.get("id"):
+            scraper.keep_site_login_result(division_id, site["id"], tried)
         if tried and not tried["ok"]:
             run.progress(f"Signing in to {site['name'] if login else shared['domain']} didn't work: {tried['message']}")
         got = None

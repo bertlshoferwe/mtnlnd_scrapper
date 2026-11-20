@@ -529,6 +529,8 @@ def _site_login(site):
         return division_login(site.get("division_id"), site.get("url")) if site.get("division_id") else None
     try:
         password = credentials.decrypt_password(enc)
+        session = (json.loads(credentials.decrypt_password(site["login_session_enc"]))
+                   if site.get("login_session_enc") else None)
     except Exception as e:
         print(f"  ! Could not decrypt login credentials for '{site.get('name')}': {e}")
         return None
@@ -536,6 +538,9 @@ def _site_login(site):
         "username": username,
         "password": password,
         "url": (site.get("login_url") or "").strip() or site.get("url"),
+        "session": session,
+        "site_id": site.get("id"),
+        "domain": supabase_store.login_domain(site.get("url")),
     }
 
 
@@ -565,6 +570,13 @@ def keep_login_result(login_id, result):
     session = result.get("session") if result.get("ok") else None
     supabase_store.record_site_login(login_id, result["ok"], result.get("message"),
                                      credentials.encrypt_password(json.dumps(session)) if session else None)
+
+
+def keep_site_login_result(division_id, site_id, result):
+    """The same for a site's own login (_site_login)."""
+    session = result.get("session") if result.get("ok") else None
+    supabase_store.record_login_result(division_id, site_id, result["ok"], result.get("message"),
+                                       credentials.encrypt_password(json.dumps(session)) if session else None)
 
 
 def _save_locations(site, adapter):
@@ -1206,9 +1218,7 @@ def _scan_division(division):
                 if shared:
                     keep_login_result(shared["id"], login_result)
                 else:
-                    supabase_store.record_login_result(
-                        division_id, site["id"], login_result["ok"], login_result["message"]
-                    )
+                    keep_site_login_result(division_id, site["id"], login_result)
                 status = "OK" if login_result["ok"] else f"FAILED ({login_result['message']})"
                 print(f"  Login check: {status}")
 

@@ -2638,7 +2638,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }else{
       var need=!im.stale&&(im.result||{}).needs_login;   // behind a sign-in: add (or replace) the division's login for it
       h+='<div class="fine lsbad">'+esc(im.stale?"Reading it stopped partway.":(im.message||"Couldn’t read the listing."))+'</div>'+
-        (canAct()&&need&&im.result.has_login?'<button class="btn small primary" data-lssign="'+esc(need)+'" style="margin:6px 8px 0 0">Sign in yourself</button>':'')+
+        (canAct()&&need&&im.result.has_login?'<button class="btn small primary" data-lssign style="margin:6px 8px 0 0">Sign in yourself</button>':'')+
         (canAct()&&need?'<button class="btn small" data-lsneed="'+esc(need)+'" style="margin:6px 8px 0 0">'+(im.result.has_login?'Replace the login for ':'Add a login for ')+esc(need)+'</button>':'')+
         (canAct()?'<button class="linkbtn" data-lsread style="font-size:12px">Try again</button>':'');
     }
@@ -5254,12 +5254,12 @@ img.who{object-fit:cover;background:var(--chip)}
   function siApi(S,path,opts){
     return fetch("/api/"+encodeURIComponent(S.div)+path,opts||{}).then(function(r){return r.json().then(function(d){if(!r.ok){var e=new Error(d.error||r.status);e.state=d;throw e}return d})});
   }
-  function siOpen(div,loginId,url,bid){
+  function siOpen(div,path,url,bid){   // path: "/signin" (the login for url) or "/logins/<id>/signin"
     siStop();
     var S=ui.si={div:div,id:null,state:null,bid:bid||null};
     $("siTitle").textContent="Sign in";$("siMsg").textContent="";$("siUrl").textContent="";siCover("Opening the sign-in page…");
     openOv("ov-signin");
-    siApi(S,"/logins/"+encodeURIComponent(loginId)+"/signin",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:url||""})})
+    siApi(S,path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:url||""})})
       .then(function(d){if(ui.si!==S)return;S.id=d.id;siShow(S,d);siFrame(S);siPoll(S)})
       .catch(function(e){if(ui.si===S){S.stopped=true;siCover("Couldn’t open the sign-in page: "+e.message)}});
   }
@@ -5676,15 +5676,8 @@ img.who{object-fit:cover;background:var(--chip)}
         .catch(function(e){toast("Couldn’t remove it: "+e.message,3500)});
       return;
     }
-    if((el=t.closest("[data-lssign]"))){
-      var sb=byId(ui.issueId),sl=sb&&listingOf(sb),sd=el.getAttribute("data-lssign");
-      if(sb)lgApi(sb.divisionId).then(function(list){
-        var r=list.filter(function(x){return x.domain===sd})[0];
-        if(r)siOpen(sb.divisionId,r.id,sl&&sl.url,sb.id);else toast("There’s no login saved for "+sd+" any more.",3500);
-      }).catch(function(e){toast("Couldn’t load the logins: "+e.message,3500)});
-      return;
-    }
-    if((el=t.closest("[data-lgsign]"))&&ui.lg){siOpen(ui.lg.div,el.getAttribute("data-lgsign"),"",null);return}
+    if(t.closest("[data-lssign]")){var sb=byId(ui.issueId),sl=sb&&listingOf(sb);if(sb&&sl)siOpen(sb.divisionId,"/signin",sl.url,sb.id);return}   // whichever login reads the link: the site's own or Settings → Logins
+    if((el=t.closest("[data-lgsign]"))&&ui.lg){siOpen(ui.lg.div,"/logins/"+encodeURIComponent(el.getAttribute("data-lgsign"))+"/signin","",null);return}
     if(t.closest("[data-sisave]")){siQueue({save:true});return}
     if(t.closest("[data-siclose]")){closeOv("ov-signin");return}
     if((el=t.closest("[data-lsneed]"))){var lb=byId(ui.issueId);if(lb)lgOpen(lb.divisionId,el.getAttribute("data-lsneed"),lb.id);return}

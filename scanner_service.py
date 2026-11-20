@@ -36,7 +36,7 @@ Routes:
   POST /learn-cancel          body: {"division_id", "site_id"}
   POST /propose-rule          body: {"division_id", "site_id", "project",
                               "reason"} — a skip rule for a removed bid
-  POST /signin                body: {"division_id", "login_id", "url"} —
+  POST /signin                body: {"division_id", "login_id" or "url"} —
                               "Sign in yourself" (see live_signin.py)
   GET  /signin/<id>           its state; /frame a picture of the page
   POST /signin/<id>/input     a click, typing, a key, scrolling, save, close
@@ -442,10 +442,11 @@ def learn_cancel():
 
 @app.route("/signin", methods=["POST"])
 def signin_start():
-    """Body: {division_id, login_id, url}. Returns the sign-in's state."""
+    """Body: {division_id, login_id, url} — login_id or url (see live_signin.start).
+    Returns the sign-in's state."""
     body = request.get_json(silent=True) or {}
     try:
-        s = live_signin.start((body.get("division_id") or "").strip(), body.get("login_id"),
+        s = live_signin.start((body.get("division_id") or "").strip(), body.get("login_id") or None,
                               (body.get("url") or "").strip() or None)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

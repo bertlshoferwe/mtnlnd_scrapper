@@ -144,6 +144,14 @@ a scanned site with no login of its own, is read signed in. Two-step sign-ins
 sign-in page fails with "Add a login for …", which opens the form and reads
 the link again once it's saved.
 
+**Sign in yourself**: when a site won't take the automatic sign-in (a
+Cloudflare "verify you are human" check, like Bidtracer's), the failed
+listing's **Sign in yourself** (or Settings → Logins → **Sign in**) shows
+the site's sign-in page in the scan worker's own browser, live, with the
+username and password filled in and "Remember me" ticked. Once you're
+signed in, the session is kept for that login — a site's own login too,
+after running `migrations/004_site_login_session.sql` once.
+
 ## Choosing between Anthropic and Gemini
 
 Both plug into the exact same three functions (semantic keyword matching, AI job-link identification, daily summary) via `ai_provider.py`'s common `.complete(prompt, max_tokens)` interface — the rest of the codebase doesn't know or care which one is active. A few practical notes beyond the cost table in Setup step 3:

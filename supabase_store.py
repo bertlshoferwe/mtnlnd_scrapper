@@ -338,11 +338,16 @@ def _turn_on_last(division_id, site_id):
     _set_switch(division_id, site_id, active=True)
 
 
-def record_login_result(division_id, site_id, ok, message=None):
+def record_login_result(division_id, site_id, ok, message=None, session_enc=None):
     """Record the outcome of a site's most recent login attempt (set by the
     scan worker right after it tries to log in), so the dashboard can show
     whether the saved credentials are still working. Best-effort — a site
-    predating this column shouldn't fail the whole scan over it."""
+    predating this column shouldn't fail the whole scan over it.
+
+    `session_enc`, from a good sign-in, is kept for the next one (see
+    site_logins' session_enc). Written on its own so a database without
+    migrations/004 yet still records the outcome; a failed sign-in leaves
+    the saved session alone, as record_site_login does."""
     try:
         get_client().table("sites").update({
             "login_last_ok": bool(ok),
@@ -351,6 +356,11 @@ def record_login_result(division_id, site_id, ok, message=None):
         }).eq("id", site_id).execute()
     except Exception as e:
         print(f"  ! Could not record login result: {e}")
+    if session_enc is not None:
+        try:
+            get_client().table("sites").update({"login_session_enc": session_enc}).eq("id", site_id).execute()
+        except Exception as e:
+            print(f"  ! Could not keep the site's session (run migrations/004_site_login_session.sql): {e}")
 
 
 def add_site(division_id, name, url, listing=None, tabs=None, adapter=None, login=None,

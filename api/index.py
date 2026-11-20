@@ -24,6 +24,7 @@ Routes:
   GET/POST /api/<division_id>/logins         the division's logins for sites behind a sign-in (write-only: add or replace)
   DEL  /api/<division_id>/logins/<login_id>  remove one
   POST /api/<division_id>/logins/<login_id>/signin   "Sign in yourself" in the scan worker's browser
+  POST /api/<division_id>/signin                     the same for whichever login reads a link: {"url"}
   GET  /api/<division_id>/signin/<id>[/frame], POST .../input   its state, picture, and the person's input
   POST /api/<division_id>/site-requests      request a site (name, url, note)
   GET  /api/site-requests                    every division's requests (the hidden menu)
@@ -512,6 +513,17 @@ def api_signin_start(division_id, login_id):
     data = request.get_json(force=True, silent=True) or {}
     return _signin_proxy("POST", "/signin", {"division_id": division_id, "login_id": login_id,
                                              "url": data.get("url") or ""}, timeout=60)
+
+
+@app.route("/api/<division_id>/signin", methods=["POST"])
+def api_signin_for_link(division_id):
+    """Body: {"url"} — sign in with whichever login reading that link uses
+    (the site's own, or the division's for its domain)."""
+    _, err = _require_division(division_id)
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    return _signin_proxy("POST", "/signin", {"division_id": division_id, "url": data.get("url") or ""}, timeout=60)
 
 
 @app.route("/api/<division_id>/signin/<sid>", methods=["GET"])

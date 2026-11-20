@@ -211,7 +211,11 @@ class SignIn:
 
     def _save(self):
         cookies = self._ctx.cookies()
-        scraper.keep_login_result(self.login["id"], {"ok": True, "message": None, "session": cookies})
+        result = {"ok": True, "message": None, "session": cookies}
+        if self.login.get("site_id"):
+            scraper.keep_site_login_result(self.division_id, self.login["site_id"], result)
+        else:
+            scraper.keep_login_result(self.login["id"], result)
         self.status, self.message = "saved", None
         print(f"  Sign-in for {self.login['domain']} as {self.login['username']}: session saved "
               f"({_lifetimes(cookies, self.login['domain'])})", flush=True)
@@ -239,17 +243,27 @@ def _lifetimes(cookies, domain):
     return ", ".join(out) or "no cookies for the site"
 
 
-def start(division_id, login_id, url=None):
-    """Opens a sign-in for one of the division's saved logins (closing any
-    other that's open). `url` is where to sign in when the login has no
-    sign-in page saved — the listing link that needed it."""
+def start(division_id, login_id=None, url=None):
+    """Opens a sign-in (closing any other that's open): for one of the
+    division's saved logins by id, or — with just `url`, a listing link that
+    needed signing in — the login reading that link uses, the way
+    listing_import.run_import picks it (the site's own login first). `url` is
+    also where to sign in when the login has no sign-in page saved."""
     global _current
-    row = next((r for r in supabase_store.load_site_logins(division_id) if r["id"] == login_id), None)
-    if row is None:
-        raise ValueError("no such login")
-    login = scraper.login_from_row(row, url)
+    if login_id:
+        row = next((r for r in supabase_store.load_site_logins(division_id) if r["id"] == login_id), None)
+        if row is None:
+            raise ValueError("no such login")
+        login = scraper.login_from_row(row, url)
+    elif url:
+        import listing_import
+        site = listing_import._site_for(division_id, url)
+        login = (scraper._site_login(site) if site and site.get("login_username")
+                 else scraper.division_login(division_id, url))
+    else:
+        raise ValueError("a login or a link is needed")
     if login is None:
-        raise ValueError("the saved login couldn't be decrypted")
+        raise ValueError("there's no saved login for that site, or it couldn't be decrypted")
     with _lock:
         if _current:
             _current.close("Another sign-in was started.")

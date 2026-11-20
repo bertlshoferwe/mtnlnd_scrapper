@@ -34,6 +34,10 @@ create table if not exists sites (
   login_last_ok boolean,
   login_last_checked_at timestamptz,
   login_last_error text,
+  -- The browser's cookies after the last good sign-in, Fernet-encrypted like
+  -- the password — restored next time to skip the form (and checks like
+  -- Bidtracer's Cloudflare one). See migrations/004_site_login_session.sql.
+  login_session_enc text,
   -- A site with adapter 'learned' — the AI-learned recipe, its review
   -- preview, the user's corrections and status. See site_agent.py.
   learned jsonb,
@@ -68,6 +72,7 @@ create table if not exists app_settings (
 --   alter table sites add column if not exists login_last_ok boolean;
 --   alter table sites add column if not exists login_last_checked_at timestamptz;
 --   alter table sites add column if not exists login_last_error text;
+--   alter table sites add column if not exists login_session_enc text;
 --   alter table sites add column if not exists learned jsonb;
 
 create table if not exists keywords (
