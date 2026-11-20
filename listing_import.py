@@ -7,8 +7,8 @@ into Bid Scout, so the bid's Bid Docs, Plan Holders and due date fill in.
                                            (scraper.main runs this after the daily scan)
 
 How a link is read, first that works:
-  0. Bidtracer: its bid page and Plans / Specs / Addenda folders, read
-     directly (_read_bidtracer).
+  0. Bidtracer and SmartBid: their bid pages and file folders, read
+     directly (_read_bidtracer, _read_smartbid).
   1. Its site is one Bid Scout scans with a portal adapter (UDOT, IDOT, ...):
      the adapter's listing, cut down to this project. Same project key as
      the daily scan, so the bid follows the project the scan keeps current.
@@ -412,15 +412,120 @@ def _bidtracer_folder(fetcher, bid_page, bid_url, folder, href, run):
 
 
 def _bidtracer_debug(page, what):
-    """A screenshot and the page's HTML in debug/, for when Bidtracer's pages change."""
+    _debug(page, f"bidtracer_{what}")
+
+
+def _debug(page, what):
+    """A screenshot and the page's HTML in debug/, for when a site's pages change."""
     try:
         os.makedirs("debug", exist_ok=True)
-        page.screenshot(path=f"debug/bidtracer_{what}.png", full_page=True)
-        with open(f"debug/bidtracer_{what}.html", "w") as f:
+        page.screenshot(path=f"debug/{what}.png", full_page=True)
+        with open(f"debug/{what}.html", "w") as f:
             f.write(page.content())
-        print(f"  [listing] saved debug/bidtracer_{what}.png/.html")
+        print(f"  [listing] saved debug/{what}.png/.html")
     except Exception:
         pass
+
+
+# SmartBid (<company>.smartbid.co/#/BidProject/...), looked at 2026-11-20: the
+# details are label/value rows ("Due Date:" 12-16-2026  5:00 PM, "Address:"),
+# the name sits in #project-title, and the Plan Room lists every file in its
+# folders (collapsed or not) with a Download button. The button's link answers
+# 401 on its own; clicking it makes the page fetch the file and hand it over
+# as a download, so each file is clicked in turn.
+SMARTBID_FILE_S = 600          # a 190 MB plan set comes down whole before the download starts
+SMARTBID_MAX_FILE = 500 * 1024 * 1024
+
+_SMARTBID_JS = """() => {
+  const norm = s => (s || '').replace(/\\s+/g, ' ').trim();
+  const fields = {};
+  for (const row of document.querySelectorAll('.row')) {
+    const k = row.querySelector(':scope > div > label'), v = row.querySelector(':scope > .value-label');
+    if (!k || !v) continue;
+    const key = norm(k.textContent).replace(/:$/, '').toLowerCase();
+    if (key && !(key in fields)) fields[key] = norm(v.textContent);
+  }
+  const title = document.querySelector('#project-title .no-width-tooltip');
+  const files = [...document.querySelectorAll('.file-download-icon')].map((a, i) => {
+    const span = a.closest('.tree-file') && a.closest('.tree-file').querySelector('.spanfilename');
+    const path = [];
+    for (let f = span && document.getElementById(span.getAttribute('folder-parent')); f;
+         f = f.parentElement && f.parentElement.closest('[id^=div_Folder_]')) {
+      const h = f.querySelector('span[data-parent="' + f.id + '"]');
+      if (h) path.unshift(norm(h.textContent).replace(/\\//g, ' '));
+    }
+    return [i, path.join('/'), span ? norm(span.textContent) : '', a.getAttribute('data-href') || ''];
+  });
+  return {name: title ? norm(title.textContent) : '', fields, files};
+}"""
+
+
+def _read_smartbid(url, fetcher, run, with_docs=True):
+    """{"name", "site", "docs", "bid_date", ...} like _read_generic, or None
+    when the page isn't a SmartBid bid project this understands. Without
+    `with_docs`, just the details: no file is downloaded."""
+    run.progress("Opening the bid on SmartBid")
+    page = fetcher._open_page(url)
+    try:
+        if _on_sign_in(page):
+            return {"name": "", "site": "SmartBid", "docs": [], "sign_in": True}
+        try:   # the page is drawn by script after it loads
+            page.wait_for_selector("#project-title", timeout=30000)
+            page.wait_for_selector(".file-download-icon", state="attached", timeout=15000)
+        except Exception:
+            pass
+        info = _try(page.evaluate, _SMARTBID_JS) or {}
+        name = info.get("name") or ""
+        if not name:
+            if _on_sign_in(page):
+                return {"name": "", "site": "SmartBid", "docs": [], "sign_in": True}
+            run.progress(f"This doesn't look like a SmartBid bid project — it opened {page.url[:120]}")
+            _debug(page, "smartbid_project")
+            return None
+        f = info.get("fields") or {}
+        due = re.sub(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b", r"\1/\2/\3", f.get("due date") or "")
+        location = ", ".join(v for v in (f.get("address"), f.get("city"), f.get("state")) if v) or None
+        files = [x for x in info.get("files") or [] if x[2].lower().endswith(browser_crawl.DOC_EXT)]
+        run.progress(f"{name}: due {due or 'not shown'}; {len(files)} file(s) in the Plan Room")
+        docs = []
+        for n, (i, folder, filename, href) in enumerate(files if with_docs else [], start=1):
+            run.progress(f"Downloading {n} of {len(files)}: {filename}"[:200])
+            data = _smartbid_file(page, i)
+            if data:
+                key = href or f"{url}#{folder}/{filename}"
+                docs.append((key, f"{folder}/{filename}".strip("/")[:200], data))
+    finally:
+        page.close()
+    return {"name": name[:200], "site": "SmartBid", "docs": docs,
+            "bid_date": site_agent.parse_date(due) if due else None,
+            "bid_time": site_agent.parse_time(due) if due else None,
+            "location": location, "holders": None}
+
+
+def _smartbid_file(page, i):
+    """The bytes of the Plan Room's i-th file, by clicking its Download button, or None."""
+    caught = []
+    on_dl = lambda d: caught.append(d)
+    page.on("download", on_dl)
+    try:
+        page.evaluate("i => document.querySelectorAll('.file-download-icon')[i].click()", i)
+        deadline = time.time() + SMARTBID_FILE_S
+        while not caught and time.time() < deadline:
+            page.wait_for_timeout(500)
+        if not caught:
+            print(f"  [listing] no download came for SmartBid file {i}")
+            return None
+        path = caught[0].path()
+        if not path or os.path.getsize(path) > SMARTBID_MAX_FILE:
+            print(f"  [listing] SmartBid file {i} was empty or too large")
+            return None
+        with open(path, "rb") as fh:
+            return fh.read()
+    except Exception as e:
+        print(f"  [listing] SmartBid file {i}: {e}")
+        return None
+    finally:
+        page.remove_listener("download", on_dl)
 
 
 def _explore(url, fetcher, ai, run):
@@ -502,6 +607,11 @@ def run_import(row):
                 got = _read_bidtracer(url, fetcher, run, with_docs=not skip_docs)
             except Exception as e:
                 run.progress(f"Reading it as a Bidtracer bid didn't work ({e}) — reading the page itself"[:200])
+        elif _host(url).endswith("smartbid.co"):
+            try:
+                got = _read_smartbid(url, fetcher, run, with_docs=not skip_docs)
+            except Exception as e:
+                run.progress(f"Reading it as a SmartBid project didn't work ({e}) — reading the page itself"[:200])
         if got is None and site:
             got = _read_with_adapter(site, url, run) or _read_learned(site, url, fetcher, run)
         if got is None:
