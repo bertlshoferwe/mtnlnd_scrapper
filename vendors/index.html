@@ -240,7 +240,30 @@ function toks(){return S.q.toLowerCase().split(/\s+/).filter(Boolean)}
 function hl(txt,T){var out=esc(txt);T.forEach(function(t){if(!t)return;var re=new RegExp('('+esc(t).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');out=out.replace(/(<[^>]*>)|([^<]+)/g,function(m,tag,text){return tag?tag:text.replace(re,'<mark>$1</mark>')})});return out}
 function divName(id){var d=S.divs.filter(function(x){return x.id===id})[0];return d?d.name:''}
 function shortDate(iso){if(!iso)return '';var d=new Date(iso);return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-function telHref(p){return 'tel:'+String(p).replace(/[^\d+]/g,'')}
+// A phone number as "(801) 555-0173 ext. 12": the extension kept apart in the form, and dialed after a pause.
+function splitPhone(p){var m=/^(.*?)\s*(?:ext\.?|extension|x|#)\s*(\d+)\s*$/i.exec(String(p||''));return m?{phone:m[1],ext:m[2]}:{phone:String(p||''),ext:''}}
+// Capitals as you type: each word's first letter goes up, nothing typed in capitals comes down
+// ("McGrath", "LLC" stay). Titles and vendor names, when you leave the box, also take small words
+// back down: "Vice President Of Sales" -> "Vice President of Sales".
+function capWords(s){return String(s||'').replace(/(^|[\s\-\/(&])([a-z])/g,function(m,a,b){return a+b.toUpperCase()})}
+function titleCase(s){return capWords(s).replace(/(\s)(Of|And|The|For|In|At|To|A|An|Or|On|By|With|De)(?=\s)/g,function(m,sp,w){return sp+w.toLowerCase()})}
+// A name read off a card in ALL CAPS: "RHETT MACKAY" -> "Rhett Mackay".
+function unshout(s){s=String(s||'');return /[a-z]/.test(s)?s:capWords(s.toLowerCase())}
+// People's names also get McGrath and O'Neil right.
+function nameCase(s){return capWords(s).replace(/\b(Mc|O')([a-z])/g,function(m,a,b){return a+b.toUpperCase()})}
+var CAP_FIELDS={name:nameCase,title:titleCase,vendor:titleCase};
+// name@company.com: one @, no spaces, a dot in the part after it. Empty is fine (email is optional).
+function emailBad(e){e=String(e||'').trim();return !!e&&!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(e)}
+function joinPhone(d){return (d.phone||'').trim()+(String(d.ext||'').trim()?' ext. '+String(d.ext).trim():'')}
+function telHref(p){var s=splitPhone(p);return 'tel:'+s.phone.replace(/[^\d+]/g,'')+(s.ext?','+s.ext:'')}
+// "8015550173" -> "(801) 555-0173" as it's typed; a number starting with + is left alone.
+function fmtPhone(v){
+ v=String(v||'');if(/^\s*\+(?!1)/.test(v))return v;
+ var d=v.replace(/\D/g,'');if(d.length===11&&d[0]==='1')d=d.slice(1);d=d.slice(0,10);
+ if(d.length<=3)return d;
+ if(d.length<=6)return '('+d.slice(0,3)+') '+d.slice(3);
+ return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+}
 function filterCount(){return (S.st!=='Any'?1:0)+(S.wc?1:0)}
 function saveUrl(){
  var q={division:S.div};if(S.vid)q.vendor=S.vid;
@@ -346,19 +369,20 @@ function renderVendorModal(){
 
 /* ---------- contact form ---------- */
 function vendorMatch(name){var n=String(name||'').trim().toLowerCase();return n?S.names.filter(function(x){return x.name.trim().toLowerCase()===n})[0]:null}
-function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',email:'',website:'',nationwide:false,areas:[]}}
+function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',ext:'',email:'',website:'',nationwide:false,areas:[]}}
 function renderForm(){
- var d=S.draft,v=vendorMatch(d.vendor);
+ var d=S.draft,v=vendorMatch(d.vendor),fixed=!S.edit&&S.ctxV;   // added from inside a vendor: that's its vendor
  var h='<div class="page">';
- if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h2 data-act="dlgtitle" style="margin:0;font-size:18px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none">'+(S.edit?'Edit contact':'New contact')+'</h2>'+(S.edit?saveStHTML():'')+'</div><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
+ if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h2 data-act="dlgtitle" style="margin:0;font-size:18px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none">'+(S.edit?'Edit contact':'New contact')+'</h2>'+(S.edit?saveStHTML():fixed?'<span class="hint" style="font-size:14px;overflow-wrap:anywhere">'+esc(S.ctxV)+'</span>':'')+'</div><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
  else h+='<button class="back" data-act="cancel">'+I.back+'Back</button>';
+ if(fixed&&!S.modal)h+='<div class="hint" style="margin:0 4px 10px;font-size:14px">Adding a contact to <b style="color:var(--t)">'+esc(S.ctxV)+'</b></div>';
  if(S.view==='scan')h+='<div class="okb" style="margin-bottom:10px">Read from the card. Check each field, then save. Coverage is not on the card, so set it by hand.</div>';
  h+='<div id="dupbox">'+dupHTML()+'</div>';
  h+='<form data-form="contact" style="display:flex;flex-direction:column;gap:10px">';
  function f(l,k,ty,ex){return '<div class="fld"><label class="lab" for="f-'+k+'">'+l+'</label><input class="in" id="f-'+k+'" data-fld="'+k+'" type="'+ty+'" value="'+esc(d[k])+'" '+(ex||'')+'></div>'}
  h+=f('Name','name','text','autocomplete="off" autocapitalize="words"')+f('Title','title','text','autocomplete="off"');
- h+='<div class="fld"><label class="lab" for="f-vendor">Vendor</label><input class="in" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off"><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
- h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'+f('Phone','phone','tel','autocomplete="off"')+f('Email','email','email','autocomplete="off" autocapitalize="off"')+'</div>';
+ if(!fixed)h+='<div class="fld"><label class="lab" for="f-vendor">Vendor</label><input class="in" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off"><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'+'<div class="fld"><label class="lab" for="f-phone">Phone</label><div style="display:flex;gap:8px"><input class="in" id="f-phone" data-fld="phone" type="tel" inputmode="tel" value="'+esc(d.phone)+'" autocomplete="off" style="flex:1;min-width:0"><input class="in" id="f-ext" data-fld="ext" inputmode="numeric" value="'+esc(d.ext)+'" placeholder="Ext." aria-label="Extension" autocomplete="off" style="width:76px;flex:none"></div></div>'+'<div class="fld"><label class="lab" for="f-email">Email</label><input class="in" id="f-email" data-fld="email" type="email" inputmode="email" value="'+esc(d.email)+'" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="emailerr"><span class="hint" id="emailerr" style="color:var(--d)">'+(emailBad(d.email)?'That email doesn’t look right':'')+'</span></div>'+'</div>';
  h+='<div class="fld"><div><div class="lab">Service area</div><div class="hint">Which jobs this salesman covers</div></div>';
  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;min-height:44px"><span style="font-size:15px;font-weight:600" id="natlab">Nationwide</span><button type="button" class="sw'+(d.nationwide?' on':'')+'" role="switch" aria-checked="'+d.nationwide+'" aria-labelledby="natlab" data-act="nat"></button></div>';
  if(!d.nationwide){
@@ -390,8 +414,8 @@ function snapshot(){
  if(S.vm)return {url:'/api/vendors/'+encodeURIComponent(S.vid),body:{name:S.vm.name.trim(),website:S.vm.website.trim()},check:S.vm.name.trim()?'':'Add a vendor name'};
  if(S.modal&&S.edit&&S.draft){
   var d=S.draft,m=vendorMatch(d.vendor);
-  return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':'',
-   body:{division:S.div,name:d.name,title:d.title,phone:d.phone,email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
+  return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':emailBad(d.email)?'Fix the email':'',
+   body:{division:S.div,name:d.name,title:d.title,phone:joinPhone(d),email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
  }
  return null;
 }
@@ -517,6 +541,7 @@ function readCropped(sh){
   return reader(sh.blob).then(function(f){
    var d=blank(S.ctxV);
    ['name','title','phone','email','website'].forEach(function(k){if(f[k])d[k]=f[k]});
+   d.name=nameCase(unshout(d.name));d.title=titleCase(unshout(d.title));
    if(!S.ctxV&&f.vendor)d.vendor=f.vendor;
    S.draft=d;S.scanStage=2;S.dup=null;render();window.scrollTo(0,0);checkDup();
    return up;
@@ -676,13 +701,14 @@ function openVendor(id){
  S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
  saveUrl();loadDetail();
 }
-function draftFrom(c){return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:c.phone,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
+function draftFrom(c){var ph=splitPhone(c.phone);return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:ph.phone,ext:ph.ext,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
 function closeForm(){S.showDel=false;S.saveSt='';S.saveBad=false;S.ctxV='';S.draft=null;S.edit=null;S.scan=null;S.scanStage=0;S.scanErr='';S.cardPath=null;S.confirmDel=false;S.dup=null;S.modal=false}
 function saveContact(){
  var d=S.draft;
  if(!d.name.trim()){toast('Add a name first');return}
  if(!d.vendor.trim()){toast('Pick or type a vendor');return}
- var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:d.phone,email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
+ if(emailBad(d.email)){toast('That email doesn’t look right');var fe=$('f-email');if(fe)fe.focus();return}
+ var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:joinPhone(d),email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
  if(S.view==='scan'&&S.cardPath)body.card_image_path=S.cardPath;
  S.busy=true;render();
  api(S.edit?'/api/vendors/contacts/'+encodeURIComponent(S.edit):'/api/vendors/contacts',{method:S.edit?'PATCH':'POST',body:body}).then(function(r){
@@ -765,7 +791,14 @@ document.addEventListener('click',function(e){
   e.preventDefault();var a=(CFG.APPS||[]).filter(function(x){return x.key===tile.dataset.app})[0];
   S.panel=null;render();if(a&&a.key!=='vendors')openInTab(a.tab,appUrl(a),a.open);return;
  }
- var el=e.target.closest('[data-act]');if(!el)return;
+ var el=e.target.closest('[data-act]');
+ if(!el){
+  // desktop: a click on empty space (not a card, the panel, the toolbar or a dialog) closes the vendor's details
+  if(S.vid&&mq.matches&&S.view==='list'&&!S.panel&&!S.vm&&!S.modal&&!S.cardView&&
+     !e.target.closest('.vcard,.detail,.tool,.mast,.modal-ov,.toast,a,button,input,select,label'))
+   {S.vid=null;S.detail=null;saveUrl();render()}
+  return;
+ }
  var act=el.dataset.act;
  if(act==='cancel-ov'){if(e.target!==el)return;act='cancel'}
  if(act==='cardclose-ov'){if(e.target!==el)return;act='cardclose'}
@@ -777,13 +810,22 @@ document.addEventListener('input',function(e){
  var t=e.target;
  if(t.id==='q'){S.q=t.value;loadList(220)}
  else if(t.dataset&&t.dataset.fld){
+  if(t.dataset.fld==='phone'){
+   var before=t.value.slice(0,t.selectionStart).replace(/\D/g,'').length,nv=fmtPhone(t.value);
+   if(nv!==t.value){t.value=nv;var pos=0,seen=0;while(pos<nv.length&&seen<before){if(/\d/.test(nv[pos]))seen++;pos++}try{t.setSelectionRange(pos,pos)}catch(x){}}
+  }
+  if(CAP_FIELDS[t.dataset.fld]){var cv=(t.dataset.fld==='name'?nameCase:capWords)(t.value);if(cv!==t.value){var cs=t.selectionStart,ce=t.selectionEnd;t.value=cv;try{t.setSelectionRange(cs,ce)}catch(x){}}}
+  if(t.dataset.fld==='ext'&&/\D/.test(t.value))t.value=t.value.replace(/\D/g,'').slice(0,6);
   S.draft[t.dataset.fld]=t.value;
   if(t.dataset.fld==='vendor'){var h=$('vhint');if(h)h.textContent=vendorHint(t.value,vendorMatch(t.value))}
-  if(t.dataset.fld==='email')checkDup();
+  if(t.dataset.fld==='email'){checkDup();var ee=$('emailerr');if(ee)ee.textContent=emailBad(t.value)&&t.value.indexOf('@')>=0&&/\.\w*$/.test(t.value)?'That email doesn’t look right':''}
   if(t.dataset.fld!=='vendor')autoSave();
  }
  else if(t.id==='newitem')S.newItem=t.value;
- else if(t.dataset&&t.dataset.vf){S.vm[t.dataset.vf]=t.value;autoSave()}
+ else if(t.dataset&&t.dataset.vf){
+  if(t.dataset.vf==='name'){var vc=capWords(t.value);if(vc!==t.value){var vs0=t.selectionStart;t.value=vc;try{t.setSelectionRange(vs0,vs0)}catch(x){}}}
+  S.vm[t.dataset.vf]=t.value;autoSave();
+ }
 });
 document.addEventListener('keydown',function(e){
  if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.reg!==undefined){e.preventDefault();var b=document.querySelector('[data-act="addreg"][data-id="'+e.target.dataset.reg+'"]');if(b)b.click()}
@@ -796,7 +838,19 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('change',function(e){
  var t=e.target;
- if(t.dataset&&t.dataset.fld==='vendor'&&S.draft){S.draft.vendor=t.value;autoSave(0);return}
+ if(t.dataset&&CAP_FIELDS[t.dataset.fld]&&S.draft){
+  var fixed=CAP_FIELDS[t.dataset.fld](t.value.replace(/\s+/g,' ').trim());
+  if(fixed!==t.value)t.value=fixed;
+  S.draft[t.dataset.fld]=t.value;
+  if(t.dataset.fld==='vendor'){var vh=$('vhint');if(vh)vh.textContent=vendorHint(t.value,vendorMatch(t.value))}
+  autoSave(0);return;
+ }
+ if(t.dataset&&t.dataset.vf==='name'&&S.vm){t.value=titleCase(t.value.replace(/\s+/g,' ').trim());S.vm.name=t.value;autoSave(0);return}
+ if(t.dataset&&t.dataset.fld==='email'&&S.draft){   // leaving the box: tidy it, and say if it's still off
+  t.value=t.value.trim().toLowerCase();S.draft.email=t.value;
+  var ee=$('emailerr');if(ee)ee.textContent=emailBad(t.value)?'That email doesn’t look right':'';
+  autoSave(0);return;
+ }
  if(t.dataset.chg==='st'){S.st=t.value;render();loadList()}
  else if(t.dataset.chg==='wc'){S.wc=t.checked;render();loadList()}
  else if(t.hasAttribute('data-vlogo')&&t.files[0]){
@@ -819,7 +873,7 @@ document.addEventListener('submit',function(e){
  if(f==='contact'){syncDraft();if(S.edit&&S.modal){autoSave(0)}else saveContact()}
  else if(f==='vmodal')autoSave(0);
  else if(f==='vendor'){
-  var nn=$('nv-n').value.trim(),ww=$('nv-w').value.trim();if(!nn){toast('Add a vendor name');return}
+  var nn=titleCase($('nv-n').value.replace(/\s+/g,' ').trim()),ww=$('nv-w').value.trim();if(!nn){toast('Add a vendor name');return}
   api('/api/vendors/admin/vendors',{method:'POST',body:{name:nn,website:ww,division:S.div}}).then(function(){toast(ww?'Vendor added. Pulling its items now':'Vendor added');loadAdmin();loadNames()}).catch(fail);
  }
  else if(f==='item'){

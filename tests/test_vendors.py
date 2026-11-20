@@ -126,6 +126,8 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(vendors_store.norm_phone("801.555.0173"), "(801) 555-0173")
         self.assertEqual(vendors_store.norm_phone("+1 801 555 0173"), "(801) 555-0173")
         self.assertEqual(vendors_store.norm_phone("ext 12"), "ext 12")
+        self.assertEqual(vendors_store.norm_phone("801-555-0173 x12"), "(801) 555-0173 ext. 12")
+        self.assertEqual(vendors_store.norm_phone("(801) 555-0173 ext. 4"), "(801) 555-0173 ext. 4")
         self.assertEqual(vendors_store.norm_email(" RMackay@GranitePeak.com "), "rmackay@granitepeak.com")
         self.assertEqual(vendors_store.norm_website("https://www.Example.com/"), "Example.com")
         self.assertEqual(vendors_store.domain_of("https://www.Example.com/shop"), "example.com")

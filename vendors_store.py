@@ -35,12 +35,17 @@ def audit(actor, action, table, row_id=None, diff=None):
 # ---------------------------------------------------------------------------
 
 def norm_phone(text):
-    """'801.555.0173' -> '(801) 555-0173'; anything that isn't a US number is kept as typed."""
+    """'801.555.0173' -> '(801) 555-0173', '801-555-0173 x12' -> '(801) 555-0173 ext. 12';
+    anything that isn't a US number is kept as typed."""
     t = (text or "").strip()
-    d = re.sub(r"\D", "", t)
+    m = re.match(r"^(.*?)\s*(?:ext\.?|extension|x|#)\s*(\d{1,6})$", t, re.I)
+    main, ext = (m.group(1), m.group(2)) if m else (t, "")
+    d = re.sub(r"\D", "", main)
     if len(d) == 11 and d[0] == "1":
         d = d[1:]
-    return f"({d[:3]}) {d[3:6]}-{d[6:]}" if len(d) == 10 else t
+    if len(d) != 10:
+        return t
+    return f"({d[:3]}) {d[3:6]}-{d[6:]}" + (f" ext. {ext}" if ext else "")
 
 
 def norm_email(text):
