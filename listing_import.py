@@ -301,9 +301,10 @@ _FOLDERS_JS = """names => {
 }"""
 
 
-def _read_bidtracer(url, fetcher, run):
+def _read_bidtracer(url, fetcher, run, with_docs=True):
     """{"name", "site", "docs", "bid_date", ...} like _read_generic, or None
-    when the page isn't a Bidtracer bid page this understands."""
+    when the page isn't a Bidtracer bid page this understands. Without
+    `with_docs`, just the bid page: no folder is downloaded."""
     run.progress("Opening the bid on Bidtracer")
     page = fetcher._open_page(url)
     try:
@@ -329,7 +330,7 @@ def _read_bidtracer(url, fetcher, run):
         run.progress(f"{name}: bid date {bid_when or 'not shown'}; files in "
                      + (", ".join(f"{t} ({n})" for t, _h, n in folders) or "no folder"))
         docs = []
-        for text, href, _n in folders:
+        for text, href, _n in folders if with_docs else ():
             docs += _bidtracer_folder(fetcher, page, url, text, href, run)
     finally:
         page.close()
@@ -457,11 +458,29 @@ def _explore(url, fetcher, ai, run):
 # One import
 # ---------------------------------------------------------------------------
 
+def _skip_docs(row):
+    """True when the bid already has documents from somewhere else — its Bid
+    Scout project (a ConstructConnect scan, say) or files uploaded on the bid —
+    so the listing is read for its details only, nothing downloaded. A listing
+    whose first read brought its own documents in keeps adding new ones."""
+    prior = row.get("result") or {}
+    if row.get("project_key") and prior and not prior.get("docs_skipped"):
+        return False
+    bid = supabase_store.load_workflow_bid(row["bid_id"]) or {}
+    if any(a.get("kind") == "doc" for a in bid.get("attachments") or []):
+        return True
+    linked = bid.get("source_project_id")
+    return bool(linked and supabase_store.load_project_files(row["division_id"], linked))
+
+
 def run_import(row):
     run = _Run(row)
     division_id, bid_id, url = row["division_id"], row["bid_id"], row["url"]
     run.save(status="reading", message=None, progress=[])
     run.progress(f"Reading {url}")
+    skip_docs = _skip_docs(row)
+    if skip_docs:
+        run.progress("The bid already has its documents — reading the listing's details only")
     site = _site_for(division_id, url)
     login = scraper._site_login(site) if site and site.get("login_username") else None
     shared = None if login else scraper.division_login(division_id, url)
@@ -480,7 +499,7 @@ def run_import(row):
         got = None
         if _host(url).endswith("bidtracer.com"):
             try:
-                got = _read_bidtracer(url, fetcher, run)
+                got = _read_bidtracer(url, fetcher, run, with_docs=not skip_docs)
             except Exception as e:
                 run.progress(f"Reading it as a Bidtracer bid didn't work ({e}) — reading the page itself"[:200])
         if got is None and site:
@@ -493,6 +512,8 @@ def run_import(row):
     if got.get("sign_in") and not got["docs"]:
         _needs_login(run, url, login or shared, tried)
         return
+    if skip_docs:
+        got["docs"] = []
 
     # The project the bid already shows, if it has one (its files go in with the
     # rest); else the one it was read into before (a re-read), so files add to
@@ -528,7 +549,7 @@ def run_import(row):
     result = {"name": got["name"], "site": got["site"], "files": len(files),
               "matched": sum(1 for f in files if (f.get("status") or "").startswith("Matched")),
               "bid_date": got["bid_date"], "bid_time": got["bid_time"], "location": got["location"],
-              "holders": len(got["holders"] or [])}
+              "holders": len(got["holders"] or []), "docs_skipped": skip_docs}
     message = None
     bid = supabase_store.workflow_bid_due(bid_id)
     if bid is None:

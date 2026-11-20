@@ -2636,6 +2636,7 @@ img.who{object-fit:cover;background:var(--chip)}
     }else if(im.status==="done"){
       var r=im.result||{},bits=[r.files+(r.files===1?" file":" files")+(r.matched?" ("+r.matched+" matched keywords)":"")];
       if(r.holders)bits.push(r.holders+" plan holders");
+      if(r.docs_skipped)bits.push("documents not downloaded — the bid already has them");
       h+='<div class="fine">Read '+(im.last_read_at?esc(shortDate(im.last_read_at.slice(0,10))):"")+': '+esc(bits.join(" · "))+'</div>';
       if(im.message)h+='<div class="fine">'+esc(im.message)+'</div>';
       var c=r.conflict||{},cd=c.due&&c.due!==is.due?c.due:"",ct=c.due_time&&c.due_time!==(is.dueTime||"")?c.due_time:"";
