@@ -240,7 +240,7 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .tbl{container-type:inline-size;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow-x:auto;overflow-y:hidden}
 .thead,.trow{display:grid;align-items:center;column-gap:14px;padding:0 14px}
 .tp{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,1.2fr)) var(--c3,minmax(0,1fr)) var(--c4,minmax(0,.8fr)) var(--c5,minmax(0,1.5fr))}
-.tv{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,2fr)) var(--c3,84px) var(--c4,minmax(0,1fr))}
+.tv{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,2fr)) var(--c3,minmax(0,1fr)) var(--c4,minmax(0,1fr))}
 .ti{grid-template-columns:var(--c1,minmax(0,1.6fr)) var(--c2,minmax(0,2fr)) var(--c3,84px)}
 /* a column's right edge drags to resize it (double-click puts it back) */
 .thead .cell{position:relative;overflow:visible}
@@ -349,6 +349,10 @@ body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!impor
  .sfold{display:none}
  @media(prefers-reduced-motion:no-preference){.side{transition:transform .2s ease}}
 }
+/* a vendor's main contact: a gold star */
+.star{color:var(--w);display:inline-flex;vertical-align:-2px}
+.btn.starred{border-color:var(--w);color:var(--w)}
+.ib.starred,.ccard-acts .ib.starred{color:var(--w)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 @media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
@@ -391,6 +395,9 @@ var I={
  trash:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
  x:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
  check:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+ star:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8z"/></svg>',
+ starF:'<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8z"/></svg>',
+ starS:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8z"/></svg>',
  share:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
  users:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.9-3.4 3.4-5.5 6.5-5.5s5.6 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.8c1.8.7 3 2.6 3.5 5.2"/></svg>',
  box:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/></svg>',
@@ -600,7 +607,7 @@ function peopleRows(){
   var m=v.contacts.filter(function(c){return c.matched}),list=T.length&&m.length?m:v.contacts;
   list.forEach(function(c){out.push({c:c,v:v})});
  });
- var st=S.sort.people,key={name:function(r){return r.c.name},vendor:function(r){return r.v.name+'\u0000'+r.c.name},title:function(r){return r.c.title||'\uffff'},covers:function(r){return r.c.unset?'\uffff':r.c.area_text}}[st.k];
+ var st=S.sort.people,key={name:function(r){return r.c.name},vendor:function(r){return r.v.name+'\u0000'+(r.c.primary?'0':'1')+r.c.name},title:function(r){return r.c.title||'\uffff'},covers:function(r){return r.c.unset?'\uffff':r.c.area_text}}[st.k];
  return out.sort(function(a,b){return st.d*cmp(key(a),key(b))||cmp(a.c.name,b.c.name)});
 }
 function vendorRows(){
@@ -619,7 +626,7 @@ function renderPeople(){
   var c=r.c,v=r.v,sel=S.cid===c.id&&S.vid===v.id&&mq.matches;
   var item=T.length&&!c.matched&&v.matched_items.length?'<div class="sub">sells '+hl(v.matched_items[0],T)+'</div>':'';
   h+='<button class="trow tp'+(sel?' sel':'')+'" role="row" data-act="person" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'">'+
-   '<div class="cell pc"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><div><b>'+hl(c.name,T)+'</b>'+
+   '<div class="cell pc"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><div><b>'+hl(c.name,T)+'</b>'+(c.primary?' <span class="star" title="Main contact at '+esc(v.name)+'">'+I.starS+'</span>':'')+''+
     '<div class="sub wide">'+(c.phone?esc(c.phone):c.alt_phone?esc(c.alt_phone):'&nbsp;')+'</div><div class="sub narrow">'+hl(v.name,T)+(c.title?' · '+hl(c.title,T):'')+'</div></div></div>'+
    '<div class="cell c-vendor"><div class="pc">'+logoHTML(v,'xs')+'<span style="overflow:hidden;text-overflow:ellipsis">'+hl(v.name,T)+'</span></div>'+item+'</div>'+
    '<div class="cell c-title'+(c.title?'':' mu')+'">'+(c.title?hl(c.title,T):'—')+'</div>'+
@@ -628,6 +635,7 @@ function renderPeople(){
  });
  return h+'</div>';
 }
+function mainOf(v){return (v.contacts||[]).filter(function(c){return c.primary})[0]||null}
 function renderVendorsTbl(){
  var T=toks(),rows=vendorRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
@@ -638,7 +646,7 @@ function renderVendorsTbl(){
   h+='<button class="trow tv'+(S.vid===v.id&&mq.matches?' sel':'')+'" role="row" data-act="vendor" data-id="'+esc(v.id)+'">'+
    '<div class="cell pc">'+logoHTML(v,'md')+'<div><b>'+hl(v.name,T)+'</b><div class="sub wide">'+(v.website?hl(v.website,T):'&nbsp;')+'</div><div class="sub narrow">'+v.contact_count+' contact'+(v.contact_count===1?'':'s')+(v.item_count?' · '+esc(v.item_names.slice(0,2).join(', ')):'')+'</div></div></div>'+
    '<div class="cell c-sells'+(sells.length?'':' mu')+'">'+(sells.length?sells.map(function(x){return hl(x,T)}).join(', ')+(more>0?' <span class="mu">+'+more+'</span>':''):'—')+'</div>'+
-   '<div class="cell c-n">'+v.contact_count+'</div>'+
+   '<div class="cell c-n">'+v.contact_count+(mainOf(v)?'<div class="sub" title="Main contact"><span class="star">'+I.starS+'</span> '+esc(mainOf(v).name)+'</div>':'')+'</div>'+
    '<div class="cell c-cov'+(st?'':' mu')+'">'+(st?esc(st):'—')+'</div></button>';
  });
  return h+'</div>';
@@ -670,7 +678,7 @@ function renderItem(){
  it.vendors.forEach(function(v){
   h+='<div class="ivend"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="openv" data-id="'+esc(v.id)+'">View</button></div>'+
    (v.contacts.length?'<div>'+v.contacts.map(function(c){
-     return '<button class="oth" data-act="openp" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(c.name)+'</b><span class="hint" style="display:block">'+esc([c.title,c.phone,c.unset?'':c.area_text].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>':'<div class="hint">No contacts yet.</div>')+'</div>';
+     return '<button class="oth" data-act="openp" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(c.name)+(c.primary?' <span class="star">'+I.starS+'</span>':'')+'</b><span class="hint" style="display:block">'+esc([c.title,c.phone,c.unset?'':c.area_text].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>':'<div class="hint">No contacts yet.</div>')+'</div>';
  });
  return h+'</div></div>';
 }
@@ -721,8 +729,9 @@ function renderPerson(){
  var c=(v.contacts||[]).filter(function(x){return x.id===S.cid})[0];
  if(!c)return renderVendor();
  var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[],ITEMS=12;
- var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0"><h2>'+esc(c.name)+'</h2><div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button></div></div></div>';
+ var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0"><h2>'+esc(c.name)+(c.primary?' <span class="star" title="Main contact at '+esc(v.name)+'">'+I.starS+'</span>':'')+'</h2><div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button></div></div></div>';
  h+='<div class="pacts">'+(c.phone?'<a class="btn pri" href="'+esc(telHref(c.phone))+'">'+I.phone+'Call</a>':'')+(c.email?'<a class="btn" href="mailto:'+esc(c.email)+'">'+I.mail+'Email</a>':'')+
+  '<button class="btn'+(c.primary?' starred':'')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'The main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'">'+(c.primary?I.starF:I.star)+(c.primary?'Main contact':'Make main')+'</button>'+
   '<button class="btn" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'Share</button><button class="btn" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'Edit</button></div>';
  h+='<div class="pinfo">'+
   (c.phone?'<div class="prow"><span class="k">Phone</span><a href="'+esc(telHref(c.phone))+'">'+esc(c.phone)+'</a></div>':'')+
@@ -735,7 +744,7 @@ function renderPerson(){
   (its.length>ITEMS?'<button class="chip tog" data-act="items">'+(S.itemsOpen?'Show fewer':'+'+(its.length-ITEMS)+' more')+'</button>':'')+'</div>';
  if(others.length){
   h+='<div class="lab">Others at '+esc(v.name)+' · '+others.length+'</div><div>'+others.map(function(o){
-   return '<button class="oth" data-act="person" data-id="'+esc(o.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(o.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(o.name)+'</b><span class="hint" style="display:block">'+esc([o.title,o.phone].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>';
+   return '<button class="oth" data-act="person" data-id="'+esc(o.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(o.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(o.name)+(o.primary?' <span class="star">'+I.starS+'</span>':'')+'</b><span class="hint" style="display:block">'+esc([o.title,o.phone].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>';
  }
  return h+'</div></div>';
 }
@@ -751,8 +760,9 @@ function renderVendor(){
  if(!cs.length)h+='<div class="crow"><span class="hint">No contacts yet.</span></div>';
  else h+='<div class="clist">';
  cs.forEach(function(c){
-  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
-   '<div class="ccard-acts"><button class="ib pen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
+  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+(c.primary?' <span class="star">'+I.starS+'</span>':'')+'</div>'+(c.primary?'<div class="hint" style="color:var(--w)">Main contact</div>':'')+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
+   '<div class="ccard-acts"><button class="ib pen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button>'+
+   '<button class="ib'+(c.primary?' starred':'')+'" aria-pressed="'+!!c.primary+'" aria-label="'+(c.primary?'Main contact — unstar':'Make main contact')+'" title="'+(c.primary?'Main contact — click to unstar':'Make main contact')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'">'+(c.primary?I.starF:I.star)+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
    '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.alt_phone?'<a class="kv" href="'+esc(telHref(c.alt_phone))+'">'+I.phone+esc(c.alt_phone)+' <span class="hint">alt</span></a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
    (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'<div style="margin-top:6px">'+srvLine(c)+'</div></div></div>';
  });
@@ -1298,6 +1308,17 @@ var A={
  opendup:function(){
   var m=S.dup;if(!m)return 'skip';
   closeForm();S.view=mq.matches?'list':'vendor';S.pendingEdit=m.id;openVendor(m.vendor_id);
+ },
+ star:function(el){
+  var cid=el.dataset.id,vid=el.dataset.v,on=false;
+  var mark=function(list){(list||[]).forEach(function(c){if(c.id===cid)on=on||!!c.primary})};
+  (S.results||[]).forEach(function(v){if(v.id===vid)mark(v.contacts)});if(S.detail&&S.detail.id===vid)mark(S.detail.contacts);
+  var to=on?null:cid,set=function(list){(list||[]).forEach(function(c){c.primary=c.id===to})};
+  (S.results||[]).forEach(function(v){if(v.id===vid){set(v.contacts);v.primary_contact_id=to}});
+  if(S.detail&&S.detail.id===vid){set(S.detail.contacts);S.detail.primary_contact_id=to;S.detail.contacts.sort(function(a,b){return (b.primary?1:0)-(a.primary?1:0)})}
+  (S.items||[]).forEach(function(it){it.vendors.forEach(function(v){if(v.id===vid)set(v.contacts)})});
+  api('/api/vendors/'+encodeURIComponent(vid)+'/main-contact',{method:'POST',body:{contact_id:to}})
+   .then(function(){toast(to?'Main contact set':'Main contact cleared')}).catch(function(e){fail(e);refresh()});
  },
  sharec:function(el){var c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===el.dataset.id})[0];if(c)shareContact(c);return 'skip'},
  nat:function(){S.draft.nationwide=!S.draft.nationwide},

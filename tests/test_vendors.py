@@ -158,6 +158,32 @@ class ItemMergeTests(unittest.TestCase):
         self.assertEqual(k("Glass"), "glass")                         # 'ss' isn't a plural
 
 
+class MainContactTests(unittest.TestCase):
+    def setUp(self):
+        self.c = app.test_client()
+
+    def test_only_a_contact_at_that_vendor_can_be_the_main_one(self):
+        with mock.patch.object(vs_mod(), "get_vendor", return_value={"id": "v1"}), \
+             mock.patch.object(vs_mod(), "get_contact", return_value={"id": "c9", "vendor_id": "v2"}), \
+             mock.patch.object(vs_mod(), "set_main_contact") as setm:
+            r = self.c.post("/api/vendors/v1/main-contact", json={"contact_id": "c9"})
+        self.assertEqual(r.status_code, 400)
+        setm.assert_not_called()
+
+    def test_set_and_clear(self):
+        with mock.patch.object(vs_mod(), "get_vendor", return_value={"id": "v1"}), \
+             mock.patch.object(vs_mod(), "get_contact", return_value={"id": "c1", "vendor_id": "v1"}), \
+             mock.patch.object(vs_mod(), "set_main_contact") as setm:
+            self.assertEqual(self.c.post("/api/vendors/v1/main-contact", json={"contact_id": "c1"}).status_code, 200)
+            setm.assert_called_with("v1", "c1", None)
+            self.assertEqual(self.c.post("/api/vendors/v1/main-contact", json={"contact_id": None}).status_code, 200)
+            setm.assert_called_with("v1", None, None)
+
+    def test_a_viewer_cant_star(self):
+        with mock.patch.object(vendors_api, "_can_edit", return_value=False):
+            self.assertEqual(self.c.post("/api/vendors/v1/main-contact", json={"contact_id": "c1"}).status_code, 403)
+
+
 class NormalizeTests(unittest.TestCase):
     def test_phone_email_website(self):
         self.assertEqual(vendors_store.norm_phone("801.555.0173"), "(801) 555-0173")

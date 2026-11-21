@@ -7,6 +7,7 @@ by every division; what a vendor sells is kept per division.
   GET  /api/vendors/items?division=&q=&state=          the Items view: each item (duplicates merged) and who sells it
   GET  /api/vendors/names                                every vendor's name and web address (the contact form)
   GET/PATCH/DELETE /api/vendors/<id>                     one vendor (GET takes ?division=)
+  POST /api/vendors/<id>/main-contact                    its main contact (★): {"contact_id"} or null
   GET/POST/DELETE  /api/vendors/<id>/logo                its logo (POST: an upload, or {"pull": true})
   POST /api/vendors/<id>/items, DELETE /api/vendors/items/<item_id>
   POST /api/vendors/contacts, PATCH/DELETE /api/vendors/contacts/<id>
@@ -127,12 +128,13 @@ def _contact_out(c):
     return {"id": c["id"], "name": c["name"], "title": c.get("title") or "", "phone": c.get("phone") or "",
             "alt_phone": c.get("alt_phone") or "", "email": c.get("email") or "", "nationwide": c["nationwide"], "areas": c["areas"],
             "unset": _unset(c), "area_text": _area_text(c), "has_card": bool(c.get("card_image_path")),
-            "card_v": re.sub(r"\D", "", str(c.get("updated_at") or ""))[:14]}
+            "card_v": re.sub(r"\D", "", str(c.get("updated_at") or ""))[:14], "primary": bool(c.get("primary"))}
 
 
 def _vendor_out(v):
     return {"id": v["id"], "name": v["name"], "website": v.get("website") or "", "logo": _logo_url(v),
-            "logo_source": v.get("logo_source"), "logo_pulled_at": v.get("logo_pulled_at")}
+            "logo_source": v.get("logo_source"), "logo_pulled_at": v.get("logo_pulled_at"),
+            "primary_contact_id": v.get("primary_contact_id")}
 
 
 @bp.route("/api/vendors", methods=["GET"])
@@ -270,6 +272,25 @@ def api_vendor_update(vendor_id):
     if v.get("website") and v.get("website") != old.get("website"):
         _pull_soon(vendor_id)
     return jsonify({"ok": True, "vendor": _vendor_out(v)})
+
+
+@bp.route("/api/vendors/<vendor_id>/main-contact", methods=["POST"])
+def api_vendor_main_contact(vendor_id):
+    """{"contact_id"}: the vendor's main contact (★); {"contact_id": null} for none."""
+    if not _can_edit():
+        return _forbidden()
+    cid = (request.get_json(force=True, silent=True) or {}).get("contact_id") or None
+    if not vs.get_vendor(vendor_id):
+        return _err("that vendor is gone", 404)
+    if cid:
+        c = vs.get_contact(cid)
+        if not c or c["vendor_id"] != vendor_id:
+            return _err("that contact isn't at this vendor")
+    try:
+        vs.set_main_contact(vendor_id, cid, _actor())
+    except ValueError as e:
+        return _err(str(e), 500)
+    return jsonify({"ok": True, "primary_contact_id": cid})
 
 
 @bp.route("/api/vendors/<vendor_id>", methods=["DELETE"])

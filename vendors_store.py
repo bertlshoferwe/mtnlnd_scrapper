@@ -98,7 +98,10 @@ def bundle(vendor_ids, division_id):
         areas.setdefault(a["contact_id"], []).append(a)
     for c in sorted(contacts, key=lambda c: (c["name"] or "").lower()):
         c["areas"] = _areas_out(areas.get(c["id"], []))
+        c["primary"] = c["id"] == vendors[c["vendor_id"]].get("primary_contact_id")
         vendors[c["vendor_id"]]["contacts"].append(c)
+    for v in vendors.values():   # the main contact (★) first
+        v["contacts"].sort(key=lambda c: not c["primary"])
     for it in _in("vendor_items", "vendor_id", vendors):
         if it["division_id"] == division_id and it["active"]:
             vendors[it["vendor_id"]]["items"].append(it)
@@ -268,8 +271,21 @@ def set_contact_card(contact_id, path, actor=None):
     audit(actor, "update", "vendor_contacts", contact_id, {"card_image_path": path})
 
 
+def set_main_contact(vendor_id, contact_id, actor=None):
+    """The vendor's main contact (★), or None for none."""
+    try:
+        _db().table("vendors").update({"primary_contact_id": contact_id}).eq("id", vendor_id).execute()
+    except Exception as e:
+        raise ValueError("couldn't save the main contact — run migrations/008_vendor_main_contact.sql in Supabase") from e
+    audit(actor, "update", "vendors", vendor_id, {"primary_contact_id": contact_id})
+
+
 def delete_contact(contact_id, actor=None):
     _db().table("vendor_contacts").update({"deleted_at": _now()}).eq("id", contact_id).execute()
+    try:   # a deleted contact can't be anyone's main contact (only soft-deleted, so the foreign key doesn't see it)
+        _db().table("vendors").update({"primary_contact_id": None}).eq("primary_contact_id", contact_id).execute()
+    except Exception:
+        pass
     audit(actor, "delete", "vendor_contacts", contact_id)
 
 
