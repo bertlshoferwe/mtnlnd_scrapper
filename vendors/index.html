@@ -255,15 +255,19 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
    screen that folds to an icon strip; on a phone or tablet a drawer from the left (the ☰ in the top bar) */
 .shell{display:flex;gap:16px;align-items:flex-start}
 .content{flex:1;min-width:0}
-.side{width:236px;flex:0 0 236px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:12px;position:sticky;top:72px;max-height:calc(100vh - 88px);max-height:calc(100dvh - 88px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.side{width:236px;flex:0 0 236px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:12px;position:sticky;top:72px;height:calc(100vh - 88px);height:calc(100dvh - 88px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
 .side .sh{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin:0 0 8px 6px}
 .side .sh b{font-size:14px}
 .sfold{width:30px;height:30px;border:0;border-radius:8px;background:none;color:var(--m);display:grid;place-items:center;flex:none}
 .sfold:hover{background:var(--s2);color:var(--t)}
 .side .newbtn{width:100%;height:42px;margin-bottom:4px}
-.side .addopts{display:flex;flex-direction:column;gap:4px;margin:2px 0 6px}
-.side .addopts .opt{min-height:48px;padding:6px 10px;gap:10px}
-.side .addopts .opt .ic{width:32px;height:32px}
+/* New contact's two choices, floating under the button */
+.side .ov{background:transparent}
+.sidepop{position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:41;background:var(--mast);border:1px solid var(--bs);border-radius:16px;box-shadow:0 10px 28px rgba(0,0,0,.55);padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* the same tiles as the apps menu: an icon on a rounded square, its name under it */
+.sidepop .tile{width:auto;color:var(--t);padding:14px 6px 12px}
+.sidepop .tile i{display:grid;place-items:center;font-style:normal;width:44px;height:44px;border-radius:12px;background:var(--as);color:var(--ast)}
+.sidepop .tile i svg{width:22px;height:22px}
 .sl{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:14px 8px 6px}
 .sl .linkish{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
 .snav{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;border-radius:8px;padding:8px;color:var(--t);font-size:14px;text-align:left;min-height:38px}
@@ -275,8 +279,6 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .stchips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 8px 4px}
 .stchips .chip.tog{min-height:32px;padding:3px 11px;font-size:13px}
 .side .chk{min-height:40px;padding:0 8px;font-size:14px}
-.sfoot{margin-top:auto;padding-top:10px;border-top:1px solid var(--b)}
-.sbadge{margin-left:auto;min-width:20px;height:20px;border-radius:999px;background:var(--a);color:var(--ac);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
 .side .full{display:flex;flex-direction:column;gap:2px;flex:1}
 .rail{display:none}
 .rbtn{width:40px;height:40px;border-radius:10px;border:0;background:none;color:var(--m);display:grid;place-items:center;position:relative;flex:none}
@@ -316,7 +318,7 @@ var CFG=window.APP_CONFIG||{};
 var COLORS=['#4f6bd6','#2f8f83','#b0663a','#8a5bc2','#3f7fb8','#a5524f','#5e8a3a','#b08a2f','#6a6fa8','#b05a8c'];
 var STATES=['UT','ID','CO','NV','WY','AZ','NM','MT'];
 var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-var S={mini:false,drawer:false,reviewN:null,mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
+var S={mini:false,drawer:false,mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
   modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
   results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
 var mq=window.matchMedia('(min-width:1000px)');
@@ -342,7 +344,6 @@ var I={
  share:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
  users:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.9-3.4 3.4-5.5 6.5-5.5s5.6 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.8c1.8.7 3 2.6 3.5 5.2"/></svg>',
  box:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/></svg>',
- review:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/></svg>',
  menu:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
  fold:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 10-2 2 2 2"/></svg>',
  unfold:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m14 10 2 2-2 2"/></svg>',
@@ -483,21 +484,19 @@ function sideHTML(){
  var VIEWS=[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]],n=filterCount();
  var full='<div class="full">'+
   '<div class="sh"><b>Browse</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
-  '<button class="btn pri newbtn" data-act="sideadd" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'New contact</button>'+
-  (S.panel==='sadd'?'<div class="addopts"><button class="opt" data-act="scan"><span class="ic">'+I.cam+'</span><span><b>Scan a business card</b><span class="s">Use the camera, then review</span></span></button><button class="opt" data-act="manual"><span class="ic">'+I.pen+'</span><span><b>Enter manually</b><span class="s">Type the details yourself</span></span></button></div>':'')+
+  '<div class="rel"><button class="btn pri newbtn" data-act="sideadd" aria-haspopup="menu" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'New contact</button>'+
+  (S.panel==='sadd'?'<div class="ov" data-act="close"></div><div class="sidepop" role="menu"><button class="tile" role="menuitem" data-act="scan" title="Scan a business card: use the camera, then review"><i>'+I.cam+'</i>Scan card</button><button class="tile" role="menuitem" data-act="manual" title="Enter manually: type the details yourself"><i>'+I.pen+'</i>Enter manually</button></div>':'')+'</div>'+
   '<div class="sl">View</div>'+
   VIEWS.map(function(v){return '<button class="snav'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" aria-current="'+(S.mode===v[0]?'page':'false')+'">'+v[2]+v[1]+'<span class="n">'+viewCount(v[0])+'</span></button>'}).join('')+
   '<div class="sl">Region'+(n?'<button class="linkish" data-act="clear">Clear all</button>':'')+'</div>'+
   '<div class="stchips" role="group" aria-label="Region">'+['Any'].concat(STATES).map(function(st){var on=S.st===st;return '<button class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="region" data-id="'+st+'">'+st+'</button>'}).join('')+'</div>'+
   '<div class="hint" style="padding:2px 8px 4px">Shows the contacts who cover that state; ones with no region set stay, marked.</div>'+
-  '<label class="chk"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label>'+
-  '<div class="sfoot"><button class="snav" data-act="toadmin">'+I.review+'Catalog review'+(S.reviewN?'<span class="sbadge" title="'+S.reviewN+' to review">'+S.reviewN+'</span>':'')+'</button></div></div>';
+  '<label class="chk"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label></div>';
  var rail='<div class="rail">'+
   '<button class="rbtn" data-act="fold" title="Show the sidebar" aria-label="Show the sidebar">'+I.unfold+'</button>'+
   '<button class="rbtn pri" data-act="sideadd" title="New contact" aria-label="New contact">'+I.plusS+'</button>'+
   VIEWS.map(function(v){return '<button class="rbtn'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" title="'+v[1]+'" aria-label="'+v[1]+'">'+v[2]+'</button>'}).join('')+
-  '<button class="rbtn" data-act="fold" title="Region'+(n?': '+S.st:'')+'" aria-label="Filters'+(n?' ('+n+' on)':'')+'">'+I.filter+(n?'<span class="dot"></span>':'')+'</button>'+
-  '<span style="flex:1"></span><button class="rbtn" data-act="toadmin" title="Catalog review" aria-label="Catalog review">'+I.review+(S.reviewN?'<span class="dot"></span>':'')+'</button></div>';
+  '<button class="rbtn" data-act="fold" title="Region'+(n?': '+S.st:'')+'" aria-label="Filters'+(n?' ('+n+' on)':'')+'">'+I.filter+(n?'<span class="dot"></span>':'')+'</button></div>';
  return '<aside class="side'+(S.drawer?' open':'')+'" aria-label="Browse and filter">'+full+rail+'</aside>';
 }
 /* ---------- the list: People or Vendors ---------- */
@@ -998,9 +997,8 @@ function shareContact(c){
 }
 
 /* ---------- admin: catalog review ---------- */
-function loadReviewCount(){api('/api/vendors/admin/review').then(function(d){S.reviewN=Array.isArray(d)?d.length:null;if(listView())render()}).catch(function(){})}
 function loadAdmin(){
- api('/api/vendors/admin/review').then(function(d){S.admin.review=d;S.reviewN=Array.isArray(d)?d.length:null;render()}).catch(function(e){S.admin.review={error:e.message};render()});
+ api('/api/vendors/admin/review').then(function(d){S.admin.review=d;render()}).catch(function(e){S.admin.review={error:e.message};render()});
  api('/api/vendors/admin/vendors').then(function(d){S.admin.vendors=d;render()}).catch(function(e){S.admin.vendors={error:e.message};render()});
 }
 // While pulls run, check every few seconds so each vendor's row updates as it finishes.
@@ -1129,7 +1127,6 @@ var A={
  drawer:function(){S.drawer=!S.drawer;S.panel=null},
  sideadd:function(){if(S.mini&&mq.matches){S.mini=false;try{localStorage.setItem('vendors.sideMini','0')}catch(e){}}S.ctxV='';S._ctx='';S.panel=S.panel==='sadd'?null:'sadd'},
  region:function(el){var st=el.dataset.id;S.st=S.st===st&&st!=='Any'?'Any':st;loadList()},
- toadmin:function(){S.drawer=false;S.view='admin';S.panel=null;S.atab='review';S.admin={review:null,vendors:null};window.scrollTo(0,0);loadAdmin()},
  mode:function(el){
   S.drawer=false;
   var m=el.dataset.id;if(m===S.mode)return;
@@ -1203,6 +1200,8 @@ document.addEventListener('click',function(e){
   e.preventDefault();var a=(CFG.APPS||[]).filter(function(x){return x.key===tile.dataset.app})[0];
   S.panel=null;render();if(a&&a.key!=='vendors')openInTab(a.tab,appUrl(a),a.open);return;
  }
+ // New contact's menu closes on a click anywhere else (the sidebar is its own layer, so its .ov can't catch them all)
+ if(S.panel==='sadd'&&!e.target.closest('.side .rel')){S.panel=null;if(!e.target.closest('[data-act]'))render()}
  var el=e.target.closest('[data-act]');
  if(!el){
   // desktop: a click on empty space (not a card, the panel, the toolbar or a dialog) closes the vendor's details
@@ -1327,7 +1326,7 @@ api('/api/divisions').then(function(divs){
  S.div=has(want)?want:has(saved)?saved:(S.divs[0]||{}).id||'';
  S.loading=false;render();
  if(!S.div)return;
- S.loading=true;loadList();loadNames();loadReviewCount();
+ S.loading=true;loadList();loadNames();
  if(p.get('vendor')&&p.get('contact')){S.mode='people';openPerson(p.get('contact'),p.get('vendor'))}
  else if(p.get('vendor'))openVendor(p.get('vendor'));else saveUrl();
  render();
