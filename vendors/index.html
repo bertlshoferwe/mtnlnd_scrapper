@@ -436,7 +436,7 @@ function coversText(c){return c.unset?'<span class="cell mu">—</span>':esc(c.a
 function renderPeople(){
  var T=toks(),rows=peopleRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No one matches. Try another item, name or state.':'No contacts in '+esc(divName(S.div))+' yet. Use + to add one.')+'</div>';
- var h='<div class="tbl" role="table" aria-label="Contacts"><div class="thead tp" role="row">'+th('name','Person')+th('vendor','Vendor','c-vendor')+th('title','Title','c-title')+th('covers','Covers','c-cov')+'<div class="cell c-email" style="font-size:12px;font-weight:600;color:var(--m)">Email</div></div>';
+ var h='<div class="tbl" role="table" aria-label="Contacts"><div class="thead tp" role="row">'+th('name','Person')+th('vendor','Vendor','c-vendor')+th('title','Title','c-title')+th('covers','Region','c-cov')+'<div class="cell c-email" style="font-size:12px;font-weight:600;color:var(--m)">Email</div></div>';
  rows.forEach(function(r){
   var c=r.c,v=r.v,sel=S.cid===c.id&&S.vid===v.id&&mq.matches;
   var item=T.length&&!c.matched&&v.matched_items.length?'<div class="sub">sells '+hl(v.matched_items[0],T)+'</div>':'';
@@ -453,7 +453,7 @@ function renderPeople(){
 function renderVendorsTbl(){
  var T=toks(),rows=vendorRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
- var h='<div class="tbl" role="table" aria-label="Vendors"><div class="thead tv" role="row">'+th('name','Vendor')+'<div class="cell c-sells" style="font-size:12px;font-weight:600;color:var(--m)">What they sell</div>'+th('contacts','Contacts','c-n')+th('covers','Covers','c-cov')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Vendors"><div class="thead tv" role="row">'+th('name','Vendor')+'<div class="cell c-sells" style="font-size:12px;font-weight:600;color:var(--m)">What they sell</div>'+th('contacts','Contacts','c-n')+th('covers','Region','c-cov')+'</div>';
  rows.forEach(function(v){
   var sells=T.length&&v.matched_items.length?v.matched_items:v.item_names,more=(T.length&&v.matched_items.length?v.matched_items.length:v.item_count)-sells.length;
   var st=v.states.indexOf('All')>=0?'Nationwide':v.states.join(', ');
@@ -500,7 +500,7 @@ function renderPerson(){
   (c.phone?'<div class="prow"><span class="k">Phone</span><a href="'+esc(telHref(c.phone))+'">'+esc(c.phone)+'</a></div>':'')+
   (c.alt_phone?'<div class="prow"><span class="k">Alt. phone</span><a href="'+esc(telHref(c.alt_phone))+'">'+esc(c.alt_phone)+'</a></div>':'')+
   (c.email?'<div class="prow"><span class="k">Email</span><a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a></div>':'')+
-  '<div class="prow"><span class="k">Covers</span><span>'+srvLine(c)+'</span></div>'+
+  '<div class="prow"><span class="k">Region</span><span>'+srvLine(c)+'</span></div>'+
   (c.has_card?'<div class="prow"><span class="k">Card</span><a href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">View business card</a></div>':'')+'</div>';
  h+='<div class="psec"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="tovendor">View vendor</button></div>';
  if(its.length)h+='<div class="lab">What they sell · '+its.length+'</div><div class="chips">'+(S.itemsOpen?its:its.slice(0,ITEMS)).map(function(i){return '<span class="chip">'+esc(i.name)+'</span>'}).join('')+
@@ -847,7 +847,7 @@ function renderCardView(){
 /* ---------- sharing a contact ---------- */
 function shareText(c,v){
  return [c.name,[c.title,v&&v.name].filter(Boolean).join(', '),c.phone&&('Phone: '+c.phone),c.alt_phone&&('Alt phone: '+c.alt_phone),c.email&&('Email: '+c.email),
-  'Covers: '+c.area_text,v&&v.website&&('Website: '+v.website)].filter(Boolean).join('\n');
+  'Region: '+c.area_text,v&&v.website&&('Website: '+v.website)].filter(Boolean).join('\n');
 }
 function vcfOf(c,v){
  var e=function(x){return String(x||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/([,;])/g,'\\$1')};
@@ -855,7 +855,7 @@ function vcfOf(c,v){
  return ['BEGIN:VCARD','VERSION:3.0','N:'+e(last)+';'+e(parts.join(' '))+';;;','FN:'+e(c.name),v?'ORG:'+e(v.name):'',c.title?'TITLE:'+e(c.title):'',
   c.phone?'TEL;TYPE=WORK,VOICE:'+sp.phone+(sp.ext?' x'+sp.ext:''):'',
   c.alt_phone?'TEL;TYPE=VOICE:'+splitPhone(c.alt_phone).phone+(splitPhone(c.alt_phone).ext?' x'+splitPhone(c.alt_phone).ext:''):'',c.email?'EMAIL;TYPE=WORK:'+e(c.email):'',
-  v&&v.website?'URL:https://'+e(v.website.replace(/^https?:\/\//i,'')):'','NOTE:'+e('Covers: '+c.area_text),'END:VCARD'].filter(Boolean).join('\r\n');
+  v&&v.website?'URL:https://'+e(v.website.replace(/^https?:\/\//i,'')):'','NOTE:'+e('Region: '+c.area_text),'END:VCARD'].filter(Boolean).join('\r\n');
 }
 function copyText(t){
  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t);
