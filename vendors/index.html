@@ -109,6 +109,7 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .ov{position:fixed;inset:0;z-index:40;background:rgba(3,6,14,.64)}
 .pop{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--pop);border-top:1px solid var(--bs);border-radius:16px 16px 0 0;padding:16px 12px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;max-height:88vh;overflow:auto}
 .pop h3{margin:0 4px 4px;font-size:14px}
+.pop .mh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:10px 10px 4px}
 .opt{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 14px;border-radius:12px;border:1px solid var(--bs);background:var(--s2);width:100%;text-align:left;text-decoration:none}
 .opt:hover{border-color:var(--a)}
 .opt .ic{width:40px;height:40px;border-radius:999px;background:var(--as);color:var(--ast);display:inline-flex;align-items:center;justify-content:center}
@@ -129,6 +130,7 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
  .pop.menu .opt:hover{background:var(--as)}
  .pop.menu .opt .ic{width:34px;height:34px}
  .pop.menu .opt b{font-size:14px}
+ .pop.menu .mh{display:block}
  .main{padding:16px 20px}
 }
 .appsgrid{display:grid;grid-template-columns:repeat(var(--cols,3),88px);gap:8px}
@@ -137,12 +139,12 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .tile.cur{background:var(--s2)}
 .tile svg{width:40px;height:40px;display:block}
 .desk{display:block}
-@media(min-width:1000px){
+@media(min-width:768px){
  .desk{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,32vw,430px);gap:16px;align-items:start}
  .desk.nodet{grid-template-columns:minmax(0,1fr)}
 }
 /* the vendor panel stays put beside the grid, and scrolls on its own when it's taller than the window */
-@media(min-width:1000px){.desk.tw{grid-template-columns:minmax(0,1fr) clamp(360px,36vw,480px)}.desk.tw.nodet{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:768px){.desk.tw{grid-template-columns:minmax(0,1fr) clamp(320px,36vw,480px)}.desk.tw.nodet{grid-template-columns:minmax(0,1fr)}}
 .detail{position:sticky;top:16px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
 .dhead{padding:16px;display:flex;gap:14px;align-items:center}
 .pen{opacity:0;transition:opacity .15s}
@@ -363,9 +365,10 @@ var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesserac
 var S={mini:false,drawer:false,mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
   modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
   results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
-var mq=window.matchMedia('(min-width:1000px)');
+var mq=window.matchMedia('(min-width:768px)');
+function defaultView(){try{var v=localStorage.getItem('vendors.defaultView');return /^(people|vendors|items)$/.test(v||'')?v:'people'}catch(e){return 'people'}}   // tablet and up: the details sit beside the list
 try{S.mini=localStorage.getItem('vendors.sideMini')==='1'}catch(e){}
-try{var savedMode=localStorage.getItem('vendors.mode');if(/^(people|vendors|items)$/.test(savedMode||''))S.mode=savedMode}catch(e){}
+S.mode=defaultView();
 var $=function(id){return document.getElementById(id)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 var I={
@@ -510,8 +513,10 @@ function renderMast(){
  '<div class="rel"><button class="cbtn" aria-label="Services" title="Services" aria-haspopup="true" aria-expanded="'+(S.panel==='apps')+'" data-act="p-apps">'+I.waffle+'</button>'+
  (S.panel==='apps'?'<div class="ov" data-act="close"></div><div class="pop r" style="width:auto">'+appsHTML()+'</div>':'')+
  '</div><div class="rel"><button class="cbtn" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded="'+(S.panel==='set')+'" data-act="p-set">'+I.gear+'</button>'+
- (S.panel==='set'?'<div class="ov" data-act="close"></div><div class="pop r menu" role="menu" style="width:220px"><h3>Theme</h3>'+[['auto','Auto','Follows this device',I.auto],['light','Light','',I.sun],['dark','Dark','',I.moon]].map(function(t){var on=themeChoice()===t[0];
-   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="theme" data-id="'+t[0]+'"><span class="ic">'+t[3]+'</span><span style="flex:1"><b>'+t[1]+'</b>'+(t[2]?'<span class="s">'+t[2]+'</span>':'')+'</span>'+(on?I.check:'')+'</button>'}).join('')+'</div>':'')+
+ (S.panel==='set'?'<div class="ov" data-act="close"></div><div class="pop r menu" role="menu" style="width:230px"><div class="mh">Theme</div>'+[['auto','Auto','Follows this device',I.auto],['light','Light','',I.sun],['dark','Dark','',I.moon]].map(function(t){var on=themeChoice()===t[0];
+   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="theme" data-id="'+t[0]+'"><span class="ic">'+t[3]+'</span><span style="flex:1"><b>'+t[1]+'</b>'+(t[2]?'<span class="s">'+t[2]+'</span>':'')+'</span>'+(on?I.check:'')+'</button>'}).join('')+
+   '<div class="mh" style="border-top:1px solid var(--b);margin-top:4px">Start on</div>'+[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]].map(function(t){var on=defaultView()===t[0];
+   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="startview" data-id="'+t[0]+'"><span class="ic">'+t[2]+'</span><span style="flex:1"><b>'+t[1]+'</b></span>'+(on?I.check:'')+'</button>'}).join('')+'</div>':'')+
  '</div></div></div></header>'+(S.offline?'<div class="offline" role="status">You’re offline. Vendors needs a connection to show and save anything.</div>':'');
 }
 
@@ -684,7 +689,23 @@ function countText(){
 function rbar(){
  return '<div class="rbar"><b class="rtitle">'+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</b><span class="count" id="modecount" aria-live="polite">'+countText()+'</span></div>';
 }
+// Tablet and desktop always show someone's (or a vendor's, or an item's) details: the first row when
+// nothing's picked, or when what was picked has gone from the list (a search, a filter, a delete).
+function ensureSelection(){
+ if(!mq.matches||!listView())return false;
+ if(S.mode==='people'){
+  var pr=peopleRows();if(!pr.length||pr.some(function(r){return r.c.id===S.cid&&r.v.id===S.vid}))return false;
+  openPerson(pr[0].c.id,pr[0].v.id);return true;
+ }
+ if(S.mode==='vendors'){
+  var vr=vendorRows();if(!vr.length||vr.some(function(v){return v.id===S.vid}))return false;
+  openVendor(vr[0].id);return true;
+ }
+ var ir=itemRows();if(!ir.length||ir.some(function(i){return i.key===S.ikey}))return false;
+ S.ikey=ir[0].key;return true;
+}
 function paintResults(){
+ if(ensureSelection()){render();return}
  var el=$('results');if(!el){render();return}
  document.querySelectorAll('.side .snav .n').forEach(function(n){n.textContent=viewCount(n.dataset.vt)});
  el.innerHTML=renderResults();
@@ -1212,13 +1233,14 @@ var A={
  clear:function(){S.st='Any';S.wc=false;loadList()},
  vendor:function(el){openVendor(el.dataset.id)},
  person:function(el){openPerson(el.dataset.id,el.dataset.v)},
- tovendor:function(){if(S.mode!=='vendors'){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}}S.cid=null;S.itemsOpen=false;saveUrl()},
+ tovendor:function(){S.mode='vendors';S.cid=null;S.itemsOpen=false;saveUrl()},
  find:function(){
   if(S.findOpen||S.q){if(S.q){var qi=$('q');if(qi)qi.focus();return 'skip'}S.findOpen=false;return}
   S.findOpen=true;render();var qn=$('q');if(qn)qn.focus();return 'skip';
  },
  'p-set':function(){S.panel=S.panel==='set'?null:'set'},
  theme:function(el){setTheme(el.dataset.id)},
+ startview:function(el){try{localStorage.setItem('vendors.defaultView',el.dataset.id)}catch(e){}toast('Vendors will open on '+({people:'People',vendors:'Vendors',items:'Items'}[el.dataset.id]))},
  fold:function(){S.mini=!S.mini;S.panel=null;try{localStorage.setItem('vendors.sideMini',S.mini?'1':'0')}catch(e){}},
  drawer:function(){S.drawer=!S.drawer;S.panel=null},
  sideadd:function(){S.ctxV='';S._ctx='';S.panel=S.panel==='sadd'?null:'sadd'},
@@ -1226,14 +1248,15 @@ var A={
  mode:function(el){
   S.drawer=false;
   var m=el.dataset.id;if(m===S.mode)return;
-  S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}
+  S.mode=m;
   S.ikey=null;if(m==='vendors')S.cid=null;else{S.vid=null;S.cid=null;S.detail=null}
   if(m==='items'&&!S.items||m!=='items'&&!S.results){S.loading=true;loadList()}
+  else ensureSelection();
   saveUrl();
  },
  item:function(el){S.ikey=el.dataset.id;S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0)},
- openv:function(el){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}S.ikey=null;if(!S.results)loadList();openVendor(el.dataset.id)},
- openp:function(el){S.mode='people';try{localStorage.setItem('vendors.mode','people')}catch(e){}S.ikey=null;if(!S.results)loadList();openPerson(el.dataset.id,el.dataset.v)},
+ openv:function(el){S.mode='vendors';S.ikey=null;if(!S.results)loadList();openVendor(el.dataset.id)},
+ openp:function(el){S.mode='people';S.ikey=null;if(!S.results)loadList();openPerson(el.dataset.id,el.dataset.v)},
  sort:function(el){var st=S.sort[S.mode],k=el.dataset.id;if(st.k===k)st.d=-st.d;else{st.k=k;st.d=k==='contacts'?-1:1}},
  back:function(){S.view='list';S.vid=null;S.cid=null;S.ikey=null;saveUrl()},
  items:function(){S.itemsOpen=!S.itemsOpen;S.addItem=false},
@@ -1300,10 +1323,6 @@ document.addEventListener('click',function(e){
  if(S.panel==='sadd'&&!e.target.closest('.side .rel')){S.panel=null;if(!e.target.closest('[data-act]'))render()}
  var el=e.target.closest('[data-act]');
  if(!el){
-  // desktop: a click on empty space (not a card, the panel, the toolbar or a dialog) closes the vendor's details
-  if((S.vid||S.ikey)&&mq.matches&&S.view==='list'&&!S.panel&&!S.vm&&!S.modal&&!S.cardView&&
-     !e.target.closest('.trow,.thead,.modebar,.detail,.tool,.mast,.modal-ov,.toast,a,button,input,select,label'))
-   {S.vid=null;S.cid=null;S.ikey=null;S.detail=null;saveUrl();render()}
   return;
  }
  var act=el.dataset.act;
@@ -1412,7 +1431,7 @@ window.vnOpenLink=function(href){
 /* ---------- start ---------- */
 window.addEventListener('online',function(){S.offline=false;render();refresh()});
 window.addEventListener('offline',function(){S.offline=true;render()});
-mq.addEventListener&&mq.addEventListener('change',function(){if(S.view==='vendor'&&mq.matches)S.view='list';render()});
+mq.addEventListener&&mq.addEventListener('change',function(){if(S.view==='vendor'&&mq.matches)S.view='list';ensureSelection();render()});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(){});
 render();
 api('/api/divisions').then(function(divs){
