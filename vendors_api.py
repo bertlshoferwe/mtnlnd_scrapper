@@ -9,7 +9,7 @@ by every division; what a vendor sells is kept per division.
   GET/POST/DELETE  /api/vendors/<id>/logo                its logo (POST: an upload, or {"pull": true})
   POST /api/vendors/<id>/items, DELETE /api/vendors/items/<item_id>
   POST /api/vendors/contacts, PATCH/DELETE /api/vendors/contacts/<id>
-  GET  /api/vendors/contacts/email?email=&not=            who already has this email
+  GET  /api/vendors/contacts/duplicate?name=&email=&vendor=&not=   who this contact would duplicate
   POST /api/vendors/cards                                a scanned card's photo (kept with the contact)
   POST /api/vendors/contacts/<id>/card                   a re-cropped photo for a saved contact's card
   GET  /api/vendors/cards/<contact_id>                   that photo
@@ -350,6 +350,26 @@ def _card_logo(vendor, data):
         vs.update_vendor(vendor["id"], {"logo_path": path, "logo_source": "card", "logo_pulled_at": vs._now()}, _actor())
 
 
+def _existing_vendor(data):
+    """The contact's vendor if it already exists (by id or name), without making one."""
+    v = vs.get_vendor(data["vendor_id"]) if data.get("vendor_id") else None
+    return v or vs.find_vendor(name=(data.get("vendor") or "").strip() or None)
+
+
+def _duplicate(fields, data, not_id=None):
+    """A 409 answer when this contact already exists, or None. The page shows
+    who it is and opens them instead of adding a second entry."""
+    v = _existing_vendor(data)
+    hit = vs.find_duplicate(fields["name"], fields.get("email"), v["id"] if v else None, not_id)
+    if not hit:
+        return None
+    hv = vs.get_vendor(hit["vendor_id"])
+    out = {"id": hit["id"], "name": hit["name"], "vendor_id": hit["vendor_id"], "vendor": hv["name"] if hv else "", "why": hit["why"]}
+    msg = (f"{hit['name']}{' at ' + out['vendor'] if out['vendor'] else ''} already has this email"
+           if hit["why"] == "email" else f"{hit['name']} is already a contact at {out['vendor']}")
+    return jsonify({"error": msg + " — not added twice", "duplicate": out}), 409
+
+
 @bp.route("/api/vendors/contacts", methods=["POST"])
 def api_contact_create():
     if not _can_edit():
@@ -360,6 +380,9 @@ def api_contact_create():
         return _err("pick a division", 404)
     try:
         fields = _contact_fields(data)
+        dup = _duplicate(fields, data)
+        if dup:
+            return dup
         vendor = _vendor_for(data, division)
     except ValueError as e:
         return _err(str(e))
@@ -382,6 +405,9 @@ def api_contact_update(contact_id):
         return _err("that contact is gone", 404)
     try:
         fields = _contact_fields(data)
+        dup = _duplicate(fields, data, not_id=contact_id)
+        if dup:
+            return dup
         vendor = _vendor_for(data, division)
     except ValueError as e:
         return _err(str(e))
@@ -399,13 +425,17 @@ def api_contact_delete(contact_id):
     return jsonify({"ok": True})
 
 
-@bp.route("/api/vendors/contacts/email", methods=["GET"])
-def api_contact_email():
-    hit = vs.contact_with_email(request.args.get("email"), request.args.get("not") or None)
+@bp.route("/api/vendors/contacts/duplicate", methods=["GET"])
+def api_contact_duplicate():
+    """?name=&email=&vendor_id=|vendor=&not= — who this contact would duplicate (see vs.find_duplicate)."""
+    a = request.args
+    v = _existing_vendor({"vendor_id": a.get("vendor_id"), "vendor": a.get("vendor")})
+    hit = vs.find_duplicate(a.get("name"), a.get("email"), v["id"] if v else None, a.get("not") or None)
     if not hit:
         return jsonify({"match": None})
-    v = vs.get_vendor(hit["vendor_id"])
-    return jsonify({"match": {"name": hit["name"], "vendor": v["name"] if v else ""}})
+    hv = vs.get_vendor(hit["vendor_id"])
+    return jsonify({"match": {"id": hit["id"], "name": hit["name"], "vendor_id": hit["vendor_id"],
+                              "vendor": hv["name"] if hv else "", "why": hit["why"]}})
 
 
 # ---------------------------------------------------------------------------

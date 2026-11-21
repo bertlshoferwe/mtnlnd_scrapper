@@ -149,6 +149,28 @@ def contact_with_email(email, not_id=None):
     return next((r for r in rows if r["id"] != not_id), None)
 
 
+def _name_key(name):
+    return re.sub(r"[^a-z0-9 ]", "", re.sub(r"\s+", " ", (name or "").lower())).strip()
+
+
+def find_duplicate(name=None, email=None, vendor_id=None, not_id=None):
+    """The contact this one would duplicate, or None: anyone with the same email
+    (at any vendor), or the same name at the same vendor. {"id", "name",
+    "vendor_id", "why": "email" | "name"}. Phones aren't compared — people at
+    one company often share a main line with different extensions."""
+    hit = contact_with_email(email, not_id)
+    if hit:
+        return dict(hit, why="email")
+    key = _name_key(name)
+    if key and vendor_id:
+        rows = _db().table("vendor_contacts").select("id,name,vendor_id").eq("vendor_id", vendor_id) \
+            .is_("deleted_at", "null").execute().data or []
+        hit = next((r for r in rows if r["id"] != not_id and _name_key(r["name"]) == key), None)
+        if hit:
+            return dict(hit, why="name")
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Writing
 # ---------------------------------------------------------------------------

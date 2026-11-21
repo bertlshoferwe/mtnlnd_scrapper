@@ -97,13 +97,38 @@ class EmailAndAdminTests(unittest.TestCase):
     def setUp(self):
         self.c = app.test_client()
 
-    def test_duplicate_email_warning(self):
-        with mock.patch.object(vs_mod(), "contact_with_email", return_value={"name": "Dale", "vendor_id": "v1"}), \
-             mock.patch.object(vs_mod(), "get_vendor", return_value={"name": "Wasatch Pipe Supply"}):
-            r = self.c.get("/api/vendors/contacts/email", query_string={"email": "D@X.com"})
-        self.assertEqual(r.get_json()["match"], {"name": "Dale", "vendor": "Wasatch Pipe Supply"})
-        with mock.patch.object(vs_mod(), "contact_with_email", return_value=None):
-            self.assertIsNone(self.c.get("/api/vendors/contacts/email?email=new@x.com").get_json()["match"])
+    def test_duplicate_check_names_who_it_is(self):
+        with mock.patch.object(vs_mod(), "find_vendor", return_value=None), \
+             mock.patch.object(vs_mod(), "get_vendor", return_value={"name": "Skaps"}), \
+             mock.patch.object(vs_mod(), "find_duplicate", return_value={"id": "c1", "name": "Anurag Shah", "vendor_id": "v1", "why": "email"}):
+            r = self.c.get("/api/vendors/contacts/duplicate", query_string={"email": "anurag@skaps.com"})
+        self.assertEqual(r.get_json()["match"], {"id": "c1", "name": "Anurag Shah", "vendor_id": "v1", "vendor": "Skaps", "why": "email"})
+        with mock.patch.object(vs_mod(), "find_vendor", return_value=None), mock.patch.object(vs_mod(), "find_duplicate", return_value=None):
+            self.assertIsNone(self.c.get("/api/vendors/contacts/duplicate?email=new@x.com").get_json()["match"])
+
+    def test_a_duplicate_is_refused_and_nothing_is_made(self):
+        body = {"division": "geo", "name": "Anurag Shah", "email": "anurag@skaps.com", "vendor": "Brand New Co"}
+        with mock.patch.object(vendors_api.supabase_store, "get_division", return_value={"id": "geo"}), \
+             mock.patch.object(vs_mod(), "find_vendor", return_value=None), \
+             mock.patch.object(vs_mod(), "get_vendor", return_value={"name": "Skaps"}), \
+             mock.patch.object(vs_mod(), "find_duplicate", return_value={"id": "c1", "name": "Anurag Shah", "vendor_id": "v1", "why": "email"}), \
+             mock.patch.object(vs_mod(), "create_vendor") as made_vendor, mock.patch.object(vs_mod(), "save_contact") as saved:
+            r = self.c.post("/api/vendors/contacts", json=body)
+            self.assertEqual(r.status_code, 409)
+            self.assertIn("already has this email", r.get_json()["error"])
+            made_vendor.assert_not_called()                           # no stray "Brand New Co" either
+            saved.assert_not_called()
+
+    def test_same_name_at_the_same_vendor_counts(self):
+        rows = [{"id": "c1", "name": "Anurag  Shah", "vendor_id": "v1"}]
+        q = mock.MagicMock()
+        q.select.return_value = q; q.eq.return_value = q; q.is_.return_value = q
+        q.execute.return_value = mock.Mock(data=rows)
+        with mock.patch.object(vendors_store, "_db") as db, mock.patch.object(vendors_store, "contact_with_email", return_value=None):
+            db.return_value.table.return_value = q
+            self.assertEqual(vendors_store.find_duplicate("anurag shah", None, "v1")["why"], "name")
+            self.assertIsNone(vendors_store.find_duplicate("anurag shah", None, "v1", not_id="c1"))   # editing themselves
+            self.assertIsNone(vendors_store.find_duplicate("Kourosh Sabzevari", None, "v1"))
 
     def test_admin_routes_refuse_a_non_admin(self):
         with mock.patch.object(vendors_api, "_is_admin", return_value=False):

@@ -111,7 +111,8 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
  .desk{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,32vw,430px);gap:16px;align-items:start}
  .desk.nodet{grid-template-columns:minmax(0,1fr)}
 }
-.detail{position:sticky;top:72px}
+/* the vendor panel stays put beside the grid, and scrolls on its own when it's taller than the window */
+.detail{position:sticky;top:72px;max-height:calc(100vh - 88px);max-height:calc(100dvh - 88px);overflow-y:auto;overscroll-behavior:contain;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
 .dhead{padding:16px;display:flex;gap:14px;align-items:center}
 .pen{opacity:0;transition:opacity .15s}
 .dhead:hover .pen,.crow:hover .pen,.ccard:hover .pen,.pen:focus-visible{opacity:1}
@@ -260,7 +261,14 @@ function loadList(delay){
 function loadDetail(){
  if(!S.vid)return Promise.resolve();
  var id=S.vid;
- return api('/api/vendors/'+encodeURIComponent(id)+'?'+qs({division:S.div})).then(function(d){if(S.vid===id){S.detail=d;render()}})
+ return api('/api/vendors/'+encodeURIComponent(id)+'?'+qs({division:S.div})).then(function(d){
+  if(S.vid!==id)return;
+  S.detail=d;
+  // "Open <them>" from a duplicate: once their vendor is showing, open their contact
+  var pe=S.pendingEdit&&d.contacts&&d.contacts.filter(function(c){return c.id===S.pendingEdit})[0];
+  if(S.pendingEdit){S.pendingEdit=null;if(pe){closeForm();S.edit=pe.id;S.draft=draftFrom(pe);S.modal=true}}
+  render();
+ })
   .catch(function(e){if(S.vid===id){S.detail={error:e.message};render()}});
 }
 function loadNames(){return api('/api/vendors/names').then(function(d){S.names=d}).catch(function(){})}
@@ -448,7 +456,7 @@ function renderForm(){
  }
  h+='</div>';
  if(S.confirmDel)h+='<div class="warn">Delete '+esc(d.name||'this contact')+'? This removes it for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="del">Delete</button><button type="button" class="btn sm" data-act="nodel">Keep</button></div></div>';
- h+=(S.edit?delBar(S.confirmDel?'':'askdel','Delete contact'):'<div class="bar"><button class="btn pri"'+(S.busy?' disabled':'')+'>'+(S.busy?'Saving…':'Add contact')+'</button></div>')+'</form></div>';
+ h+=(S.edit?delBar(S.confirmDel?'':'askdel','Delete contact'):'<div class="bar"><button class="btn pri"'+(S.busy||S.dup?' disabled':'')+'>'+(S.busy?'Saving…':'Add contact')+'</button></div>')+'</form></div>';
  return h;
 }
 function headSub(d,fixed){
@@ -479,7 +487,7 @@ function snapshot(){
  if(S.vm)return {url:'/api/vendors/'+encodeURIComponent(S.vid),body:{name:S.vm.name.trim(),website:S.vm.website.trim()},check:S.vm.name.trim()?'':'Add a vendor name'};
  if(S.modal&&S.edit&&S.draft){
   var d=S.draft,m=vendorMatch(d.vendor);
-  return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':emailBad(d.email)?'Fix the email':'',
+  return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':emailBad(d.email)?'Fix the email':S.dup?'Same as '+S.dup.name+' — change the name or email':'',
    body:{division:S.div,name:d.name,title:d.title,phone:joinPhone(d),alt_phone:joinPhone({phone:d.alt,ext:d.altExt}),email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
  }
  return null;
@@ -510,15 +518,26 @@ function vendorHint(name,v){
  if(!String(name||'').trim())return 'Pick an existing vendor or type a new one.';
  return v?'Matches an existing vendor. Their items carry over.':'New vendor. Add its website later so items can be pulled.';
 }
-function dupHTML(){var m=S.dup;return m?'<div class="warn" style="margin-bottom:10px">'+esc(m.name)+' already has this email'+(m.vendor?' at '+esc(m.vendor):'')+'. Saving will add a second entry.</div>':''}
-var dupTimer=null;
-function checkDup(){
+// No duplicate contacts: the same email anywhere, or the same name at the same vendor. The server
+// refuses them too; this says so while typing, blocks saving, and offers the existing contact instead.
+function dupHTML(){
+ var m=S.dup;if(!m)return '';
+ var why=m.why==='email'?esc(m.name)+(m.vendor?' at <b>'+esc(m.vendor)+'</b>':'')+' already has this email.':esc(m.name)+' is already a contact at <b>'+esc(m.vendor)+'</b>.';
+ return '<div class="errb" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1 1 200px">'+why+' They can’t be added twice.</span>'+
+  '<button type="button" class="btn sm" data-act="opendup">Open '+esc(m.name)+'</button></div>';
+}
+function paintDup(){var b=$('dupbox');if(b)b.innerHTML=dupHTML();var sb=document.querySelector('form[data-form="contact"] .bar .btn.pri');if(sb)sb.disabled=!!S.dup||!!S.busy}
+var dupTimer=null,dupSeq=0;
+function checkDup(delay){
  clearTimeout(dupTimer);
  dupTimer=setTimeout(function(){
-  var e=S.draft&&S.draft.email.trim();
-  if(!e||!/@/.test(e)){S.dup=null;var b=$('dupbox');if(b)b.innerHTML='';return}
-  api('/api/vendors/contacts/email?'+qs({email:e,not:S.edit||''})).then(function(d){S.dup=d.match;var b=$('dupbox');if(b)b.innerHTML=dupHTML()}).catch(function(){});
- },300);
+  var d=S.draft;if(!d)return;
+  var e=d.email.trim(),n=d.name.trim(),vn=(!S.edit&&S.ctxV)||d.vendor.trim(),m=vendorMatch(vn);
+  if((!e||!/@.+\./.test(e))&&!(n&&m)){S.dup=null;paintDup();return}
+  var seq=++dupSeq;
+  api('/api/vendors/contacts/duplicate?'+qs({email:/@.+\./.test(e)?e:'',name:n,vendor_id:m?m.id:'',not:S.edit||''}))
+   .then(function(r){if(seq!==dupSeq||!S.draft)return;S.dup=r.match;paintDup()}).catch(function(){});
+ },delay==null?300:delay);
 }
 
 /* ---------- business card ---------- */
@@ -802,6 +821,7 @@ function saveContact(){
  if(!d.name.trim()){toast('Add a name first');return}
  if(!d.vendor.trim()){toast('Pick or type a vendor');return}
  if(emailBad(d.email)){toast('That email doesn’t look right');var fe=$('f-email');if(fe)fe.focus();return}
+ if(S.dup){toast('That contact is already in Vendors');return}
  var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:joinPhone(d),alt_phone:joinPhone({phone:d.alt,ext:d.altExt}),email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
  if(S.view==='scan'&&S.cardPath)body.card_image_path=S.cardPath;
  S.busy=true;render();
@@ -809,7 +829,7 @@ function saveContact(){
   var wasEdit=S.edit;S.busy=false;closeForm();S.view=mq.matches?'list':'vendor';
   S.vid=r.vendor_id;S.detail=null;S.itemsOpen=false;window.scrollTo(0,0);saveUrl();refresh();
   toast(wasEdit?'Contact updated':'Contact saved');
- }).catch(fail);
+ }).catch(function(e){fail(e);checkDup(0)});
 }
 
 /* ---------- what clicks do ---------- */
@@ -868,6 +888,10 @@ var A={
   cropped(false).then(function(sh){var fd=new FormData();fd.append('file',sh.blob,'card.jpg');return api('/api/vendors/contacts/'+encodeURIComponent(cid)+'/card',{method:'POST',body:fd})})
    .then(function(){S.busy=false;S.crop=null;toast('Card cropped');loadDetail()}).catch(fail);
   return 'skip';
+ },
+ opendup:function(){
+  var m=S.dup;if(!m)return 'skip';
+  closeForm();S.view=mq.matches?'list':'vendor';S.pendingEdit=m.id;openVendor(m.vendor_id);
  },
  sharec:function(el){var c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===el.dataset.id})[0];if(c)shareContact(c);return 'skip'},
  nat:function(){S.draft.nationwide=!S.draft.nationwide},
@@ -942,6 +966,7 @@ document.addEventListener('change',function(e){
   if(fixed!==t.value)t.value=fixed;
   S.draft[t.dataset.fld]=t.value;paintHead();
   if(t.dataset.fld==='vendor'){var vh=$('vhint');if(vh)vh.textContent=vendorHint(t.value,vendorMatch(t.value))}
+  if(t.dataset.fld!=='title')checkDup(0);
   autoSave(0);return;
  }
  if(t.dataset&&t.dataset.vf==='name'&&S.vm){t.value=titleCase(t.value.replace(/\s+/g,' ').trim());S.vm.name=t.value;autoSave(0);return}
