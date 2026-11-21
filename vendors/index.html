@@ -50,7 +50,6 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
  .cbtn{width:36px;height:36px}
  .dtab{padding:0 11px}
  .find.open{order:10;flex:1 1 100%}.find.open .msearch{width:auto;flex:1}
- .rbar .count{display:none}
  .main{padding:10px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
 }
 .pill{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--bs);background:var(--as);color:var(--ast);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;max-width:46vw}
@@ -226,16 +225,10 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .cf-reg{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--b)}
 .cf-reg .in2{height:36px;font-size:14px;border-radius:8px}
 /* the two views: a table of people or of vendors, details beside it on a wide screen */
-/* the results card, as Bid Scout's: underlined tabs with count pills, the count on the right */
+/* the results card: what's showing and how many, then the table */
 .rcard{background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden;min-width:0}
-.rbar{display:flex;align-items:center;gap:4px 14px;padding:0 14px;border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none}
-.rtabs{display:flex;gap:2px}
-.rtab{border:0;border-bottom:2px solid transparent;background:transparent;padding:13px 10px 11px;font-size:14px;font-weight:600;color:var(--m);white-space:nowrap}
-.rtab:hover{color:var(--t);border-bottom-color:var(--bs)}
-.rtab.on{color:var(--t);border-bottom-color:var(--a);font-weight:700}
-.rtab .vt{margin-left:6px;background:var(--s2);color:var(--m);border-radius:999px;padding:1px 7px;font-size:12px;font-weight:500}
-.rtab.on .vt{background:var(--a);color:var(--ac)}
-.rtab .vt:empty{display:none}
+.rbar{display:flex;align-items:center;gap:4px 14px;min-height:48px;padding:0 16px;border-bottom:1px solid var(--b)}
+.rtitle{font-size:15px}
 .rbar .count{margin-left:auto;font-size:13px;color:var(--m);white-space:nowrap;padding:8px 0}
 .rcard .tbl{border:0;border-radius:0}
 .rcard>#results>.card{border:0;border-radius:0}
@@ -309,6 +302,12 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .sidepop .tile i svg{width:22px;height:22px}
 .sl{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:14px 8px 6px}
 .sl .linkish{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
+.snav{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;border-radius:8px;padding:8px;color:var(--t);font-size:14px;text-align:left;min-height:38px}
+.snav:hover{background:var(--s2)}
+.snav svg{color:var(--m)}
+.snav.on{background:var(--as);box-shadow:inset 3px 0 0 var(--a);color:var(--ast);font-weight:600}
+.snav.on svg{color:var(--ast)}
+.snav .n{margin-left:auto;font-size:12px;color:var(--m);font-weight:400}
 .stchips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 8px 4px}
 .stchips .chip.tog{min-height:32px;padding:3px 11px;font-size:13px}
 .side .chk{min-height:40px;padding:0 8px;font-size:14px}
@@ -513,11 +512,13 @@ function addTiles(cls){
 }
 function sideHTML(){
  var railOn=S.mini&&mq.matches;   // folded: New contact's tiles open beside the strip's +
- var n=filterCount();
+ var VIEWS=[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]],n=filterCount();
  var full='<div class="full">'+
-  '<div class="sh"><b>Filters</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
+  '<div class="sh"><b>Browse</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
   '<div class="rel"><button class="btn pri newbtn" data-act="sideadd" aria-haspopup="menu" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'New contact</button>'+
   (S.panel==='sadd'&&!railOn?addTiles(''):'')+'</div>'+
+  '<div class="sl">View</div>'+
+  VIEWS.map(function(v){return '<button class="snav'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" aria-current="'+(S.mode===v[0]?'page':'false')+'">'+v[2]+v[1]+'<span class="n" data-vt="'+v[0]+'">'+viewCount(v[0])+'</span></button>'}).join('')+
   '<div class="sl">Region'+(n?'<button class="linkish" data-act="clear">Clear all</button>':'')+'</div>'+
   '<div class="stchips" role="group" aria-label="Region">'+['Any'].concat(STATES).map(function(st){var on=S.st===st;return '<button class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="region" data-id="'+st+'">'+st+'</button>'}).join('')+'</div>'+
   '<div class="hint" style="padding:2px 8px 4px">Shows the contacts who cover that state; ones with no region set stay, marked.</div>'+
@@ -525,6 +526,7 @@ function sideHTML(){
  var rail='<div class="rail">'+
   '<button class="rbtn" data-act="fold" title="Show the sidebar" aria-label="Show the sidebar">'+I.unfold+'</button>'+
   '<div class="rel"><button class="rbtn pri" data-act="sideadd" title="New contact" aria-label="New contact" aria-haspopup="menu" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'</button>'+(S.panel==='sadd'&&railOn?addTiles(' railpop'):'')+'</div>'+
+  VIEWS.map(function(v){return '<button class="rbtn'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" title="'+v[1]+'" aria-label="'+v[1]+'">'+v[2]+'</button>'}).join('')+
   '<button class="rbtn" data-act="fold" title="Region'+(n?': '+S.st:'')+'" aria-label="Filters'+(n?' ('+n+' on)':'')+'">'+I.filter+(n?'<span class="dot"></span>':'')+'</button></div>';
  return '<aside class="side'+(S.drawer?' open':'')+'" aria-label="Browse and filter">'+full+rail+'</aside>';
 }
@@ -628,14 +630,11 @@ function countText(){
  return n+' '+(S.mode==='people'?(n===1?'person':'people'):(n===1?'vendor':'vendors'));
 }
 function rbar(){
- var V=[['people','People'],['vendors','Vendors'],['items','Items']];
- return '<div class="rbar"><div class="rtabs" role="tablist" aria-label="Show">'+V.map(function(v){
-  return '<button class="rtab'+(S.mode===v[0]?' on':'')+'" role="tab" aria-selected="'+(S.mode===v[0])+'" data-act="mode" data-id="'+v[0]+'">'+v[1]+'<span class="vt" data-vt="'+v[0]+'">'+viewCount(v[0])+'</span></button>'}).join('')+
-  '</div><span class="count" id="modecount" aria-live="polite">'+countText()+'</span></div>';
+ return '<div class="rbar"><b class="rtitle">'+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</b><span class="count" id="modecount" aria-live="polite">'+countText()+'</span></div>';
 }
 function paintResults(){
  var el=$('results');if(!el){render();return}
- document.querySelectorAll('.rtab .vt').forEach(function(n){n.textContent=viewCount(n.dataset.vt)});
+ document.querySelectorAll('.side .snav .n').forEach(function(n){n.textContent=viewCount(n.dataset.vt)});
  el.innerHTML=renderResults();
  var c=$('count');if(c)c.textContent=countText();
  var mc=$('modecount');if(mc)mc.textContent=countText();
