@@ -251,6 +251,58 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .psec .lab{margin:0}
 .oth{display:flex;align-items:center;gap:10px;padding:8px;margin:0 -8px;border-radius:10px;border:0;background:none;width:calc(100% + 16px);text-align:left}
 .oth:hover{background:var(--s2)}
+/* the sidebar, like Bid Scout's filters and the bid board's spaces: a card beside the list on a wide
+   screen that folds to an icon strip; on a phone or tablet a drawer from the left (the ☰ in the top bar) */
+.shell{display:flex;gap:16px;align-items:flex-start}
+.content{flex:1;min-width:0}
+.side{width:236px;flex:0 0 236px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:12px;position:sticky;top:72px;max-height:calc(100vh - 88px);max-height:calc(100dvh - 88px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.side .sh{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin:0 0 8px 6px}
+.side .sh b{font-size:14px}
+.sfold{width:30px;height:30px;border:0;border-radius:8px;background:none;color:var(--m);display:grid;place-items:center;flex:none}
+.sfold:hover{background:var(--s2);color:var(--t)}
+.side .newbtn{width:100%;height:42px;margin-bottom:4px}
+.side .addopts{display:flex;flex-direction:column;gap:4px;margin:2px 0 6px}
+.side .addopts .opt{min-height:48px;padding:6px 10px;gap:10px}
+.side .addopts .opt .ic{width:32px;height:32px}
+.sl{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:14px 8px 6px}
+.sl .linkish{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
+.snav{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;border-radius:8px;padding:8px;color:var(--t);font-size:14px;text-align:left;min-height:38px}
+.snav:hover{background:var(--s2)}
+.snav svg{color:var(--m)}
+.snav.on{background:var(--as);box-shadow:inset 3px 0 0 var(--a);color:var(--ast);font-weight:600}
+.snav.on svg{color:var(--ast)}
+.snav .n{margin-left:auto;font-size:12px;color:var(--m);font-weight:400}
+.stchips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 8px 4px}
+.stchips .chip.tog{min-height:32px;padding:3px 11px;font-size:13px}
+.side .chk{min-height:40px;padding:0 8px;font-size:14px}
+.sfoot{margin-top:auto;padding-top:10px;border-top:1px solid var(--b)}
+.sbadge{margin-left:auto;min-width:20px;height:20px;border-radius:999px;background:var(--a);color:var(--ac);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
+.side .full{display:flex;flex-direction:column;gap:2px;flex:1}
+.rail{display:none}
+.rbtn{width:40px;height:40px;border-radius:10px;border:0;background:none;color:var(--m);display:grid;place-items:center;position:relative;flex:none}
+.rbtn:hover{background:var(--s2);color:var(--t)}
+.rbtn.on{background:var(--as);color:var(--ast)}
+.rbtn.pri{background:var(--a);color:var(--ac)}
+.rbtn .dot{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--a);box-shadow:0 0 0 2px var(--s)}
+.menubtn,.mob{display:none}
+.scrim{display:none}
+@media(min-width:900px){
+ .shell.mini .side{width:60px;flex-basis:60px;padding:10px 0;align-items:center;overflow-x:hidden}
+ .shell.mini .side .full{display:none}
+ .shell.mini .side .rail{display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
+ .modebar .seg{display:none}
+ @media(prefers-reduced-motion:no-preference){.side{transition:width .18s ease,flex-basis .18s ease,padding .18s ease}}
+}
+@media(max-width:899px){
+ .shell{display:block}
+ .side{position:fixed;left:0;top:0;bottom:0;width:min(290px,86vw);max-height:none;height:100%;border-radius:0 16px 16px 0;border-left:0;z-index:45;transform:translateX(-102%);padding:calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));box-shadow:4px 0 24px rgba(0,0,0,.45)}
+ .side.open{transform:none}
+ .scrim.open{display:block;position:fixed;inset:0;background:rgba(3,6,14,.6);z-index:44}
+ .menubtn{display:inline-flex}
+ .mob{display:block}
+ .sfold{display:none}
+ @media(prefers-reduced-motion:no-preference){.side{transition:transform .2s ease}}
+}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 @media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
@@ -264,10 +316,11 @@ var CFG=window.APP_CONFIG||{};
 var COLORS=['#4f6bd6','#2f8f83','#b0663a','#8a5bc2','#3f7fb8','#a5524f','#5e8a3a','#b08a2f','#6a6fa8','#b05a8c'];
 var STATES=['UT','ID','CO','NV','WY','AZ','NM','MT'];
 var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-var S={mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
+var S={mini:false,drawer:false,reviewN:null,mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
   modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
   results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
 var mq=window.matchMedia('(min-width:1000px)');
+try{S.mini=localStorage.getItem('vendors.sideMini')==='1'}catch(e){}
 try{var savedMode=localStorage.getItem('vendors.mode');if(/^(people|vendors|items)$/.test(savedMode||''))S.mode=savedMode}catch(e){}
 var $=function(id){return document.getElementById(id)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -287,6 +340,12 @@ var I={
  x:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
  check:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
  share:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
+ users:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.9-3.4 3.4-5.5 6.5-5.5s5.6 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.8c1.8.7 3 2.6 3.5 5.2"/></svg>',
+ box:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/></svg>',
+ review:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/></svg>',
+ menu:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+ fold:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 10-2 2 2 2"/></svg>',
+ unfold:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m14 10 2 2-2 2"/></svg>',
  user:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.2-4 4.2-6 8-6s6.8 2 8 6"/></svg>',
  tag:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
  shop:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-6h6v6"/></svg>',
@@ -395,6 +454,7 @@ function appUrl(a){return a.url+(a.division&&S.div?'?division='+encodeURICompone
 function renderMast(){
  var title=S.view==='admin'?'Catalog review':S.view==='scan'?(S.scanStage===2?(S.edit?'Edit contact':'New contact'):'Scan card'):S.view==='form'?(S.edit?'Edit contact':'New contact'):'Vendors';
  return '<header class="mast"><div class="mast-in">'+
+ (listView()?'<button class="ib menubtn" data-act="drawer" aria-label="Open the menu" aria-expanded="'+S.drawer+'">'+I.menu+'</button>':'')+
  '<h1 data-act="title">'+esc(title)+'</h1>'+
  '<div class="rel"><button class="pill" data-act="p-div" aria-haspopup="true" aria-expanded="'+(S.panel==='div')+'"><span>'+esc(divName(S.div)||'Division')+'</span>'+I.chev+'</button>'+
  (S.panel==='div'?'<div class="ov" data-act="close"></div><div class="pop" style="width:220px"><h3>Division</h3>'+S.divs.map(function(d){return '<button class="opt" data-act="div" data-id="'+esc(d.id)+'" style="min-height:48px"><b>'+esc(d.name)+(d.id===S.div?' ✓':'')+'</b></button>'}).join('')+'<span class="hint" style="padding:0 4px">Divisions come from Bid Scout.</span></div>':'')+
@@ -405,20 +465,40 @@ function renderMast(){
 }
 
 /* ---------- list ---------- */
-function filtersBody(){
- return '<div class="fld"><label class="lab" for="fst">Job state</label><select class="in" id="fst" data-chg="st">'+['Any'].concat(STATES).map(function(s){return '<option'+(S.st===s?' selected':'')+'>'+s+'</option>'}).join('')+'</select><span class="hint">Hides contacts who don’t cover this state. Contacts with no area set stay, marked Coverage not set.</span></div>'+
- '<label class="chk fld" style="flex-direction:row"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label>';
-}
 function addMenu(panel){
  return '<div class="ov" data-act="close"></div><div class="pop r menu"><h3>Add a contact</h3><button class="opt" data-act="scan"><span class="ic">'+I.cam+'</span><span><b>Scan a business card</b><span class="s">Use the camera, then review</span></span></button><button class="opt" data-act="manual"><span class="ic">'+I.pen+'</span><span><b>Enter manually</b><span class="s">Type the details yourself</span></span></button><button class="btn" data-act="close">Cancel</button></div>';
 }
 function renderToolbar(){
- var n=filterCount();
  return '<div class="tool"><div class="search">'+I.search+'<input id="q" type="search" placeholder="Search items, vendors or contacts" aria-label="Search" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"></div>'+
- '<div class="rel"><button class="btn" aria-label="Filters'+(n?' ('+n+' on)':'')+'" aria-haspopup="true" aria-expanded="'+(S.panel==='filter')+'" data-act="p-filter">'+I.filter+(n?'<span class="badge">'+n+'</span>':'')+'</button>'+
- (S.panel==='filter'?'<div class="ov" data-act="close"></div><div class="pop r" role="dialog" aria-label="Filters"><h3>Filters</h3>'+filtersBody()+'<div style="display:flex;gap:8px"><button class="btn" style="flex:1" data-act="clear">Clear</button><button class="btn pri" style="flex:1" data-act="close">Done</button></div></div>':'')+'</div>'+
- '<div class="rel"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
+ '<div class="rel mob"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
  (S.panel==='add'?addMenu():'')+'</div></div>';
+}
+/* ---------- the sidebar ---------- */
+function viewCount(m){
+ if(m==='items')return S.items?S.items.length:'';
+ if(!S.results)return '';
+ return m==='people'?peopleRows().length:S.results.length;
+}
+function sideHTML(){
+ var VIEWS=[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]],n=filterCount();
+ var full='<div class="full">'+
+  '<div class="sh"><b>Browse</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
+  '<button class="btn pri newbtn" data-act="sideadd" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'New contact</button>'+
+  (S.panel==='sadd'?'<div class="addopts"><button class="opt" data-act="scan"><span class="ic">'+I.cam+'</span><span><b>Scan a business card</b><span class="s">Use the camera, then review</span></span></button><button class="opt" data-act="manual"><span class="ic">'+I.pen+'</span><span><b>Enter manually</b><span class="s">Type the details yourself</span></span></button></div>':'')+
+  '<div class="sl">View</div>'+
+  VIEWS.map(function(v){return '<button class="snav'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" aria-current="'+(S.mode===v[0]?'page':'false')+'">'+v[2]+v[1]+'<span class="n">'+viewCount(v[0])+'</span></button>'}).join('')+
+  '<div class="sl">Region'+(n?'<button class="linkish" data-act="clear">Clear all</button>':'')+'</div>'+
+  '<div class="stchips" role="group" aria-label="Region">'+['Any'].concat(STATES).map(function(st){var on=S.st===st;return '<button class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="region" data-id="'+st+'">'+st+'</button>'}).join('')+'</div>'+
+  '<div class="hint" style="padding:2px 8px 4px">Shows the contacts who cover that state; ones with no region set stay, marked.</div>'+
+  '<label class="chk"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label>'+
+  '<div class="sfoot"><button class="snav" data-act="toadmin">'+I.review+'Catalog review'+(S.reviewN?'<span class="sbadge" title="'+S.reviewN+' to review">'+S.reviewN+'</span>':'')+'</button></div></div>';
+ var rail='<div class="rail">'+
+  '<button class="rbtn" data-act="fold" title="Show the sidebar" aria-label="Show the sidebar">'+I.unfold+'</button>'+
+  '<button class="rbtn pri" data-act="sideadd" title="New contact" aria-label="New contact">'+I.plusS+'</button>'+
+  VIEWS.map(function(v){return '<button class="rbtn'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" title="'+v[1]+'" aria-label="'+v[1]+'">'+v[2]+'</button>'}).join('')+
+  '<button class="rbtn" data-act="fold" title="Region'+(n?': '+S.st:'')+'" aria-label="Filters'+(n?' ('+n+' on)':'')+'">'+I.filter+(n?'<span class="dot"></span>':'')+'</button>'+
+  '<span style="flex:1"></span><button class="rbtn" data-act="toadmin" title="Catalog review" aria-label="Catalog review">'+I.review+(S.reviewN?'<span class="dot"></span>':'')+'</button></div>';
+ return '<aside class="side'+(S.drawer?' open':'')+'" aria-label="Browse and filter">'+full+rail+'</aside>';
 }
 /* ---------- the list: People or Vendors ---------- */
 // People: one row per contact (searching shows the ones who matched, or a vendor's whole team when it
@@ -524,6 +604,7 @@ function modeBar(){
 }
 function paintResults(){
  var el=$('results');if(!el){render();return}
+ document.querySelectorAll('.side .snav[data-act="mode"]').forEach(function(b){var n=b.querySelector('.n');if(n)n.textContent=viewCount(b.dataset.id)});
  el.innerHTML=renderResults();
  var c=$('count');if(c)c.textContent=countText();
  var mc=$('modecount');if(mc)mc.textContent=countText();
@@ -917,8 +998,9 @@ function shareContact(c){
 }
 
 /* ---------- admin: catalog review ---------- */
+function loadReviewCount(){api('/api/vendors/admin/review').then(function(d){S.reviewN=Array.isArray(d)?d.length:null;if(listView())render()}).catch(function(){})}
 function loadAdmin(){
- api('/api/vendors/admin/review').then(function(d){S.admin.review=d;render()}).catch(function(e){S.admin.review={error:e.message};render()});
+ api('/api/vendors/admin/review').then(function(d){S.admin.review=d;S.reviewN=Array.isArray(d)?d.length:null;render()}).catch(function(e){S.admin.review={error:e.message};render()});
  api('/api/vendors/admin/vendors').then(function(d){S.admin.vendors=d;render()}).catch(function(e){S.admin.vendors={error:e.message};render()});
 }
 // While pulls run, check every few seconds so each vendor's row updates as it finishes.
@@ -974,7 +1056,8 @@ function render(){
  else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</button>'+detailHTML()+'</div>';
  else{
   var det=mq.matches&&(S.mode==='items'?!!S.ikey:!!S.vid);
-  main=renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div>';
+  main='<div class="shell'+(S.mini?' mini':'')+'">'+sideHTML()+'<div class="scrim'+(S.drawer?' open':'')+'" data-act="drawer"></div><div class="content">'+
+   renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div></div></div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
@@ -986,6 +1069,8 @@ function render(){
  if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
  if(S.addItem&&$('newitem')&&(!keep||keep.id!=='newitem'))$('newitem').focus();
 }
+// The main list (with the sidebar), not one of the full-page screens (a form, the scan, catalog review, a phone's detail page).
+function listView(){return !!S.divs.length&&!/^(admin|scan|form)$/.test(S.view)&&!(S.view==='vendor'&&!mq.matches)}
 function detailHTML(){return S.mode==='items'?renderItem():S.mode==='people'&&S.cid?renderPerson():renderVendor()}
 function toast(m){S.toast=m;render();clearTimeout(toast.t);toast.t=setTimeout(function(){S.toast='';render()},2400)}
 function fail(e){S.busy=false;toast(e.message||String(e))}
@@ -1034,15 +1119,20 @@ var A={
  close:function(){S.panel=null},
  'p-div':function(){S.panel=S.panel==='div'?null:'div'},
  'p-apps':function(){S.panel=S.panel==='apps'?null:'apps'},
- 'p-filter':function(){S.panel=S.panel==='filter'?null:'filter'},
  'p-add':function(){S.ctxV='';S.panel=S.panel==='add'?null:'add'},
  div:function(el){S.div=el.dataset.id;S.panel=null;S.vid=null;S.detail=null;S.view=S.view==='admin'?'admin':'list';S.itemsOpen=false;S.results=null;S.loading=true;saveUrl();loadList()},
  clear:function(){S.st='Any';S.wc=false;loadList()},
  vendor:function(el){openVendor(el.dataset.id)},
  person:function(el){openPerson(el.dataset.id,el.dataset.v)},
  tovendor:function(){if(S.mode!=='vendors'){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}}S.cid=null;S.itemsOpen=false;saveUrl()},
+ fold:function(){S.mini=!S.mini;S.panel=null;try{localStorage.setItem('vendors.sideMini',S.mini?'1':'0')}catch(e){}},
+ drawer:function(){S.drawer=!S.drawer;S.panel=null},
+ sideadd:function(){if(S.mini&&mq.matches){S.mini=false;try{localStorage.setItem('vendors.sideMini','0')}catch(e){}}S.ctxV='';S._ctx='';S.panel=S.panel==='sadd'?null:'sadd'},
+ region:function(el){var st=el.dataset.id;S.st=S.st===st&&st!=='Any'?'Any':st;loadList()},
+ toadmin:function(){S.drawer=false;S.view='admin';S.panel=null;S.atab='review';S.admin={review:null,vendors:null};window.scrollTo(0,0);loadAdmin()},
  mode:function(el){
-  var m=el.dataset.id;if(m===S.mode)return 'skip';
+  S.drawer=false;
+  var m=el.dataset.id;if(m===S.mode)return;
   var was=S.mode;S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}
   S.ikey=null;if(m==='vendors')S.cid=null;else{S.vid=null;S.cid=null;S.detail=null}
   if(m==='items'||was==='items'){S.loading=true;if(m==='items')S.items=null;loadList()}
@@ -1068,9 +1158,9 @@ var A={
  vlogoclear:function(){api('/api/vendors/'+encodeURIComponent(S.vid)+'/logo',{method:'DELETE'}).then(function(){toast('Logo removed');loadDetail();loadList()}).catch(fail)},
  vdelask:function(){S.vm.confirm=true},vdelno:function(){S.vm.confirm=false},
  vdel:function(){var nm=S.detail.name;S.busy=true;api('/api/vendors/'+encodeURIComponent(S.vid),{method:'DELETE'}).then(function(){S.busy=false;S.vm=null;S.vid=null;S.detail=null;S.view='list';saveUrl();window.scrollTo(0,0);refresh();toast(nm+' deleted')}).catch(fail)},
- scan:function(){closeForm();S.panel=null;S.ctxV=S._ctx||'';S._ctx='';go('scan');S.draft=blank(S.ctxV);tesseract().catch(function(){})},
+ scan:function(){S.drawer=false;closeForm();S.panel=null;S.ctxV=S._ctx||'';S._ctx='';go('scan');S.draft=blank(S.ctxV);tesseract().catch(function(){})},
  skipscan:function(){var v=S.ctxV;closeForm();S.ctxV=v;S.draft=blank(v);S.view=S.vid&&!mq.matches?'vendor':'list';S.modal=true},
- manual:function(){closeForm();S.ctxV=S._ctx||'';S._ctx='';S.draft=blank(S.ctxV);S.panel=null;S.modal=true},
+ manual:function(){S.drawer=false;closeForm();S.ctxV=S._ctx||'';S._ctx='';S.draft=blank(S.ctxV);S.panel=null;S.modal=true},
  addfor:function(){S._ctx=S.detail.name;S.panel=S.panel==='addv'?null:'addv'},
  editc:function(el){var c=S.detail.contacts.filter(function(x){return x.id===el.dataset.id})[0];if(!c)return;closeForm();S.edit=c.id;S.draft=draftFrom(c);S.panel=null;S.modal=true},
  cancel:function(){
@@ -1156,6 +1246,7 @@ document.addEventListener('keydown',function(e){
   if(S.cardView){if(S.crop)S.crop=null;else S.cardView=null;render()}
   else if(S.vm||S.modal){A.cancel();render()}
   else if(S.panel){S.panel=null;render()}
+  else if(S.drawer){S.drawer=false;render()}
   else if(S.view==='scan'&&S.scanStage!==1){A.cancel();render()}
  }
 });
@@ -1236,7 +1327,7 @@ api('/api/divisions').then(function(divs){
  S.div=has(want)?want:has(saved)?saved:(S.divs[0]||{}).id||'';
  S.loading=false;render();
  if(!S.div)return;
- S.loading=true;loadList();loadNames();
+ S.loading=true;loadList();loadNames();loadReviewCount();
  if(p.get('vendor')&&p.get('contact')){S.mode='people';openPerson(p.get('contact'),p.get('vendor'))}
  else if(p.get('vendor'))openVendor(p.get('vendor'));else saveUrl();
  render();
