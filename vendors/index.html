@@ -232,11 +232,18 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .rbar .count{margin-left:auto;font-size:13px;color:var(--m);white-space:nowrap;padding:8px 0}
 .rcard .tbl{border:0;border-radius:0}
 .rcard>#results>.card{border:0;border-radius:0}
-.tbl{container-type:inline-size;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
+.tbl{container-type:inline-size;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow-x:auto;overflow-y:hidden}
 .thead,.trow{display:grid;align-items:center;column-gap:14px;padding:0 14px}
-.tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,1.5fr)}
-.tv{grid-template-columns:minmax(0,1.5fr) minmax(0,2fr) 84px minmax(0,1fr)}
-.ti{grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) 84px}
+.tp{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,1.2fr)) var(--c3,minmax(0,1fr)) var(--c4,minmax(0,.8fr)) var(--c5,minmax(0,1.5fr))}
+.tv{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,2fr)) var(--c3,84px) var(--c4,minmax(0,1fr))}
+.ti{grid-template-columns:var(--c1,minmax(0,1.6fr)) var(--c2,minmax(0,2fr)) var(--c3,84px)}
+/* a column's right edge drags to resize it (double-click puts it back) */
+.thead .cell{position:relative;overflow:visible}
+.rsz{position:absolute;top:0;bottom:0;right:-9px;width:12px;cursor:col-resize;z-index:2;touch-action:none}
+.rsz::after{content:"";position:absolute;top:10px;bottom:10px;left:5px;width:2px;border-radius:2px;background:var(--bs);opacity:0;transition:opacity .12s}
+.thead:hover .rsz::after{opacity:.7}
+.rsz:hover::after,.rsz.drag::after{opacity:1;background:var(--a)}
+body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!important}
 .logos{display:flex;align-items:center;gap:4px;min-width:0}
 .ivend{border:1px solid var(--b);border-radius:12px;background:var(--s2);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .ivend .oth{padding:6px 8px}
@@ -257,11 +264,12 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .logo.xs{width:22px;height:22px;font-size:9px;border-radius:6px}
 .logo.md{width:34px;height:34px;font-size:12px;border-radius:9px}
 .narrow{display:none}
-@container (max-width:860px){.tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr)}.tp .c-email{display:none}}
+@container (max-width:860px){.tp{grid-template-columns:var(--c1,minmax(0,1.5fr)) var(--c2,minmax(0,1.2fr)) var(--c3,minmax(0,1fr)) minmax(0,1fr)}.tp .c-email{display:none}}
 @container (max-width:640px){
- .ti{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.ti .c-n{display:none}
- .tp{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}.tp .c-title,.tp .c-cov{display:none}
- .tv{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr)}.tv .c-n,.tv .c-cov{display:none}
+ .ti{grid-template-columns:var(--c1,minmax(0,1.3fr)) minmax(0,1fr)}.ti .c-n{display:none}
+ .tp{grid-template-columns:var(--c1,minmax(0,1.4fr)) minmax(0,1fr)}.tp .c-title,.tp .c-cov{display:none}
+ .tv{grid-template-columns:var(--c1,minmax(0,1.2fr)) minmax(0,1fr)}.tv .c-n,.tv .c-cov{display:none}
+ .rsz{display:none}
 }
 @container (max-width:460px){
  .tp,.tv,.ti{grid-template-columns:minmax(0,1fr)}.tp .c-vendor,.tv .c-sells,.ti .c-vlist,.thead{display:none}
@@ -535,7 +543,41 @@ function sideHTML(){
 // matched by its name or what it sells). Vendors: one row per company. Columns sort; narrow screens
 // drop columns (container queries) down to a simple list.
 function sortArrow(k){var st=S.sort[S.mode];return st.k===k?(st.d>0?' ↑':' ↓'):''}
-function th(k,label,cls){var on=S.sort[S.mode].k===k;return '<div class="cell '+(cls||'')+'"><button type="button" class="'+(on?'on':'')+'" data-act="sort" data-id="'+k+'">'+label+sortArrow(k)+'</button></div>'}
+// A header cell: sortable when k is given; n is its column (1..), and every column but the table's last gets a drag handle.
+function th(k,label,cls,n,last){
+ var on=k&&S.sort[S.mode].k===k;
+ return '<div class="cell '+(cls||'')+'">'+(k?'<button type="button" class="'+(on?'on':'')+'" data-act="sort" data-id="'+k+'">'+label+sortArrow(k)+'</button>':'<span style="display:inline-flex;align-items:center;height:40px;font-size:12px;font-weight:600;color:var(--m)">'+label+'</span>')+
+  (n&&!last?'<span class="rsz" data-col="'+n+'" title="Drag to resize · double-click to reset" aria-hidden="true"></span>':'')+'</div>';
+}
+// The widths someone has dragged a table's columns to, kept per view on this device.
+function colWidths(){try{return JSON.parse(localStorage.getItem('vendors.cols.'+S.mode)||'{}')||{}}catch(e){return {}}}
+function colStyle(){var w=colWidths();return Object.keys(w).map(function(k){return '--c'+k+':'+w[k]+'px'}).join(';')}
+var colDrag=null;
+document.addEventListener('pointerdown',function(e){
+ var h=e.target.closest&&e.target.closest('.rsz');if(!h)return;
+ e.preventDefault();e.stopPropagation();
+ var tbl=h.closest('.tbl'),cell=h.parentNode;
+ colDrag={h:h,tbl:tbl,n:h.dataset.col,x:e.clientX,w:cell.getBoundingClientRect().width};
+ h.classList.add('drag');document.body.classList.add('resizing');
+ try{h.setPointerCapture(e.pointerId)}catch(x){}
+});
+document.addEventListener('pointermove',function(e){
+ if(!colDrag)return;
+ var w=Math.round(Math.max(70,Math.min(900,colDrag.w+e.clientX-colDrag.x)));
+ colDrag.tbl.style.setProperty('--c'+colDrag.n,w+'px');colDrag.now=w;
+});
+function endColDrag(){
+ if(!colDrag)return;
+ var d=colDrag;colDrag=null;d.h.classList.remove('drag');document.body.classList.remove('resizing');
+ if(d.now){var w=colWidths();w[d.n]=d.now;try{localStorage.setItem('vendors.cols.'+S.mode,JSON.stringify(w))}catch(x){}}
+}
+document.addEventListener('pointerup',endColDrag);
+document.addEventListener('pointercancel',endColDrag);
+document.addEventListener('dblclick',function(e){
+ var h=e.target.closest&&e.target.closest('.rsz');if(!h)return;
+ var w=colWidths();delete w[h.dataset.col];try{localStorage.setItem('vendors.cols.'+S.mode,JSON.stringify(w))}catch(x){}
+ h.closest('.tbl').style.removeProperty('--c'+h.dataset.col);
+});
 function cmp(a,b){a=String(a||'').toLowerCase();b=String(b||'').toLowerCase();return a<b?-1:a>b?1:0}
 function peopleRows(){
  var T=toks(),out=[];
@@ -557,7 +599,7 @@ function coversText(c){return c.unset?'<span class="cell mu">—</span>':esc(c.a
 function renderPeople(){
  var T=toks(),rows=peopleRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No one matches. Try another item, name or state.':'No contacts in '+esc(divName(S.div))+' yet. Use + to add one.')+'</div>';
- var h='<div class="tbl" role="table" aria-label="Contacts"><div class="thead tp" role="row">'+th('name','Person')+th('vendor','Vendor','c-vendor')+th('title','Title','c-title')+th('covers','Region','c-cov')+'<div class="cell c-email" style="font-size:12px;font-weight:600;color:var(--m)">Email</div></div>';
+ var h='<div class="tbl" role="table" aria-label="Contacts" style="'+colStyle()+'"><div class="thead tp" role="row">'+th('name','Person','',1)+th('vendor','Vendor','c-vendor',2)+th('title','Title','c-title',3)+th('covers','Region','c-cov',4)+th('','Email','c-email',5,true)+'</div>';
  rows.forEach(function(r){
   var c=r.c,v=r.v,sel=S.cid===c.id&&S.vid===v.id&&mq.matches;
   var item=T.length&&!c.matched&&v.matched_items.length?'<div class="sub">sells '+hl(v.matched_items[0],T)+'</div>':'';
@@ -574,7 +616,7 @@ function renderPeople(){
 function renderVendorsTbl(){
  var T=toks(),rows=vendorRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
- var h='<div class="tbl" role="table" aria-label="Vendors"><div class="thead tv" role="row">'+th('name','Vendor')+'<div class="cell c-sells" style="font-size:12px;font-weight:600;color:var(--m)">What they sell</div>'+th('contacts','Contacts','c-n')+th('covers','Region','c-cov')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Vendors" style="'+colStyle()+'"><div class="thead tv" role="row">'+th('name','Vendor','',1)+th('','What they sell','c-sells',2)+th('contacts','Contacts','c-n',3)+th('covers','Region','c-cov',4,true)+'</div>';
  rows.forEach(function(v){
   var sells=T.length&&v.matched_items.length?v.matched_items:v.item_names,more=(T.length&&v.matched_items.length?v.matched_items.length:v.item_count)-sells.length;
   var st=v.states.indexOf('All')>=0?'Nationwide':v.states.join(', ');
@@ -594,7 +636,7 @@ function itemRows(){
 function renderItemsTbl(){
  var T=toks(),rows=itemRows();
  if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No items match. Try another word or state.':'No items in '+esc(divName(S.div))+' yet. They come from each vendor’s website, or add them on a vendor.')+'</div>';
- var h='<div class="tbl" role="table" aria-label="Items"><div class="thead ti" role="row">'+th('name','Item')+'<div class="cell c-vlist" style="font-size:12px;font-weight:600;color:var(--m)">Sold by</div>'+th('vendors','Vendors','c-n')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Items" style="'+colStyle()+'"><div class="thead ti" role="row">'+th('name','Item','',1)+th('','Sold by','c-vlist',2)+th('vendors','Vendors','c-n',3,true)+'</div>';
  rows.forEach(function(it){
   var vs=it.vendors,also=it.variants.filter(function(n){return n!==it.name});
   h+='<button class="trow ti'+(S.ikey===it.key&&mq.matches?' sel':'')+'" role="row" data-act="item" data-id="'+esc(it.key)+'">'+
