@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Vendors">
 <title>Vendors</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=2">
 <script>try{var t=localStorage.getItem('bidscout_theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <script src="config.js"></script>
 <style>
@@ -47,12 +47,12 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 @media(max-width:699px){
  .mast{margin:calc(8px + env(safe-area-inset-top)) 10px 0}
  .mast-in{padding:8px 8px 8px 10px;gap:8px;flex-wrap:nowrap}
- .mast-in:has(.find.open){flex-wrap:wrap}
  .mast h1{font-size:16px}
  .mright{gap:6px}
  .cbtn{width:36px;height:36px}
  .dtab{padding:0 11px}
- .find.open{order:10;flex:1 1 100%}.find.open .msearch{width:auto;flex:1}
+ .find.open .msearch{position:absolute;left:0;right:0;top:calc(100% + 8px);width:auto;height:48px;z-index:35;background:var(--pop);border:1px solid var(--bs);box-shadow:0 10px 28px rgba(0,0,0,.35)}
+ .find.open .msearch input{color:var(--t)}
  .main{padding:10px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
 }
 .pill{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--bs);background:var(--as);color:var(--ast);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;max-width:46vw}
@@ -1106,7 +1106,7 @@ function renderAdmin(){
  if(err)h+='<div class="errb">'+esc(err)+'</div>';
  if(A.review===null||A.vendors===null)h+='<div class="card loading"><span class="spin"></span>Loading…</div>';
  else if(S.atab==='review'){
-  if(!rv.length)h+='<div class="card empty">Nothing to review. Each vendor’s items are pulled again a week after the last pull.</div>';
+  if(!rv.length)h+='<div class="card empty">Nothing to review. Every vendor’s items are pulled again Sunday at 2 AM; a vendor given a website is pulled right away.</div>';
   rv.forEach(function(r){
    h+='<div class="card" style="padding:14px"><div class="vhead">'+logoHTML(r,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(r.name)+'</b><div class="hint">Pulled '+esc(shortDate(r.at))+' · '+esc(r.division)+' division</div></div></div>';
    if(r.added.length)h+='<div class="lab" style="margin:12px 0 6px;color:var(--ok)">New · '+r.added.length+'</div><div class="chips">'+r.added.map(function(x){return '<span class="chip" style="border-color:#2f6a49">'+esc(x)+'</span>'}).join('')+'</div>';

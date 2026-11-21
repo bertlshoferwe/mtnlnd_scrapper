@@ -240,6 +240,14 @@ class PullTests(unittest.TestCase):
         add.assert_not_called()
         self.assertNotIn("v1", vendor_catalog._stop)   # cleared, so the next pull runs
 
+    def test_the_weekly_pull_is_sunday_2am_mountain(self):
+        from datetime import datetime
+        tz = vendor_catalog.TZ
+        at = lambda *a: datetime(*a, tzinfo=tz)
+        self.assertEqual(vendor_catalog.week_slot(at(2026, 11, 25, 15, 0)), at(2026, 11, 22, 2, 0))   # Wednesday -> last Sunday
+        self.assertEqual(vendor_catalog.week_slot(at(2026, 11, 22, 1, 59)), at(2026, 11, 15, 2, 0))   # Sunday, before 2 AM
+        self.assertEqual(vendor_catalog.week_slot(at(2026, 11, 22, 2, 0)), at(2026, 11, 22, 2, 0))    # on the dot
+
     def test_division_keywords_pick_items_without_ai(self):
         with mock.patch.object(vendor_catalog.ai_provider, "get_provider", return_value=None):
             got = vendor_catalog._assign(["Geotextile fabric 6 oz", "Anchor bolts", "Silt fences"],

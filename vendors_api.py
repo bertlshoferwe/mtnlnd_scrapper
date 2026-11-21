@@ -263,9 +263,13 @@ def api_vendor_update(vendor_id):
         patch["name"] = name[:120]
     if "website" in data:
         patch["website"] = (data.get("website") or "").strip()[:200]
-    if not vs.get_vendor(vendor_id):
+    old = vs.get_vendor(vendor_id)
+    if not old:
         return _err("that vendor is gone", 404)
-    return jsonify({"ok": True, "vendor": _vendor_out(vs.update_vendor(vendor_id, patch, _actor()))})
+    v = vs.update_vendor(vendor_id, patch, _actor())
+    if v.get("website") and v.get("website") != old.get("website"):
+        _pull_soon(vendor_id)
+    return jsonify({"ok": True, "vendor": _vendor_out(v)})
 
 
 @bp.route("/api/vendors/<vendor_id>", methods=["DELETE"])
@@ -440,7 +444,10 @@ def api_contact_create():
         dup = _duplicate(fields, data)
         if dup:
             return dup
+        existed = _existing_vendor(data)
         vendor = _vendor_for(data, division)
+        if not existed and vendor.get("website"):
+            _pull_soon(vendor["id"])
     except ValueError as e:
         return _err(str(e))
     card = data.get("card_image_path")
@@ -566,6 +573,18 @@ def _scanner(path, body, wait=False):
     except requests.RequestException as e:
         return _err(f"couldn't reach the scan worker: {e}", 424)
     return Response(resp.content, status=resp.status_code, mimetype="application/json")
+
+
+def _pull_soon(vendor_id):
+    """Pull a vendor that just got a website, now rather than at the weekly pull.
+    Best effort: if the scan worker can't be reached, the weekly pull gets it."""
+    base = (os.environ.get("SCANNER_URL") or "").rstrip("/")
+    if not base:
+        return
+    try:
+        requests.post(base + "/vendor-pull", json={"vendor_id": vendor_id, "what": "all"}, timeout=5)
+    except requests.RequestException as e:
+        print(f"  ! couldn't start a pull for {vendor_id}: {e}")
 
 
 def _division_names():

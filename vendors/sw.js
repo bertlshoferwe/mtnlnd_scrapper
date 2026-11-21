@@ -1,8 +1,9 @@
 // Vendors' service worker: keeps the app shell (the page, its manifest and icons) so the installed app
 // opens without a connection and says it's offline. No data is cached: /api/ always goes to the network.
-var SHELL = "vendors-shell-v1";
+var SHELL = "vendors-shell-v2";
 var FILES = ["/vendors/", "/vendors/manifest.webmanifest", "/vendors/icons/icon.svg",
-             "/vendors/icons/icon-180.png", "/vendors/icons/icon-192.png", "/vendors/icons/icon-512.png"];
+             "/vendors/icons/icon-180.png", "/vendors/icons/icon-192.png", "/vendors/icons/icon-512.png",
+             "/vendors/icons/icon-maskable-512.png"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(SHELL).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));

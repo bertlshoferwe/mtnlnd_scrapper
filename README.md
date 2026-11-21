@@ -176,7 +176,9 @@ call through `_is_admin()`, so sign-in, when it comes, only changes those two.
   you press Save, and the service area is set by hand). The photo is kept
   with the contact. `VENDORS_CARD_READER` (default `browser`) is the switch
   for another reader later; one only has to return the same fields.
-- **Items** are pulled weekly from each vendor's website by the scan worker
+- **Items** are pulled from every vendor's website once a week (Sunday 2 AM
+  Mountain, `PULL_DAY` / `PULL_HOUR`), and from a vendor's right away when it
+  gets a website, by the scan worker
   (`vendor_catalog.py`): a store's product feed, then schema.org product
   markup, then the AI reading the pages, or an uploaded PDF catalog. Each
   division's Bid Scout keywords decide which products belong in it. The first

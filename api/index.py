@@ -252,12 +252,12 @@ APPS = [
              '<rect x="13.25" y="7" width="5.5" height="12" rx="1.6" fill="#9fb0e6"/>'
              '<rect x="20.5" y="7" width="5.5" height="15" rx="1.6" fill="#fff"/></svg>'},
     {"key": "vendors", "name": "Vendors", "url": "/vendors/", "tab": "vendors", "open": "vnOpenLink", "division": True,
-     "icon": '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#24305e"/>'
-             '<rect x="5.5" y="8.5" width="21" height="15" rx="2.4" fill="#fff"/>'
-             '<circle cx="11.5" cy="14.2" r="2.6" fill="#9fb0e6"/>'
-             '<path d="M7.8 20.2c.6-2 2.1-3 3.7-3s3.1 1 3.7 3z" fill="#9fb0e6"/>'
-             '<rect x="17" y="12.6" width="7" height="2" rx="1" fill="#24305e"/>'
-             '<rect x="17" y="16.6" width="5" height="2" rx="1" fill="#24305e"/></svg>'},
+     "icon": '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#202c54"/>'
+             '<rect x="3.5" y="7" width="25" height="18" rx="3" fill="#fff"/>'
+             '<circle cx="10.2" cy="13.4" r="3.1" fill="#9fb0e6"/>'
+             '<path d="M5.6 21.6c.5-2.6 2.4-4.3 4.6-4.3s4.1 1.7 4.6 4.3z" fill="#9fb0e6"/>'
+             '<rect x="16.5" y="11.6" width="9" height="2.8" rx="1.4" fill="#202c54"/>'
+             '<rect x="16.5" y="17" width="6" height="2.8" rx="1.4" fill="#202c54"/></svg>'},
 ]
 
 

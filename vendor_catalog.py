@@ -9,6 +9,10 @@ How a site is read, first that finds products:
   schema_org  JSON-LD Product / ItemList markup on the home page and its product-looking pages
   llm         the AI reads those pages' text and lists what they sell
   pdf         an uploaded PDF catalog, read by the AI
+When: every vendor with a website once a week, together (PULL_DAY at PULL_HOUR,
+Mountain time — a worker that was down then catches up when it starts), and a
+vendor right away when it gets a website (vendors_api.py asks for that pull).
+
 Each division's keywords (Bid Scout's) only decide which of those products
 belong in that division (the union across the divisions the vendor serves
 steers what the AI pulls); nothing records which keyword matched.
@@ -23,6 +27,8 @@ import json
 import re
 import threading
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -38,7 +44,8 @@ GAP_S = 2.0
 TIMEOUT_S = 20
 MAX_PAGES = 20
 MAX_PRODUCTS = 600
-WEEK_S = 7 * 86400
+TZ = ZoneInfo("America/Denver")
+PULL_DAY, PULL_HOUR = 6, 2   # the weekly pull: Sunday (Monday is 0), 2 AM Mountain
 DAY_S = 86400   # Pull now skips a vendor pulled this recently
 CHECK_EVERY_S = 3600
 FIRST_RUN_AFTER_S = 300
@@ -484,12 +491,19 @@ def pull_all():
     return True
 
 
+def week_slot(now=None):
+    """When this week's pull was due: the last PULL_DAY at PULL_HOUR (Mountain) at or before now."""
+    now = now or datetime.now(TZ)
+    slot = now.replace(hour=PULL_HOUR, minute=0, second=0, microsecond=0) - timedelta(days=(now.weekday() - PULL_DAY) % 7)
+    return slot - timedelta(days=7) if slot > now else slot
+
+
 def run_due(force=False):
-    """Pull every vendor with a website not pulled in a week, one at a time.
-    With force (Pull now): every one not pulled in the last day — a pull that
-    failed in that time is tried again."""
-    from datetime import datetime
+    """The weekly pull: every vendor with a website not pulled since this week's
+    slot (week_slot), one at a time. With force (Pull now): every one not
+    pulled in the last day — a pull that failed in that time is tried again."""
     _stop_all.clear()
+    since = week_slot().timestamp()
     runs = vs.last_runs()
     now = time.time()
     for v in vs.all_vendors():
@@ -500,11 +514,11 @@ def run_due(force=False):
         if not v.get("website"):
             continue
         if last:
-            age = now - datetime.fromisoformat(last["started_at"].replace("Z", "+00:00")).timestamp()
-            if force and last["status"] != "failed" and age < DAY_S:
+            started = datetime.fromisoformat(last["started_at"].replace("Z", "+00:00")).timestamp()
+            if force and last["status"] != "failed" and now - started < DAY_S:
                 print(f"  [vendors] {v['name']}: pulled in the last day — skipped", flush=True)
                 continue
-            if not force and age < WEEK_S:
+            if not force and started >= since:   # already pulled this week
                 continue
         pull(v["id"])
 
