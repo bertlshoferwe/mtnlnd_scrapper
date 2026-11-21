@@ -556,6 +556,15 @@ def api_admin_pull_all():
     return _scanner("/vendor-pull-all", {})
 
 
+@bp.route("/api/vendors/admin/stop", methods=["POST"])
+def api_admin_stop():
+    """{"vendor_id"}: stop that vendor's pull; {}: stop every pull going."""
+    if not _is_admin():
+        return _forbidden()
+    data = request.get_json(force=True, silent=True) or {}
+    return _scanner("/vendor-stop", {"vendor_id": data.get("vendor_id") or None})
+
+
 @bp.route("/api/vendors/admin/pdf", methods=["POST"])
 def api_admin_pdf():
     """A PDF catalog for a vendor (form: vendor_id, file). The scan worker reads

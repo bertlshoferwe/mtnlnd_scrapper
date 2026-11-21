@@ -315,12 +315,18 @@ def finish_run(run_id, ok, method=None, reason=None):
                                               "finished_at": _now()}).eq("id", run_id).execute()
 
 
-def fail_running(reason):
-    """Mark pulls still 'running' as failed — for when the worker starts, since
-    one that was running when it stopped can't be running now."""
-    rows = _db().table("vendor_scrape_runs").update({"status": "failed", "failure_reason": reason, "finished_at": _now()}) \
-        .eq("status", "running").execute().data or []
-    return len(rows)
+def fail_running(reason, vendor_id=None, skip=()):
+    """Mark pulls still 'running' as failed (one vendor's, or every one), except
+    the vendors in skip — those really are in progress. For when the worker
+    starts (nothing can be running then) and for Stop on a pull nothing's doing."""
+    q = _db().table("vendor_scrape_runs").select("id,vendor_id").eq("status", "running")
+    if vendor_id:
+        q = q.eq("vendor_id", vendor_id)
+    ids = [r["id"] for r in q.execute().data or [] if r["vendor_id"] not in skip]
+    for i in range(0, len(ids), 200):
+        _db().table("vendor_scrape_runs").update({"status": "failed", "failure_reason": reason, "finished_at": _now()}) \
+            .in_("id", ids[i:i + 200]).execute()
+    return len(ids)
 
 
 def last_runs():

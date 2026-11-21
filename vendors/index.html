@@ -114,11 +114,22 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .detail{position:sticky;top:72px}
 .dhead{padding:16px;display:flex;gap:14px;align-items:center}
 .pen{opacity:0;transition:opacity .15s}
-.dhead:hover .pen,.crow:hover .pen,.pen:focus-visible{opacity:1}
+.dhead:hover .pen,.crow:hover .pen,.ccard:hover .pen,.pen:focus-visible{opacity:1}
 @media(hover:none){.pen{opacity:1}}
 .sec{padding:14px 16px;border-top:1px solid var(--b)}
 .crow{padding:12px 16px;border-top:1px solid var(--b);display:flex;gap:12px}
 .crow .nm{font-weight:700}
+/* a vendor's contacts: one card each */
+.clist{display:flex;flex-direction:column;gap:10px;padding:0 12px 12px}
+.ccard{border:1px solid var(--b);border-radius:12px;background:var(--s2);padding:12px 12px 12px 14px;display:flex;flex-direction:column;gap:10px}
+.ccard-h{display:flex;align-items:center;gap:12px;min-width:0}
+.ccard-h .cf-av{width:40px;height:40px;font-size:14px}
+.ccard-h .nm{font-weight:700;font-size:15px;overflow-wrap:anywhere}
+.ccard-acts{display:flex;align-items:center;margin-left:auto;flex:none}
+.ccard-acts .ib{width:36px;height:36px;color:var(--m)}
+.ccard-acts .ib:hover{color:var(--t)}
+.ccard-b{display:flex;flex-direction:column;gap:2px;padding-left:52px}
+@media(max-width:639px){.ccard-b{padding-left:0}.ccard-acts .ib{width:44px;height:44px}}
 .kv{font-size:14px;color:var(--ast);text-decoration:none;display:inline-flex;gap:6px;align-items:center;min-height:28px;overflow-wrap:anywhere}
 .back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;font-size:14px;font-weight:600;color:var(--ast);padding:8px 4px;min-height:44px}
 .page{max-width:720px;margin:0 auto}
@@ -141,7 +152,7 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .dlg{background:var(--s);border:1px solid var(--bs);width:100%;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
 .dlg .bar{background:var(--s);bottom:-8px}
 .dlg .page{max-width:none}
-@media(min-width:640px){.modal-ov{align-items:center}.dlg{width:560px;border-radius:16px;max-height:88vh}}
+@media(min-width:640px){.modal-ov{align-items:center}.dlg{width:min(620px,calc(100vw - 32px));border-radius:16px;max-height:88vh;padding:20px}}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#e6e9f1;color:#12162b;padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:calc(100vw - 32px)}
 .spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--bs);border-top-color:var(--a);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -157,6 +168,31 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .hd::after{content:"";position:absolute;left:13px;top:13px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.6)}
 .hd.tl{left:0;top:0;cursor:nwse-resize}.hd.tr{left:100%;top:0;cursor:nesw-resize}.hd.bl{left:0;top:100%;cursor:nesw-resize}.hd.br{left:100%;top:100%;cursor:nwse-resize}
 .cardview{display:block;max-width:100%;max-height:68vh;margin:0 auto;border-radius:10px}
+/* the contact form: plain labels over clean inputs, icons inside, sections split by a rule */
+.cf{display:flex;flex-direction:column;gap:16px}
+.cf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.cf-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cf-f>label,.cf-lt{font-size:13px;font-weight:600;color:var(--m)}
+.cf-in{position:relative;display:flex;align-items:center;gap:8px}
+.cf-in>svg{position:absolute;left:12px;color:var(--m);pointer-events:none}
+.in2{height:44px;width:100%;min-width:0;border-radius:10px;border:1px solid var(--b);background:var(--bg);padding:0 12px;font-size:16px;outline:0;transition:border-color .15s,box-shadow .15s}
+.cf-in>svg+.in2{padding-left:38px}
+.in2:focus{border-color:var(--a);box-shadow:0 0 0 3px rgba(147,163,214,.22)}
+.in2::placeholder{color:#5f6779}
+.in2.ext{width:76px;flex:none}
+.cf-hint{font-size:12px;color:var(--m);min-height:0}
+.cf-hint:empty{display:none}
+.cf-sec{border-top:1px solid var(--b);padding-top:16px;display:flex;flex-direction:column;gap:12px}
+.cf-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.cf-av{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:800;font-size:16px;color:var(--ast);background:var(--as);border:1px solid var(--bs)}
+.cf-who{flex:1;min-width:0}
+.cf-who h2{margin:0;font-size:18px;line-height:1.25;overflow-wrap:anywhere;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.cf-who .cf-sub{font-size:13px;color:var(--m);overflow-wrap:anywhere}
+.seg{display:inline-flex;padding:3px;border-radius:10px;background:var(--bg);border:1px solid var(--b);align-self:flex-start}
+.seg button{border:0;background:transparent;padding:0 14px;border-radius:8px;font-size:14px;font-weight:600;color:var(--m);min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--as);color:var(--ast)}
+.cf-reg{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--b)}
+.cf-reg .in2{height:36px;font-size:14px;border-radius:8px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 @media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
@@ -191,6 +227,10 @@ var I={
  trash:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
  x:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
  check:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+ share:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>',
+ user:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.2-4 4.2-6 8-6s6.8 2 8 6"/></svg>',
+ tag:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
+ shop:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-6h6v6"/></svg>',
  card:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.5 1.7-2 3-2s2.4.5 3 2M15 10h3M15 13h2"/></svg>'
 };
 
@@ -337,11 +377,14 @@ function renderVendor(){
  var h='<div class="card"><div class="dhead">'+logoHTML(v,'lg')+'<div style="flex:1;min-width:0"><div class="vname" style="font-size:20px">'+esc(v.name)+'</div>'+(v.website?'<a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a>':'<div class="vweb">No web address</div>')+'</div><button class="ib pen" aria-label="Edit vendor" data-act="editvendor">'+I.pen+'</button></div>';
  h+='<div class="sec" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px"><span class="lab">Contacts · '+cs.length+'</span><div class="rel"><button class="btn sm" data-act="addfor" aria-haspopup="true" aria-expanded="'+(S.panel==='addv')+'">'+I.plusS+'Add</button>'+(S.panel==='addv'?addMenu():'')+'</div></div>';
  if(!cs.length)h+='<div class="crow"><span class="hint">No contacts yet.</span></div>';
+ else h+='<div class="clist">';
  cs.forEach(function(c){
-  h+='<div class="crow"><div style="flex:1;min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint" style="margin-bottom:6px">'+esc(c.title)+'</div>':'')+
-   '<div style="display:flex;flex-direction:column;gap:4px">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
-   (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'</div><div style="margin-top:8px">'+srvLine(c)+'</div></div><button class="ib pen" aria-label="Edit '+esc(c.name)+'" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>';
+  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
+   '<div class="ccard-acts"><button class="ib pen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
+   '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
+   (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'<div style="margin-top:6px">'+srvLine(c)+'</div></div></div>';
  });
+ if(cs.length)h+='</div>';
  h+='<div class="sec"><button class="row" style="padding:0;border:0;min-height:44px" data-act="items" aria-expanded="'+S.itemsOpen+'"><span style="flex:1"><b>Items they sell · '+its.length+'</b><div class="sub">'+(v.website?'From their website, ':'')+esc(divName(S.div))+' division</div></span><span class="btn sm">'+(S.itemsOpen?'Hide':'Show')+'</span></button>';
  if(S.itemsOpen){
   h+='<div class="chips" style="margin-top:12px">'+(its.length?its.map(function(i){return '<span class="chip">'+esc(i.name)+'<button aria-label="Remove '+esc(i.name)+'" data-act="rmitem" data-id="'+esc(i.id)+'">×</button></span>'}).join(''):'<span class="hint">None yet.</span>')+'</div>';
@@ -373,29 +416,50 @@ function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',ext:'',
 function renderForm(){
  var d=S.draft,v=vendorMatch(d.vendor),fixed=!S.edit&&S.ctxV;   // added from inside a vendor: that's its vendor
  var h='<div class="page">';
- if(S.modal)h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h2 data-act="dlgtitle" style="margin:0;font-size:18px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none">'+(S.edit?'Edit contact':'New contact')+'</h2>'+(S.edit?saveStHTML():fixed?'<span class="hint" style="font-size:14px;overflow-wrap:anywhere">'+esc(S.ctxV)+'</span>':'')+'</div><button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button></div>';
- else h+='<button class="back" data-act="cancel">'+I.back+'Back</button>';
- if(fixed&&!S.modal)h+='<div class="hint" style="margin:0 4px 10px;font-size:14px">Adding a contact to <b style="color:var(--t)">'+esc(S.ctxV)+'</b></div>';
- if(S.view==='scan')h+='<div class="okb" style="margin-bottom:10px">Read from the card. Check each field, then save. Coverage is not on the card, so set it by hand.</div>';
+ if(!S.modal)h+='<button class="back" data-act="cancel">'+I.back+'Back</button>';
+ // who it is, kept up to date as the name, title and vendor are typed (paintHead)
+ h+='<div class="cf-head"><span class="cf-av" id="hdav" aria-hidden="true">'+(d.name.trim()?esc(ini(d.name)):I.user)+'</span>'+
+  '<div class="cf-who"><h2 data-act="dlgtitle" id="hdname">'+esc(d.name.trim()||(S.edit?'Edit contact':'New contact'))+'</h2><div class="cf-sub" id="hdsub">'+esc(headSub(d,fixed))+'</div></div>'+
+  (S.edit?saveStHTML():'')+(S.modal?'<button type="button" class="ib" aria-label="Close" data-act="cancel" style="font-size:22px">×</button>':'')+'</div>';
+ if(S.view==='scan')h+='<div class="okb" style="margin-bottom:14px">Read from the card. Check each field, then save. Coverage is not on the card, so set it by hand.</div>';
  h+='<div id="dupbox">'+dupHTML()+'</div>';
- h+='<form data-form="contact" style="display:flex;flex-direction:column;gap:10px">';
- function f(l,k,ty,ex){return '<div class="fld"><label class="lab" for="f-'+k+'">'+l+'</label><input class="in" id="f-'+k+'" data-fld="'+k+'" type="'+ty+'" value="'+esc(d[k])+'" '+(ex||'')+'></div>'}
- h+=f('Name','name','text','autocomplete="off" autocapitalize="words"')+f('Title','title','text','autocomplete="off"');
- if(!fixed)h+='<div class="fld"><label class="lab" for="f-vendor">Vendor</label><input class="in" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off"><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
- h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'+'<div class="fld"><label class="lab" for="f-phone">Phone</label><div style="display:flex;gap:8px"><input class="in" id="f-phone" data-fld="phone" type="tel" inputmode="tel" value="'+esc(d.phone)+'" autocomplete="off" style="flex:1;min-width:0"><input class="in" id="f-ext" data-fld="ext" inputmode="numeric" value="'+esc(d.ext)+'" placeholder="Ext." aria-label="Extension" autocomplete="off" style="width:76px;flex:none"></div></div>'+'<div class="fld"><label class="lab" for="f-email">Email</label><input class="in" id="f-email" data-fld="email" type="email" inputmode="email" value="'+esc(d.email)+'" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="emailerr"><span class="hint" id="emailerr" style="color:var(--d)">'+(emailBad(d.email)?'That email doesn’t look right':'')+'</span></div>'+'</div>';
- h+='<div class="fld"><div><div class="lab">Service area</div><div class="hint">Which jobs this salesman covers</div></div>';
- h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;min-height:44px"><span style="font-size:15px;font-weight:600" id="natlab">Nationwide</span><button type="button" class="sw'+(d.nationwide?' on':'')+'" role="switch" aria-checked="'+d.nationwide+'" aria-labelledby="natlab" data-act="nat"></button></div>';
+ function fld(label,k,icon,ex,extra){
+  return '<div class="cf-f"><label for="f-'+k+'">'+label+'</label><div class="cf-in">'+(icon||'')+'<input class="in2" id="f-'+k+'" data-fld="'+k+'" value="'+esc(d[k])+'" autocomplete="off" '+(ex||'')+'>'+(extra||'')+'</div></div>';
+ }
+ h+='<form data-form="contact" class="cf">';
+ h+='<div class="cf-grid">'+fld('Name','name',I.user,'type="text" autocapitalize="words" placeholder="First and last name"')+fld('Title','title',I.tag,'type="text" placeholder="e.g. Outside sales"')+'</div>';
+ if(!fixed)h+='<div class="cf-f"><label for="f-vendor">Vendor</label><div class="cf-in">'+I.shop+'<input class="in2" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off" placeholder="Pick one, or type a new vendor"></div><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="cf-hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
+ h+='<div class="cf-grid">'+
+  '<div class="cf-f"><label for="f-phone">Phone</label><div class="cf-in">'+I.phone+'<input class="in2" id="f-phone" data-fld="phone" type="tel" inputmode="tel" value="'+esc(d.phone)+'" autocomplete="off" placeholder="(801) 555-0123"><input class="in2 ext" id="f-ext" data-fld="ext" inputmode="numeric" value="'+esc(d.ext)+'" placeholder="Ext." aria-label="Extension" autocomplete="off"></div></div>'+
+  '<div class="cf-f"><label for="f-email">Email</label><div class="cf-in">'+I.mail+'<input class="in2" id="f-email" data-fld="email" type="email" inputmode="email" value="'+esc(d.email)+'" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="name@company.com" aria-describedby="emailerr"></div><span class="cf-hint" id="emailerr" style="color:var(--d)">'+(emailBad(d.email)?'That email doesn’t look right':'')+'</span></div>'+
+ '</div>';
+ // service area: nationwide, or the states (and regions in them) they cover; neither = coverage not set
+ h+='<div class="cf-sec"><div><div class="cf-lt" style="color:var(--t);font-size:14px">Service area</div><div class="cf-hint">Which jobs this salesman covers</div></div>'+
+  '<div class="seg" role="group" aria-label="Service area"><button type="button" data-act="natset" data-id="1" aria-pressed="'+!!d.nationwide+'">Nationwide</button><button type="button" data-act="natset" data-id="0" aria-pressed="'+!d.nationwide+'">By state</button></div>';
  if(!d.nationwide){
-  h+='<div class="chips" style="margin-top:6px" role="group" aria-label="States">'+STATES.map(function(s){var on=d.areas.some(function(x){return x.state===s});return '<button type="button" class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="st" data-id="'+s+'">'+s+'</button>'}).join('')+'</div>';
+  h+='<div class="chips" role="group" aria-label="States">'+STATES.map(function(s){var on=d.areas.some(function(x){return x.state===s});return '<button type="button" class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="st" data-id="'+s+'">'+s+'</button>'}).join('')+'</div>';
   d.areas.forEach(function(x){
-   h+='<div style="margin-top:8px"><div class="hint" style="margin-bottom:6px">Regions in '+x.state+' (blank = whole state)</div><div class="chips">'+x.regions.map(function(r,i){return '<span class="chip">'+esc(r)+'<button type="button" aria-label="Remove '+esc(r)+'" data-act="rmreg" data-id="'+x.state+'|'+i+'">×</button></span>'}).join('')+'</div><div style="display:flex;gap:8px;margin-top:6px"><input class="in" style="height:40px" placeholder="Add region" aria-label="Add a region in '+x.state+'" data-reg="'+x.state+'"><button type="button" class="btn sm" data-act="addreg" data-id="'+x.state+'">Add</button></div></div>';
+   h+='<div class="cf-reg"><div class="cf-lt">'+x.state+' <span style="font-weight:400">· '+(x.regions.length?'these regions':'the whole state')+'</span></div>'+
+    (x.regions.length?'<div class="chips">'+x.regions.map(function(r,i){return '<span class="chip">'+esc(r)+'<button type="button" aria-label="Remove '+esc(r)+'" data-act="rmreg" data-id="'+x.state+'|'+i+'">×</button></span>'}).join('')+'</div>':'')+
+    '<div style="display:flex;gap:8px"><input class="in2" placeholder="Add a region, e.g. Wasatch Front" aria-label="Add a region in '+x.state+'" data-reg="'+x.state+'"><button type="button" class="btn sm" data-act="addreg" data-id="'+x.state+'">Add</button></div></div>';
   });
-  if(!d.areas.length)h+='<div class="hint" style="margin-top:6px">Nothing selected: shown as Coverage not set.</div>';
+  if(!d.areas.length)h+='<div class="cf-hint">No states picked: shown as Coverage not set.</div>';
  }
  h+='</div>';
  if(S.confirmDel)h+='<div class="warn">Delete '+esc(d.name||'this contact')+'? This removes it for every division.<div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm dng" data-act="del">Delete</button><button type="button" class="btn sm" data-act="nodel">Keep</button></div></div>';
  h+=(S.edit?delBar(S.confirmDel?'':'askdel','Delete contact'):'<div class="bar"><button class="btn pri"'+(S.busy?' disabled':'')+'>'+(S.busy?'Saving…':'Add contact')+'</button></div>')+'</form></div>';
  return h;
+}
+function headSub(d,fixed){
+ var vn=fixed?S.ctxV:d.vendor;
+ return [d.title,vn].map(function(x){return String(x||'').trim()}).filter(Boolean).join(' · ')||(S.edit?'':'Fill in what you know; only the name and vendor are needed');
+}
+function paintHead(){
+ var d=S.draft;if(!d)return;
+ var n=$('hdname'),a=$('hdav'),sb=$('hdsub');
+ if(n)n.textContent=d.name.trim()||(S.edit?'Edit contact':'New contact');
+ if(a)a.innerHTML=d.name.trim()?esc(ini(d.name)):I.user;
+ if(sb)sb.textContent=headSub(d,!S.edit&&S.ctxV);
 }
 // An edit dialog saves itself, so its only button is Delete — and that stays hidden until the
 // dialog's title is triple-clicked (S.showDel), since it's rarely wanted.
@@ -624,6 +688,33 @@ function renderCardView(){
   '<div class="bar"><button type="button" class="btn" data-act="cardcrop">Crop</button><a class="btn" href="'+esc(cardUrl(c))+'" download="'+esc(c.name)+' card.jpg">Download</a><button type="button" class="btn pri" data-act="cardclose">Close</button></div>';
 }
 
+/* ---------- sharing a contact ---------- */
+function shareText(c,v){
+ return [c.name,[c.title,v&&v.name].filter(Boolean).join(', '),c.phone&&('Phone: '+c.phone),c.email&&('Email: '+c.email),
+  'Covers: '+c.area_text,v&&v.website&&('Website: '+v.website)].filter(Boolean).join('\n');
+}
+function vcfOf(c,v){
+ var e=function(x){return String(x||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/([,;])/g,'\\$1')};
+ var parts=String(c.name||'').trim().split(/\s+/),last=parts.length>1?parts.pop():'',sp=splitPhone(c.phone);
+ return ['BEGIN:VCARD','VERSION:3.0','N:'+e(last)+';'+e(parts.join(' '))+';;;','FN:'+e(c.name),v?'ORG:'+e(v.name):'',c.title?'TITLE:'+e(c.title):'',
+  c.phone?'TEL;TYPE=WORK,VOICE:'+sp.phone+(sp.ext?' x'+sp.ext:''):'',c.email?'EMAIL;TYPE=WORK:'+e(c.email):'',
+  v&&v.website?'URL:https://'+e(v.website.replace(/^https?:\/\//i,'')):'','NOTE:'+e('Covers: '+c.area_text),'END:VCARD'].filter(Boolean).join('\r\n');
+}
+function copyText(t){
+ if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t);
+ return new Promise(function(res,rej){var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')?res():rej(new Error('copy failed'))}catch(e){rej(e)}ta.remove()});
+}
+function shareContact(c){
+ var v=S.detail,text=shareText(c,v),file=null;
+ try{file=new File([vcfOf(c,v)],(c.name||'contact').replace(/[^\w .-]+/g,'')+'.vcf',{type:'text/vcard'})}catch(e){}
+ var copied=function(){copyText(text).then(function(){toast(c.name+'’s details copied')},function(){toast('Couldn’t copy them')})};
+ if(navigator.share){
+  var data={title:c.name,text:text};
+  if(file&&navigator.canShare&&navigator.canShare({files:[file]}))data.files=[file];
+  navigator.share(data).catch(function(e){if(e&&e.name!=='AbortError')copied()});
+ }else copied();
+}
+
 /* ---------- admin: catalog review ---------- */
 function loadAdmin(){
  api('/api/vendors/admin/review').then(function(d){S.admin.review=d;render()}).catch(function(e){S.admin.review={error:e.message};render()});
@@ -644,7 +735,8 @@ function renderAdmin(){
  var failed=vv.filter(function(v){return v.last_pull&&v.last_pull.status==='failed'});
  var pulling=vv.filter(function(v){return v.last_pull&&v.last_pull.status==='running'}).length;
  var h='<div class="page" style="max-width:820px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><button class="back" data-act="adminback">'+I.back+'Vendors</button>'+
-  '<button class="btn sm" data-act="pullall"'+(pulling?' disabled':'')+'>'+(pulling?'<span class="spin" style="width:16px;height:16px;border-width:2px"></span>Pulling '+pulling+'…':'Pull now')+'</button></div>';
+  (pulling?'<div style="display:flex;align-items:center;gap:8px"><span class="hint" style="display:inline-flex;align-items:center;gap:8px"><span class="spin" style="width:16px;height:16px;border-width:2px"></span>Pulling '+pulling+'…</span><button class="btn sm dng" data-act="stopall">Stop</button></div>':
+   '<button class="btn sm" data-act="pullall">Pull now</button>')+'</div>';
  h+='<div class="tabs" role="tablist">'+[['review','To review ('+rv.length+')'],['failed','Failed pulls ('+failed.length+')'],['vendors','Vendors']].map(function(x){return '<button class="chip tog'+(S.atab===x[0]?' on':'')+'" role="tab" aria-selected="'+(S.atab===x[0])+'" data-act="atab" data-id="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">';
  var err=(A.review&&A.review.error)||(A.vendors&&A.vendors.error);
  if(err)h+='<div class="errb">'+esc(err)+'</div>';
@@ -664,7 +756,7 @@ function renderAdmin(){
   });
  }else{
   h+='<form class="card" data-form="vendor" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="lab">Add a vendor website</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="in" style="flex:1 1 180px" id="nv-n" placeholder="Vendor name" aria-label="Vendor name" autocomplete="off"><input class="in" style="flex:1 1 180px" id="nv-w" placeholder="Web address" aria-label="Web address" autocomplete="off" inputmode="url"><button class="btn pri" style="height:40px">Add</button></div><span class="hint">Added to '+esc(divName(S.div))+'. Its items are pulled right away.</span></form>';
-  h+='<div class="card scroll">'+(vv.length?vv.map(function(v){var lp=v.last_pull;return '<div class="row" style="cursor:default">'+logoHTML(v,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(v.name)+'</b><div class="hint">'+(lp?(lp.status==='failed'?'Last pull failed ':lp.status==='running'?'Pulling now · started ':'Last pulled ')+esc(shortDate(lp.started_at)):'Not pulled yet')+'</div></div><input class="in" style="width:min(220px,45%);height:40px;font-size:14px" data-web="'+esc(v.id)+'" value="'+esc(v.website)+'" placeholder="Web address" aria-label="Web address for '+esc(v.name)+'" inputmode="url"></div>'}).join(''):'<div class="empty">No vendors yet.</div>')+'</div>';
+  h+='<div class="card scroll">'+(vv.length?vv.map(function(v){var lp=v.last_pull;return '<div class="row" style="cursor:default">'+logoHTML(v,'sm')+'<div style="flex:1;min-width:0"><b>'+esc(v.name)+'</b><div class="hint">'+(lp?(lp.status==='failed'?'Last pull failed ':lp.status==='running'?'Pulling now · started ':'Last pulled ')+esc(shortDate(lp.started_at)):'Not pulled yet')+'</div></div>'+(lp&&lp.status==='running'?'<button class="btn sm dng" data-act="stop" data-id="'+esc(v.id)+'">Stop</button>':'')+'<input class="in" style="width:min(220px,45%);height:40px;font-size:14px" data-web="'+esc(v.id)+'" value="'+esc(v.website)+'" placeholder="Web address" aria-label="Web address for '+esc(v.name)+'" inputmode="url"></div>'}).join(''):'<div class="empty">No vendors yet.</div>')+'</div>';
  }
  return h+'</div></div>';
 }
@@ -726,6 +818,8 @@ var A={
  atab:function(el){S.atab=el.dataset.id},
  approve:function(el){decide(el,true);return 'skip'},
  reject:function(el){decide(el,false);return 'skip'},
+ stopall:function(el){el.disabled=true;api('/api/vendors/admin/stop',{method:'POST',body:{}}).then(function(d){toast(d.message||'Stopping…');pollAdmin()}).catch(fail);return 'skip'},
+ stop:function(el){el.disabled=true;api('/api/vendors/admin/stop',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Stopping…');pollAdmin()}).catch(fail);return 'skip'},
  pullall:function(){api('/api/vendors/admin/pull-all',{method:'POST'}).then(function(d){toast(d.message||'Pulling every vendor not pulled in the last day');pollAdmin()}).catch(fail);return 'skip'},
  retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
  close:function(){S.panel=null},
@@ -773,7 +867,9 @@ var A={
    .then(function(){S.busy=false;S.crop=null;toast('Card cropped');loadDetail()}).catch(fail);
   return 'skip';
  },
+ sharec:function(el){var c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===el.dataset.id})[0];if(c)shareContact(c);return 'skip'},
  nat:function(){S.draft.nationwide=!S.draft.nationwide},
+ natset:function(el){var on=el.dataset.id==='1';if(S.draft.nationwide===on)return 'skip';S.draft.nationwide=on},
  st:function(el){var s=el.dataset.id,a=S.draft.areas,i=a.map(function(x){return x.state}).indexOf(s);if(i>=0)a.splice(i,1);else{a.push({state:s,regions:[]});a.sort(function(x,y){return STATES.indexOf(x.state)-STATES.indexOf(y.state)})}},
  addreg:function(el){var s=el.dataset.id,inp=document.querySelector('[data-reg="'+s+'"]'),val=inp.value.trim();if(!val)return;var ar=S.draft.areas.filter(function(x){return x.state===s})[0];if(ar.regions.indexOf(val)<0)ar.regions.push(val)},
  rmreg:function(el){var p=el.dataset.id.split('|');S.draft.areas.filter(function(x){return x.state===p[0]})[0].regions.splice(+p[1],1)},
@@ -804,7 +900,7 @@ document.addEventListener('click',function(e){
  if(act==='cardclose-ov'){if(e.target!==el)return;act='cardclose'}
  if(S.draft)syncDraft();
  if(S.armItem&&act!=='rmitem')S.armItem=null;
- if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render();if(/^(nat|st|addreg|rmreg)$/.test(act))autoSave(0)}
+ if(A[act]){e.preventDefault();if(A[act](el)==='skip')return;render();if(/^(nat|natset|st|addreg|rmreg)$/.test(act))autoSave(0)}
 });
 document.addEventListener('input',function(e){
  var t=e.target;
@@ -817,6 +913,7 @@ document.addEventListener('input',function(e){
   if(CAP_FIELDS[t.dataset.fld]){var cv=(t.dataset.fld==='name'?nameCase:capWords)(t.value);if(cv!==t.value){var cs=t.selectionStart,ce=t.selectionEnd;t.value=cv;try{t.setSelectionRange(cs,ce)}catch(x){}}}
   if(t.dataset.fld==='ext'&&/\D/.test(t.value))t.value=t.value.replace(/\D/g,'').slice(0,6);
   S.draft[t.dataset.fld]=t.value;
+  if(/^(name|title|vendor)$/.test(t.dataset.fld))paintHead();
   if(t.dataset.fld==='vendor'){var h=$('vhint');if(h)h.textContent=vendorHint(t.value,vendorMatch(t.value))}
   if(t.dataset.fld==='email'){checkDup();var ee=$('emailerr');if(ee)ee.textContent=emailBad(t.value)&&t.value.indexOf('@')>=0&&/\.\w*$/.test(t.value)?'That email doesn’t look right':''}
   if(t.dataset.fld!=='vendor')autoSave();
@@ -841,7 +938,7 @@ document.addEventListener('change',function(e){
  if(t.dataset&&CAP_FIELDS[t.dataset.fld]&&S.draft){
   var fixed=CAP_FIELDS[t.dataset.fld](t.value.replace(/\s+/g,' ').trim());
   if(fixed!==t.value)t.value=fixed;
-  S.draft[t.dataset.fld]=t.value;
+  S.draft[t.dataset.fld]=t.value;paintHead();
   if(t.dataset.fld==='vendor'){var vh=$('vhint');if(vh)vh.textContent=vendorHint(t.value,vendorMatch(t.value))}
   autoSave(0);return;
  }

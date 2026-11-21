@@ -182,6 +182,27 @@ class PullTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         finish.assert_called_with("r1", False, None, "Site blocks automated requests")
 
+    def test_stop_ends_a_pull_as_stopped_by_hand(self):
+        def site(*_a):
+            vendor_catalog.stop("v1")       # pressed while the site is being read
+            vendor_catalog._check()         # what every request does first
+            return ["never"], "feed"
+        vs = vendor_catalog.vs
+        with mock.patch.object(vs, "get_vendor", return_value={"id": "v1", "name": "W", "website": "w"}), \
+             mock.patch.object(vendor_catalog, "pull_logo", return_value=False), \
+             mock.patch.object(vendor_catalog.supabase_store, "load_divisions", return_value=[]), \
+             mock.patch.object(vs, "divisions_of", return_value=[]), \
+             mock.patch.object(vs, "start_run", return_value={"id": "r1"}), \
+             mock.patch.object(vs, "fail_running", return_value=0), \
+             mock.patch.object(vs, "add_item") as add, \
+             mock.patch.object(vs, "finish_run") as finish, \
+             mock.patch.object(vendor_catalog, "_from_site", side_effect=site):
+            result = vendor_catalog.pull("v1")
+        self.assertEqual(result["message"], "Stopped by hand")
+        finish.assert_called_with("r1", False, None, "Stopped by hand")
+        add.assert_not_called()
+        self.assertNotIn("v1", vendor_catalog._stop)   # cleared, so the next pull runs
+
     def test_division_keywords_pick_items_without_ai(self):
         with mock.patch.object(vendor_catalog.ai_provider, "get_provider", return_value=None):
             got = vendor_catalog._assign(["Geotextile fabric 6 oz", "Anchor bolts", "Silt fences"],

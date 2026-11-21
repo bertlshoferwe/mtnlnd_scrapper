@@ -48,6 +48,32 @@ _LOGINISH = re.compile(r"log-?in|sign-?in|account/login|auth", re.I)
 _busy = set()
 _busy_lock = threading.Lock()
 
+# Stop: a pull checks between requests (and around each AI call) whether it's
+# been asked to stop, and gives up as a failed pull, "Stopped by hand".
+STOPPED = "Stopped by hand"
+_stop = set()                 # vendor ids asked to stop
+_stop_all = threading.Event()  # Pull now / the weekly round: don't start the next vendor
+_local = threading.local()    # the vendor this thread is pulling
+
+
+def _check():
+    vid = getattr(_local, "vid", None)
+    if vid and vid in _stop:
+        raise Failed(STOPPED)
+
+
+def stop(vendor_id=None):
+    """Stop one vendor's pull, or (no vendor) every pull going and the round
+    that's working through them. A pull shown as running that nothing here is
+    doing is marked stopped too. Returns how many were stopped."""
+    with _busy_lock:
+        busy = set(_busy)
+    if vendor_id is None:
+        _stop_all.set()
+    targets = busy if vendor_id is None else {vendor_id} & busy
+    _stop.update(targets)
+    return len(targets) + vs.fail_running(STOPPED, vendor_id, skip=busy)
+
 
 class Failed(Exception):
     pass
@@ -73,6 +99,7 @@ class _Site:
             self.robots.parse([])
 
     def _get(self, url, check=True, **kw):
+        _check()
         if check and not self.robots.can_fetch(UA, url):
             return None
         wait = GAP_S - (time.monotonic() - self._last)
@@ -223,7 +250,9 @@ def _ai_items(text, keywords, what):
         raise Failed("Reading this needs the AI provider, and none is set up")
     import site_agent
     focus = ("Concentrate on products related to these: " + ", ".join(keywords[:150]) + ".") if keywords else ""
+    _check()
     reply = site_agent._ask(ai, EXTRACT_PROMPT.format(what=what, focus=focus, text=text), max_tokens=6000)
+    _check()
     if not reply:
         raise Failed("The AI didn't answer (it may be over its daily limit)")
     return _dedupe(reply.get("items") or [])
@@ -295,6 +324,7 @@ def _assign(names, keywords_by_div):
     if not rest:
         return out
     ai = ai_provider.get_provider()
+    _check()
     if ai is not None and len(names) <= 400:
         import site_agent
         reply = site_agent._ask(ai, ASSIGN_PROMPT.format(
@@ -370,11 +400,14 @@ def pull(vendor_id, what="all", pdf_path=None, force=False):
         if vendor_id in _busy:
             return {"ok": False, "message": "it's already being pulled"}
         _busy.add(vendor_id)
+    _local.vid = vendor_id
     try:
         return _pull(vendor_id, what, pdf_path, force)
     finally:
+        _local.vid = None
         with _busy_lock:
             _busy.discard(vendor_id)
+            _stop.discard(vendor_id)
 
 
 def _pull(vendor_id, what, pdf_path, force):
@@ -408,7 +441,9 @@ def _pull(vendor_id, what, pdf_path, force):
             raise Failed("No product list found on the site")
         first = not vs.had_good_run(vendor_id, run["id"])
         queued = 0
-        for div, keep in _assign(names, keywords).items():
+        assigned = _assign(names, keywords)
+        _check()   # last chance to stop before anything changes
+        for div, keep in assigned.items():
             have = {i["name"].lower(): i for i in vs.items_of(vendor_id, div) if i["active"]}
             added = [n for n in keep if n.lower() not in have]
             lower = {n.lower() for n in keep}
@@ -454,9 +489,13 @@ def run_due(force=False):
     With force (Pull now): every one not pulled in the last day — a pull that
     failed in that time is tried again."""
     from datetime import datetime
+    _stop_all.clear()
     runs = vs.last_runs()
     now = time.time()
     for v in vs.all_vendors():
+        if _stop_all.is_set():
+            print("  [vendors] pulls stopped by hand", flush=True)
+            break
         last = runs.get(v["id"])
         if not v.get("website"):
             continue

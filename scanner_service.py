@@ -441,6 +441,16 @@ def vendor_pull_all():
     return jsonify({"ok": True, "message": "Pulling every vendor now. Each one's result shows up here as it finishes."})
 
 
+@app.route("/vendor-stop", methods=["POST"])
+def vendor_stop():
+    """Stop a vendor's pull ({vendor_id}), or every pull going ({})."""
+    vid = str((request.get_json(silent=True) or {}).get("vendor_id") or "").strip() or None
+    if vid and not re.fullmatch(r"[0-9a-f-]{36}", vid):
+        return jsonify({"ok": False, "error": "bad vendor_id"}), 400
+    n = vendor_catalog.stop(vid)
+    return jsonify({"ok": True, "stopped": n, "message": "Stopping…" if n else "Nothing was pulling"})
+
+
 @app.route("/learn-cancel", methods=["POST"])
 def learn_cancel():
     """Stop a site's learning. Body: {division_id, site_id}."""
