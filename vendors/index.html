@@ -196,8 +196,8 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 .grab{position:absolute;left:50%;top:7px;width:40px;height:5px;margin-left:-20px;border-radius:999px;background:var(--bs)}
 .sheet-b{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 10px calc(16px + env(safe-area-inset-bottom))}
 @media(prefers-reduced-motion:no-preference){
- .sheet.in{animation:sheetup .24s ease}
- .sheet-ov.in{animation:fadein .2s ease}
+ .sheet.enter{animation:sheetup .24s ease}
+ .sheet-ov.enter{animation:fadein .2s ease}
 }
 @keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
 @keyframes fadein{from{opacity:0}}
@@ -1276,7 +1276,7 @@ function render(){
    '<div class="desk tw'+(det?'':' nodet')+'"><div class="rcard">'+rbar()+'<div id="results">'+renderResults()+'</div></div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div></div></div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
-  (sheet&&S.divs.length?'<div class="sheet-ov'+(hadSheet?'':' in')+'" data-act="sheetclose"></div><div class="sheet'+(hadSheet?'':' in')+'" role="dialog" aria-modal="true" aria-label="Details">'+
+  (sheet&&S.divs.length?'<div class="sheet-ov'+(hadSheet?'':' enter')+'" data-act="sheetclose"></div><div class="sheet'+(hadSheet?'':' enter')+'" role="dialog" aria-modal="true" aria-label="Details">'+
    '<div class="sheet-h"><span class="grab" aria-hidden="true"></span><button class="back" data-act="sheetclose">'+I.back+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</button></div>'+
    '<div class="sheet-b">'+detailHTML()+'</div></div>':'')+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
