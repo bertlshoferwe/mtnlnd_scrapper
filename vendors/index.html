@@ -175,7 +175,7 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .ccard-h{display:flex;align-items:center;gap:12px;min-width:0}
 .ccard-h .cf-av{width:40px;height:40px;font-size:14px}
 .ccard-h .nm{font-weight:700;font-size:15px;overflow-wrap:anywhere}
-.ccard-h .nmpen{width:28px;height:28px;vertical-align:middle;margin-left:2px;color:var(--m)}
+.ccard-h .nmpen{width:28px;height:28px;vertical-align:middle;margin:-6px 0 -6px 2px;color:var(--m)}
 .ccard-h .nmpen:hover{color:var(--t)}
 .ccard-h .nmpen svg{width:15px;height:15px}
 .ccard-acts{display:flex;align-items:center;margin-left:auto;flex:none}
@@ -188,6 +188,19 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .linkish:hover{text-decoration:underline}
 .back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;font-size:14px;font-weight:600;color:var(--ast);padding:8px 4px;min-height:44px}
 .page{max-width:720px;margin:0 auto}
+/* a phone's details: a card slid up over the list, a gap left at the top */
+html.sheet-open,html.sheet-open body{overflow:hidden}
+.sheet-ov{position:fixed;inset:0;z-index:38;background:rgba(3,6,14,.6)}
+.sheet{position:fixed;left:0;right:0;bottom:0;top:calc(44px + env(safe-area-inset-top));z-index:39;display:flex;flex-direction:column;background:var(--bg);border-top:1px solid var(--bs);border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.45);overscroll-behavior:contain}
+.sheet-h{flex:none;position:relative;padding:14px 8px 0;touch-action:none}
+.grab{position:absolute;left:50%;top:7px;width:40px;height:5px;margin-left:-20px;border-radius:999px;background:var(--bs)}
+.sheet-b{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 10px calc(16px + env(safe-area-inset-bottom))}
+@media(prefers-reduced-motion:no-preference){
+ .sheet.in{animation:sheetup .24s ease}
+ .sheet-ov.in{animation:fadein .2s ease}
+}
+@keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
+@keyframes fadein{from{opacity:0}}
 .warn{padding:10px 14px;border-radius:12px;border:1px solid var(--w);background:var(--warnbg);color:var(--warnt);font-size:14px}
 .okb{padding:10px 14px;border-radius:12px;border:1px solid var(--okbd);background:var(--okbg);color:var(--okt);font-size:14px}
 .errb{padding:10px 14px;border-radius:12px;border:1px solid var(--errbd);background:var(--errbg);color:var(--errt);font-size:14px}
@@ -704,6 +717,9 @@ function renderPeople(){
  });
  return h+'</div>';
 }
+// A name with icons after it: the last word and the icons wrap together, never the icons alone.
+function nameKeep(name,after){var m=String(name||'').match(/^(.*\s)?(\S+)$/)||[null,'',String(name||'')];
+ return esc(m[1]||'')+'<span style="white-space:nowrap">'+esc(m[2])+after+'</span>'}
 function mainOf(v){return (v.contacts||[]).filter(function(c){return c.primary})[0]||null}
 function renderVendorsTbl(){
  var T=toks(),rows=vendorRows();
@@ -784,11 +800,12 @@ function ensureSelection(){
 // Redrawing replaces the list and the details panel, so their scroll positions are carried over
 // (the details panel's only while it's showing the same thing).
 function listScroller(){return document.querySelector('#results .tbl')||$('results')}
+function detailScroller(){return document.querySelector('.detail')||document.querySelector('.sheet-b')}
 function keepScroll(){
- var l=listScroller(),d=document.querySelector('.detail'),k=S.mode+'|'+S.vid+'|'+S.cid+'|'+S.ikey;
+ var l=listScroller(),d=detailScroller(),k=S.mode+'|'+S.vid+'|'+S.cid+'|'+S.ikey;
  var lt=l?l.scrollTop:0,ll=l?l.scrollLeft:0,dt=d?d.scrollTop:0,dk=d?k:null;
  return function(){
-  var l2=listScroller(),d2=document.querySelector('.detail');
+  var l2=listScroller(),d2=detailScroller();
   if(l2){l2.scrollTop=lt;l2.scrollLeft=ll}
   if(d2&&dk===S.mode+'|'+S.vid+'|'+S.cid+'|'+S.ikey)d2.scrollTop=dt;
  };
@@ -846,8 +863,8 @@ function renderVendor(){
  if(!cs.length)h+='<div class="crow"><span class="hint">No contacts yet.</span></div>';
  else h+='<div class="clist">';
  cs.forEach(function(c){
-  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+(c.primary?' <span class="star">'+I.starS+'</span>':'')+
-    '<button class="ib pen nmpen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>'+(c.primary?'<div class="hint" style="color:var(--w)">Main contact</div>':'')+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
+  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+nameKeep(c.name,(c.primary?' <span class="star">'+I.starS+'</span>':'')+
+    '<button class="ib pen nmpen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button>')+'</div>'+(c.primary?'<div class="hint" style="color:var(--w)">Main contact</div>':'')+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
    '<div class="ccard-acts">'+
    '<button class="ib'+(c.primary?' starred':'')+'" aria-pressed="'+!!c.primary+'" aria-label="'+(c.primary?'Main contact — unstar':'Make main contact')+'" title="'+(c.primary?'Main contact — click to unstar':'Make main contact')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'">'+(c.primary?I.starF:I.star)+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
    '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.alt_phone?'<a class="kv" href="'+esc(telHref(c.alt_phone))+'">'+I.phone+esc(c.alt_phone)+' <span class="hint">alt</span></a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
@@ -1246,25 +1263,29 @@ function renderAdmin(){
 /* ---------- drawing the page ---------- */
 function render(){
  var ae=document.activeElement,keep=ae&&ae.id?{id:ae.id,a:ae.selectionStart,b:ae.selectionEnd}:null;
- var od=document.querySelector('.dlg'),ost=od?od.scrollTop:0,back=keepScroll();
+ var od=document.querySelector('.dlg'),ost=od?od.scrollTop:0,back=keepScroll(),hadSheet=!!document.querySelector('.sheet');
+ var sheet=S.view==='vendor'&&!mq.matches;
  var main='';
  if(!S.divs.length)main=S.loading?'<div class="loading"><span class="spin"></span>Loading…</div>':'<div class="card empty">'+esc(S.err||'No divisions yet. Add one in Bid Scout.')+'</div>';
  else if(S.view==='admin')main=renderAdmin();
  else if(S.view==='scan'&&S.scanStage!==2)main=renderScan();
  else if(S.view==='scan'||(S.view==='form'&&!S.modal))main=renderForm();
- else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</button>'+detailHTML()+'</div>';
  else{
   var det=mq.matches&&(S.mode==='items'?!!S.ikey:!!S.vid);
   main='<div class="shell'+(S.mini?' mini':'')+'">'+sideHTML()+'<div class="scrim'+(S.drawer?' open':'')+'" data-act="drawer"></div><div class="content">'+
    '<div class="desk tw'+(det?'':' nodet')+'"><div class="rcard">'+rbar()+'<div id="results">'+renderResults()+'</div></div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div></div></div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
+  (sheet&&S.divs.length?'<div class="sheet-ov'+(hadSheet?'':' in')+'" data-act="sheetclose"></div><div class="sheet'+(hadSheet?'':' in')+'" role="dialog" aria-modal="true" aria-label="Details">'+
+   '<div class="sheet-h"><span class="grab" aria-hidden="true"></span><button class="back" data-act="sheetclose">'+I.back+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</button></div>'+
+   '<div class="sheet-b">'+detailHTML()+'</div></div>':'')+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
   (S.vm?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Edit vendor">'+renderVendorModal()+'</div></div>':'')+
   (S.modal&&S.draft?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="'+(S.edit?'Edit contact':'New contact')+'">'+renderForm()+'</div></div>':'')+
   (S.toast?'<div class="toast" role="status">'+esc(S.toast)+'</div>':'');
  var c=$('count');if(c)c.textContent=countText();
  document.documentElement.classList.toggle('lock',listView()&&mq.matches);
+ document.documentElement.classList.toggle('sheet-open',sheet);
  back();
  var nd=document.querySelector('.dlg');if(nd)nd.scrollTop=ost;
  if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
@@ -1288,12 +1309,12 @@ function openPerson(cid,vid){
  if(cid!==S.cid)S.sellOpen=false;   // each person's details start with What they sell folded
  S.cid=cid;S.itemsOpen=false;S.addItem=false;
  if(S.vid!==vid||!S.detail||S.detail.id!==vid){S.vid=vid;S.detail=null;loadDetail()}
- S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
+ S.view=mq.matches?'list':'vendor';
  saveUrl();
 }
 function openVendor(id){
  S.vid=id;S.cid=null;S.itemsOpen=false;S.addItem=false;if(!S.detail||S.detail.id!==id)S.detail=null;
- S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
+ S.view=mq.matches?'list':'vendor';
  saveUrl();loadDetail();
 }
 function draftFrom(c){var ph=splitPhone(c.phone),ap=splitPhone(c.alt_phone);return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:ph.phone,ext:ph.ext,alt:ap.phone,altExt:ap.ext,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
@@ -1354,11 +1375,12 @@ var A={
   else ensureSelection();
   saveUrl();
  },
- item:function(el){S.ikey=el.dataset.id;S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0)},
+ item:function(el){S.ikey=el.dataset.id;S.view=mq.matches?'list':'vendor'},
  openv:function(el){S.mode='vendors';S.ikey=null;if(!S.results)loadList();openVendor(el.dataset.id)},
  openp:function(el){S.mode='people';S.ikey=null;if(!S.results)loadList();openPerson(el.dataset.id,el.dataset.v)},
  sort:function(el){var st=S.sort[S.mode],k=el.dataset.id;if(st.k===k)st.d=-st.d;else{st.k=k;st.d=k==='contacts'?-1:1}},
  back:function(){S.view='list';S.vid=null;S.cid=null;S.ikey=null;saveUrl()},
+ sheetclose:function(){closeSheet();return 'skip'},
  items:function(){S.itemsOpen=!S.itemsOpen;S.addItem=false},
  additem:function(){S.addItem=true;S.newItem=''},
  rmitem:function(el){
@@ -1426,6 +1448,31 @@ function decide(el,ok){
  api('/api/vendors/admin/review',{method:'POST',body:{vendor_id:el.dataset.id,division_id:el.dataset.div,approve:ok}}).then(function(){toast(ok?'Approved. Items updated':'Rejected. List left as it was');loadAdmin()}).catch(fail);
 }
 function syncDraft(){document.querySelectorAll('[data-fld]').forEach(function(i){S.draft[i.dataset.fld]=i.value})}
+function closeSheet(){
+ var sh=document.querySelector('.sheet'),ov=document.querySelector('.sheet-ov');
+ if(!sh){A.back();render();return}
+ sh.style.transition='transform .2s ease';sh.style.transform='translateY(100%)';if(ov){ov.style.transition='opacity .2s';ov.style.opacity='0'}
+ setTimeout(function(){A.back();render()},190);
+}
+(function(){
+ var y0=null,dy=0,sh=null;
+ document.addEventListener('touchstart',function(e){
+  sh=e.target.closest('.sheet');if(!sh){y0=null;return}
+  var b=sh.querySelector('.sheet-b');
+  // from the handle anywhere; from the body only when it's scrolled to the top
+  y0=(e.target.closest('.sheet-h')||!b||b.scrollTop<=0)?e.touches[0].clientY:null;dy=0;
+ },{passive:true});
+ document.addEventListener('touchmove',function(e){
+  if(y0==null||!sh)return;dy=e.touches[0].clientY-y0;
+  if(dy<=0){sh.style.transform='';return}
+  e.preventDefault();sh.style.transition='none';sh.style.transform='translateY('+dy+'px)';
+ },{passive:false});
+ document.addEventListener('touchend',function(){
+  if(y0==null||!sh)return;y0=null;
+  if(dy>110)closeSheet();else{sh.style.transition='transform .2s ease';sh.style.transform=''}
+  dy=0;
+ });
+})();
 document.addEventListener('click',function(e){
  var tile=e.target.closest('.tile[data-app]');
  if(tile&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey){
