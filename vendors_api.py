@@ -4,6 +4,7 @@ Vendors: the page at /vendors/ (vendors/index.html) and its API under
 by every division; what a vendor sells is kept per division.
 
   GET  /api/vendors?division=&q=&state=&with_contact=1   the list / search
+  GET  /api/vendors/items?division=&q=&state=          the Items view: each item (duplicates merged) and who sells it
   GET  /api/vendors/names                                every vendor's name and web address (the contact form)
   GET/PATCH/DELETE /api/vendors/<id>                     one vendor (GET takes ?division=)
   GET/POST/DELETE  /api/vendors/<id>/logo                its logo (POST: an upload, or {"pull": true})
@@ -175,6 +176,61 @@ def api_vendor_list():
                         item_names=[i["name"] for i in v["items"][:6]], states=states))
     out.sort(key=lambda r: r["name"].lower())
     return jsonify({"vendors": out})
+
+
+def _item_key(name):
+    """What makes two item names the same item: capitals, spacing, punctuation and
+    plurals don't count ("Silt Fences" = "silt fence"); different words do
+    ("Wired silt fence" stays its own item)."""
+    words = re.sub(r"[^a-z0-9#/ ]+", " ", (name or "").lower().replace("-", " ")).split()
+    out = []
+    for w in words:
+        if w.endswith("ies") and len(w) > 4:
+            w = w[:-3] + "y"
+        elif w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+            w = w[:-1]
+        out.append(w)
+    return " ".join(out)
+
+
+@bp.route("/api/vendors/items", methods=["GET"])
+def api_item_list():
+    """Items view: what the division's vendors sell, one row per item, the easy
+    duplicates merged (_item_key), each with the vendors that sell it and their
+    contacts. Same query string as /api/vendors; with q, only the items whose
+    names hold every word. State and with_contact filter vendors as there."""
+    division = (request.args.get("division") or "").strip()
+    if not division or not supabase_store.get_division(division):
+        return _err("pick a division", 404)
+    words = [w for w in re.split(r"\s+", (request.args.get("q") or "").strip().lower()) if w][:8]
+    state = (request.args.get("state") or "").strip().upper()
+    state = state if re.fullmatch(r"[A-Z]{2}", state) else ""
+    with_contact = request.args.get("with_contact") in ("1", "true")
+    try:
+        vendors = vs.bundle(vs.search_ids(division, []), division)
+    except ValueError as e:
+        return _err(str(e), 500)
+    groups = {}
+    for v in vendors.values():
+        cs = v["contacts"]
+        show = [c for c in cs if not state or _covers(c, state)] + [c for c in cs if state and _unset(c)]
+        if (with_contact and not show) or (state and cs and not show):
+            continue
+        for it in v["items"]:
+            low = it["name"].lower()
+            if words and not all(w in low for w in words):
+                continue
+            g = groups.setdefault(_item_key(it["name"]), {"names": {}, "vendors": {}})
+            g["names"][it["name"]] = g["names"].get(it["name"], 0) + 1
+            g["vendors"].setdefault(v["id"], dict(_vendor_out(v), contacts=[_contact_out(c) for c in show]))
+    out = []
+    for key, g in groups.items():
+        # the name shown: the one most vendors use, then one that starts with a capital
+        name = sorted(g["names"], key=lambda n: (-g["names"][n], not n[:1].isupper(), n.lower()))[0]
+        out.append({"key": key, "name": name[:1].upper() + name[1:], "variants": sorted(g["names"], key=str.lower),
+                    "vendors": sorted(g["vendors"].values(), key=lambda x: x["name"].lower())})
+    out.sort(key=lambda r: r["name"].lower())
+    return jsonify({"items": out})
 
 
 @bp.route("/api/vendors/names", methods=["GET"])

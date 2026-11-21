@@ -146,6 +146,18 @@ class EmailAndAdminTests(unittest.TestCase):
                 self.assertEqual(getattr(self.c, method)(path, json={}).status_code, 403, path)
 
 
+class ItemMergeTests(unittest.TestCase):
+    def test_easy_duplicates_merge_but_different_items_dont(self):
+        k = vendors_api._item_key
+        self.assertEqual(k("Silt Fences"), k("silt fence"))
+        self.assertEqual(k("Straw wattles"), k("Straw  wattle"))
+        self.assertEqual(k("Geocomposites"), k("Geocomposite"))
+        self.assertEqual(k("Bulk-bags"), k("Bulk bags"))
+        self.assertNotEqual(k("Wired silt fence"), k("Silt fence"))
+        self.assertNotEqual(k("Geogrid"), k("Biaxial geogrid"))
+        self.assertEqual(k("Glass"), "glass")                         # 'ss' isn't a plural
+
+
 class NormalizeTests(unittest.TestCase):
     def test_phone_email_website(self):
         self.assertEqual(vendors_store.norm_phone("801.555.0173"), "(801) 555-0173")

@@ -205,6 +205,10 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .thead,.trow{display:grid;align-items:center;column-gap:14px;padding:0 14px}
 .tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,1.5fr)}
 .tv{grid-template-columns:minmax(0,1.5fr) minmax(0,2fr) 84px minmax(0,1fr)}
+.ti{grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) 84px}
+.logos{display:flex;align-items:center;gap:4px;min-width:0}
+.ivend{border:1px solid var(--b);border-radius:12px;background:var(--s2);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ivend .oth{padding:6px 8px}
 .thead{height:40px;border-bottom:1px solid var(--b);background:var(--s2)}
 .thead button{border:0;background:none;padding:0;color:var(--m);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;height:40px;text-align:left}
 .thead button:hover,.thead button.on{color:var(--t)}
@@ -224,11 +228,12 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .narrow{display:none}
 @container (max-width:860px){.tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr)}.tp .c-email{display:none}}
 @container (max-width:640px){
+ .ti{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.ti .c-n{display:none}
  .tp{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}.tp .c-title,.tp .c-cov{display:none}
  .tv{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr)}.tv .c-n,.tv .c-cov{display:none}
 }
 @container (max-width:460px){
- .tp,.tv{grid-template-columns:minmax(0,1fr)}.tp .c-vendor,.tv .c-sells,.thead{display:none}
+ .tp,.tv,.ti{grid-template-columns:minmax(0,1fr)}.tp .c-vendor,.tv .c-sells,.ti .c-vlist,.thead{display:none}
  .wide{display:none}.narrow{display:block}
 }
 /* one person's details */
@@ -259,11 +264,11 @@ var CFG=window.APP_CONFIG||{};
 var COLORS=['#4f6bd6','#2f8f83','#b0663a','#8a5bc2','#3f7fb8','#a5524f','#5e8a3a','#b08a2f','#6a6fa8','#b05a8c'];
 var STATES=['UT','ID','CO','NV','WY','AZ','NM','MT'];
 var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-var S={mode:'people',cid:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
+var S={mode:'people',cid:null,ikey:null,items:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1},items:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
   modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
   results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
 var mq=window.matchMedia('(min-width:1000px)');
-try{var savedMode=localStorage.getItem('vendors.mode');if(savedMode==='vendors'||savedMode==='people')S.mode=savedMode}catch(e){}
+try{var savedMode=localStorage.getItem('vendors.mode');if(/^(people|vendors|items)$/.test(savedMode||''))S.mode=savedMode}catch(e){}
 var $=function(id){return document.getElementById(id)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 var I={
@@ -306,7 +311,13 @@ function loadList(delay){
  listTimer=setTimeout(function(){
   var seq=++listSeq;
   if(!S.div)return;
-  api('/api/vendors?'+qs({division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''})).then(function(d){
+  var q={division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''};
+  if(S.mode==='items'){
+   api('/api/vendors/items?'+qs(q)).then(function(d){if(seq!==listSeq)return;S.items=d.items||[];S.loading=false;S.err='';paintResults()})
+    .catch(function(e){if(seq!==listSeq)return;S.loading=false;S.err=e.message;paintResults()});
+   return;
+  }
+  api('/api/vendors?'+qs(q)).then(function(d){
    if(seq!==listSeq)return;
    S.results=(d.vendors||[]).map(function(v){v.item_names=v.item_names||[];v.matched_items=v.matched_items||[];v.states=v.states||[];return v});
    S.loading=false;S.err='';paintResults();
@@ -465,18 +476,51 @@ function renderVendorsTbl(){
  });
  return h+'</div>';
 }
+// Items: what the vendors sell, the easy duplicates merged by the server ("Silt Fences" = "silt fence").
+function itemRows(){
+ var st=S.sort.items;
+ return (S.items||[]).slice().sort(function(a,b){return st.d*(st.k==='vendors'?a.vendors.length-b.vendors.length:cmp(a.name,b.name))||cmp(a.name,b.name)});
+}
+function renderItemsTbl(){
+ var T=toks(),rows=itemRows();
+ if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No items match. Try another word or state.':'No items in '+esc(divName(S.div))+' yet. They come from each vendor’s website, or add them on a vendor.')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Items"><div class="thead ti" role="row">'+th('name','Item')+'<div class="cell c-vlist" style="font-size:12px;font-weight:600;color:var(--m)">Sold by</div>'+th('vendors','Vendors','c-n')+'</div>';
+ rows.forEach(function(it){
+  var vs=it.vendors,also=it.variants.filter(function(n){return n!==it.name});
+  h+='<button class="trow ti'+(S.ikey===it.key&&mq.matches?' sel':'')+'" role="row" data-act="item" data-id="'+esc(it.key)+'">'+
+   '<div class="cell"><b style="font-weight:600">'+hl(it.name,T)+'</b><div class="sub wide">'+(also.length?'also '+esc(also.join(', ')):'&nbsp;')+'</div><div class="sub narrow">'+esc(vs.map(function(v){return v.name}).join(', '))+'</div></div>'+
+   '<div class="cell c-vlist"><div class="logos">'+vs.slice(0,4).map(function(v){return logoHTML(v,'xs')}).join('')+'<span style="margin-left:6px;overflow:hidden;text-overflow:ellipsis">'+esc(vs.map(function(v){return v.name}).join(', '))+'</span></div></div>'+
+   '<div class="cell c-n">'+vs.length+'</div></button>';
+ });
+ return h+'</div>';
+}
+function renderItem(){
+ var it=(S.items||[]).filter(function(x){return x.key===S.ikey})[0];
+ if(!it)return '<div class="card empty">That item isn’t in this list any more.</div>';
+ var also=it.variants.filter(function(n){return n!==it.name});
+ var h='<div class="card pdet"><div class="ph"><div style="min-width:0"><h2>'+esc(it.name)+'</h2><div class="hint" style="font-size:14px">Sold by '+it.vendors.length+' vendor'+(it.vendors.length===1?'':'s')+(S.st!=='Any'?' · contacts who cover '+S.st:'')+'</div>'+
+  (also.length?'<div class="hint" style="margin-top:4px">Also listed as '+esc(also.join(', '))+'</div>':'')+'</div></div><div class="psec">';
+ it.vendors.forEach(function(v){
+  h+='<div class="ivend"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="openv" data-id="'+esc(v.id)+'">View</button></div>'+
+   (v.contacts.length?'<div>'+v.contacts.map(function(c){
+     return '<button class="oth" data-act="openp" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(c.name)+'</b><span class="hint" style="display:block">'+esc([c.title,c.phone,c.unset?'':c.area_text].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>':'<div class="hint">No contacts yet.</div>')+'</div>';
+ });
+ return h+'</div></div>';
+}
 function renderResults(){
- if(S.loading&&!S.results)return '<div class="loading"><span class="spin"></span>Loading vendors…</div>';
- if(S.err&&!S.results)return '<div class="card empty">Couldn’t load vendors: '+esc(S.err)+'</div>';
- return S.mode==='people'?renderPeople():renderVendorsTbl();
+ var list=S.mode==='items'?S.items:S.results;
+ if(S.loading&&!list)return '<div class="loading"><span class="spin"></span>Loading…</div>';
+ if(S.err&&!list)return '<div class="card empty">Couldn’t load them: '+esc(S.err)+'</div>';
+ return S.mode==='people'?renderPeople():S.mode==='items'?renderItemsTbl():renderVendorsTbl();
 }
 function countText(){
+ if(S.mode==='items'){var n0=(S.items||[]).length;return S.items?n0+' item'+(n0===1?'':'s'):''}
  if(!S.results)return '';
  var n=S.mode==='people'?peopleRows().length:S.results.length;
  return n+' '+(S.mode==='people'?(n===1?'person':'people'):(n===1?'vendor':'vendors'));
 }
 function modeBar(){
- return '<div class="modebar"><div class="seg" role="group" aria-label="Show"><button type="button" data-act="mode" data-id="people" aria-pressed="'+(S.mode==='people')+'">People</button><button type="button" data-act="mode" data-id="vendors" aria-pressed="'+(S.mode==='vendors')+'">Vendors</button></div><span class="hint" id="modecount" aria-live="polite">'+countText()+'</span></div>';
+ return '<div class="modebar"><div class="seg" role="group" aria-label="Show"><button type="button" data-act="mode" data-id="people" aria-pressed="'+(S.mode==='people')+'">People</button><button type="button" data-act="mode" data-id="vendors" aria-pressed="'+(S.mode==='vendors')+'">Vendors</button><button type="button" data-act="mode" data-id="items" aria-pressed="'+(S.mode==='items')+'">Items</button></div><span class="hint" id="modecount" aria-live="polite">'+countText()+'</span></div>';
 }
 function paintResults(){
  var el=$('results');if(!el){render();return}
@@ -927,10 +971,10 @@ function render(){
  else if(S.view==='admin')main=renderAdmin();
  else if(S.view==='scan'&&S.scanStage!==2)main=renderScan();
  else if(S.view==='scan'||(S.view==='form'&&!S.modal))main=renderForm();
- else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+(S.mode==='people'?'People':'Vendors')+'</button>'+(S.mode==='people'&&S.cid?renderPerson():renderVendor())+'</div>';
+ else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+({people:'People',vendors:'Vendors',items:'Items'}[S.mode])+'</button>'+detailHTML()+'</div>';
  else{
-  var det=S.vid&&mq.matches;
-  main=renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+(S.mode==='people'&&S.cid?renderPerson():renderVendor())+'</div>':'')+'</div>';
+  var det=mq.matches&&(S.mode==='items'?!!S.ikey:!!S.vid);
+  main=renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
@@ -942,6 +986,7 @@ function render(){
  if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
  if(S.addItem&&$('newitem')&&(!keep||keep.id!=='newitem'))$('newitem').focus();
 }
+function detailHTML(){return S.mode==='items'?renderItem():S.mode==='people'&&S.cid?renderPerson():renderVendor()}
 function toast(m){S.toast=m;render();clearTimeout(toast.t);toast.t=setTimeout(function(){S.toast='';render()},2400)}
 function fail(e){S.busy=false;toast(e.message||String(e))}
 function go(view){S.view=view;S.panel=null;window.scrollTo(0,0)}
@@ -996,9 +1041,18 @@ var A={
  vendor:function(el){openVendor(el.dataset.id)},
  person:function(el){openPerson(el.dataset.id,el.dataset.v)},
  tovendor:function(){if(S.mode!=='vendors'){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}}S.cid=null;S.itemsOpen=false;saveUrl()},
- mode:function(el){var m=el.dataset.id;if(m===S.mode)return 'skip';S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}if(m==='vendors')S.cid=null;else{S.vid=null;S.detail=null}saveUrl()},
+ mode:function(el){
+  var m=el.dataset.id;if(m===S.mode)return 'skip';
+  var was=S.mode;S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}
+  S.ikey=null;if(m==='vendors')S.cid=null;else{S.vid=null;S.cid=null;S.detail=null}
+  if(m==='items'||was==='items'){S.loading=true;if(m==='items')S.items=null;loadList()}
+  saveUrl();
+ },
+ item:function(el){S.ikey=el.dataset.id;S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0)},
+ openv:function(el){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}S.ikey=null;if(!S.results)loadList();openVendor(el.dataset.id)},
+ openp:function(el){S.mode='people';try{localStorage.setItem('vendors.mode','people')}catch(e){}S.ikey=null;if(!S.results)loadList();openPerson(el.dataset.id,el.dataset.v)},
  sort:function(el){var st=S.sort[S.mode],k=el.dataset.id;if(st.k===k)st.d=-st.d;else{st.k=k;st.d=k==='contacts'?-1:1}},
- back:function(){S.view='list';S.vid=null;S.cid=null;saveUrl()},
+ back:function(){S.view='list';S.vid=null;S.cid=null;S.ikey=null;saveUrl()},
  items:function(){S.itemsOpen=!S.itemsOpen;S.addItem=false},
  additem:function(){S.addItem=true;S.newItem=''},
  rmitem:function(el){
@@ -1062,9 +1116,9 @@ document.addEventListener('click',function(e){
  var el=e.target.closest('[data-act]');
  if(!el){
   // desktop: a click on empty space (not a card, the panel, the toolbar or a dialog) closes the vendor's details
-  if(S.vid&&mq.matches&&S.view==='list'&&!S.panel&&!S.vm&&!S.modal&&!S.cardView&&
+  if((S.vid||S.ikey)&&mq.matches&&S.view==='list'&&!S.panel&&!S.vm&&!S.modal&&!S.cardView&&
      !e.target.closest('.trow,.thead,.modebar,.detail,.tool,.mast,.modal-ov,.toast,a,button,input,select,label'))
-   {S.vid=null;S.cid=null;S.detail=null;saveUrl();render()}
+   {S.vid=null;S.cid=null;S.ikey=null;S.detail=null;saveUrl();render()}
   return;
  }
  var act=el.dataset.act;
