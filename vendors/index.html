@@ -58,6 +58,7 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .logo.sm{width:36px;height:36px;font-size:13px}
 .vname{font-size:16px;font-weight:700;overflow-wrap:anywhere}
 .vweb{font-size:13px;color:var(--m);overflow-wrap:anywhere}
+.vmeta{font-size:13px;color:var(--m);margin-top:auto;padding-top:2px}
 .sm-row{display:flex;gap:8px;align-items:baseline;font-size:14px;flex-wrap:wrap}
 .sm-row .ti{color:var(--m);font-size:13px}
 .srv{font-size:12px;color:var(--ast);background:var(--as);border-radius:999px;padding:2px 8px;white-space:nowrap}
@@ -276,7 +277,7 @@ function refresh(){loadList();loadDetail();loadNames()}
 
 /* ---------- helpers ---------- */
 function hash(s){var h=0;s=String(s);for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return Math.abs(h)}
-function ini(n){var w=String(n||'?').replace(/&/g,'').split(/\s+/).filter(Boolean);return ((w[0]||'?')[0]+(w[1]?w[1][0]:'')).toUpperCase()}
+function ini(n){var w=String(n||'?').replace(/[^A-Za-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);if(!w.length)w=['?'];return ((w[0]||'?')[0]+(w[1]?w[1][0]:'')).toUpperCase()}
 // A vendor's logo, or its initials on a color tile that's always the same for that vendor. An image that
 // fails to load removes itself, which shows the initials underneath: never a broken image.
 function logoHTML(v,cls){
@@ -354,13 +355,24 @@ function renderToolbar(){
  '<div class="rel"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
  (S.panel==='add'?addMenu():'')+'</div></div>';
 }
+// A vendor's card. Browsing: just who they are and one quiet line of counts. Searching: the contacts
+// and items that matched, since that's what you're looking for; coverage only once a job state is set.
 function vcard(r,T){
- var sh=r.contacts.slice(0,2),more=r.contacts.length-sh.length;
- var body=sh.map(function(c){return '<div class="sm-row"><b>'+hl(c.name,T)+'</b><span class="ti">'+hl(c.title,T)+'</span>'+srvLine(c)+'</div>'}).join('');
+ var head='<div class="vhead">'+logoHTML(r)+'<div style="min-width:0"><div class="vname">'+hl(r.name,T)+'</div>'+(r.website?'<div class="vweb">'+hl(r.website,T)+'</div>':'')+'</div></div>';
+ var open='<button class="card vcard'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'">';
+ if(!T.length){
+  var bits=[r.contact_count+' contact'+(r.contact_count===1?'':'s')];
+  if(r.item_count)bits.push(r.item_count+' item'+(r.item_count===1?'':'s'));
+  var st=r.states.filter(function(x){return x!=='All'});
+  if(r.states.indexOf('All')>=0)bits.push('Nationwide');else if(st.length)bits.push(st.join(', '));
+  return open+head+'<div class="vmeta">'+esc(bits.join(' · '))+'</div></button>';
+ }
+ var sh=r.contacts.slice(0,2),more=r.contacts.length-sh.length,stateOn=S.st!=='Any';
+ var body=sh.map(function(c){return '<div class="sm-row"><b>'+hl(c.name,T)+'</b>'+(c.title?'<span class="ti">'+hl(c.title,T)+'</span>':'')+(stateOn?srvLine(c):'')+'</div>'}).join('');
  if(!r.contacts.length)body='<div class="hint">No contacts yet</div>';
  if(more>0)body+='<div class="more">+'+more+' more</div>';
- var items=!T.length?(r.item_count?'<div class="hint">'+r.item_count+' item'+(r.item_count===1?'':'s')+' they sell</div>':''):r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
- return '<button class="card vcard'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'"><div class="vhead">'+logoHTML(r)+'<div style="min-width:0"><div class="vname">'+hl(r.name,T)+'</div><div class="vweb">'+hl(r.website,T)+'</div></div></div>'+body+items+'</button>';
+ var items=r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
+ return open+head+body+items+'</button>';
 }
 function renderResults(){
  if(S.loading&&!S.results)return '<div class="loading"><span class="spin"></span>Loading vendors…</div>';
