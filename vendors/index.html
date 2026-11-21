@@ -23,16 +23,43 @@ a{color:inherit}
 svg{flex:none}
 mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .app{min-height:100vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
-.mast{position:sticky;top:0;z-index:30;background:var(--mast);border-bottom:1px solid var(--b);padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left))}
-.mast-in{max-width:1400px;margin:0 auto;height:56px;display:flex;align-items:center;gap:10px}
-.mast h1{font-size:18px;margin:0;font-weight:700;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:default}
+/* the top bar, as Bid Scout's: a floating card — the name, the division pills, then round icon buttons */
+.mast{position:relative;z-index:30;margin:calc(12px + env(safe-area-inset-top)) 16px 0;background:var(--mast);border:1px solid rgba(255,255,255,.07);border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.28)}
+.mast-in{min-height:60px;padding:8px 10px 8px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.mast h1{font-size:17px;margin:0;font-weight:800;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:default}
+.dtabs{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.dtab{height:30px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--m);font-size:13px;font-weight:600}
+.dtab:hover{background:rgba(255,255,255,.15);color:var(--t)}
+.dtab.on{background:#fff;color:#202c54;border-color:#fff}
+.mright{margin-left:auto;display:flex;align-items:center;gap:8px}
+.cbtn{width:38px;height:38px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--m);display:inline-grid;place-items:center;position:relative;flex:none}
+.cbtn:hover{color:var(--t);background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.34)}
+.cbtn.pri{background:var(--a);border-color:var(--a);color:var(--ac)}
+.cbtn .dot{position:absolute;top:5px;right:6px;width:7px;height:7px;border-radius:50%;background:#fff}
+.find{display:flex;align-items:center;gap:6px}
+.msearch{display:none;align-items:center;gap:8px;width:340px;height:38px;background:var(--s);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:0 14px}
+.msearch:focus-within{border-color:var(--a)}
+.msearch input{flex:1;min-width:0;background:transparent;border:0;outline:0;font-size:16px}
+.find.open .msearch{display:flex}
+@media(max-width:699px){
+ .mast{margin:calc(8px + env(safe-area-inset-top)) 10px 0}
+ .mast-in{padding:8px 8px 8px 10px;gap:8px;flex-wrap:nowrap}
+ .mast-in:has(.find.open){flex-wrap:wrap}
+ .mast h1{font-size:16px}
+ .mright{gap:6px}
+ .cbtn{width:36px;height:36px}
+ .dtab{padding:0 11px}
+ .find.open{order:10;flex:1 1 100%}.find.open .msearch{width:auto;flex:1}
+ .rbar .count{display:none}
+ .main{padding:10px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+}
 .pill{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--bs);background:var(--as);color:var(--ast);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;max-width:46vw}
 .pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sp{flex:1}
 .ib{width:40px;height:40px;border-radius:999px;border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;color:var(--t)}
 .ib:hover{background:var(--as)}
 .rel{position:relative}
-.main{width:100%;max-width:1400px;margin:0 auto;padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left));flex:1}
+.main{width:100%;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left));flex:1}
 .tool{display:flex;gap:8px;align-items:center}
 .search{flex:1;min-width:0;height:48px;border:1px solid var(--bs);background:var(--s);border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 14px}
 .search:focus-within{border-color:var(--a)}
@@ -114,7 +141,7 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 }
 /* the vendor panel stays put beside the grid, and scrolls on its own when it's taller than the window */
 @media(min-width:1000px){.desk.tw{grid-template-columns:minmax(0,1fr) clamp(360px,36vw,480px)}.desk.tw.nodet{grid-template-columns:minmax(0,1fr)}}
-.detail{position:sticky;top:72px;max-height:calc(100vh - 88px);max-height:calc(100dvh - 88px);overflow-y:auto;overscroll-behavior:contain;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
+.detail{position:sticky;top:16px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
 .dhead{padding:16px;display:flex;gap:14px;align-items:center}
 .pen{opacity:0;transition:opacity .15s}
 .dhead:hover .pen,.crow:hover .pen,.ccard:hover .pen,.pen:focus-visible{opacity:1}
@@ -199,8 +226,19 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .cf-reg{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--b)}
 .cf-reg .in2{height:36px;font-size:14px;border-radius:8px}
 /* the two views: a table of people or of vendors, details beside it on a wide screen */
-.modebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 10px}
-.modebar .hint{font-size:13px}
+/* the results card, as Bid Scout's: underlined tabs with count pills, the count on the right */
+.rcard{background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden;min-width:0}
+.rbar{display:flex;align-items:center;gap:4px 14px;padding:0 14px;border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none}
+.rtabs{display:flex;gap:2px}
+.rtab{border:0;border-bottom:2px solid transparent;background:transparent;padding:13px 10px 11px;font-size:14px;font-weight:600;color:var(--m);white-space:nowrap}
+.rtab:hover{color:var(--t);border-bottom-color:var(--bs)}
+.rtab.on{color:var(--t);border-bottom-color:var(--a);font-weight:700}
+.rtab .vt{margin-left:6px;background:var(--s2);color:var(--m);border-radius:999px;padding:1px 7px;font-size:12px;font-weight:500}
+.rtab.on .vt{background:var(--a);color:var(--ac)}
+.rtab .vt:empty{display:none}
+.rbar .count{margin-left:auto;font-size:13px;color:var(--m);white-space:nowrap;padding:8px 0}
+.rcard .tbl{border:0;border-radius:0}
+.rcard>#results>.card{border:0;border-radius:0}
 .tbl{container-type:inline-size;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
 .thead,.trow{display:grid;align-items:center;column-gap:14px;padding:0 14px}
 .tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,1.5fr)}
@@ -255,7 +293,7 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
    screen that folds to an icon strip; on a phone or tablet a drawer from the left (the ☰ in the top bar) */
 .shell{display:flex;gap:16px;align-items:flex-start}
 .content{flex:1;min-width:0}
-.side{width:236px;flex:0 0 236px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:12px;position:sticky;top:72px;height:calc(100vh - 88px);height:calc(100dvh - 88px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.side{width:236px;flex:0 0 236px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:12px;position:sticky;top:16px;height:calc(100vh - 32px);height:calc(100dvh - 32px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
 .side .sh{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin:0 0 8px 6px}
 .side .sh b{font-size:14px}
 .sfold{width:30px;height:30px;border:0;border-radius:8px;background:none;color:var(--m);display:grid;place-items:center;flex:none}
@@ -265,17 +303,12 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .side .ov{background:transparent}
 .sidepop{position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:41;background:var(--mast);border:1px solid var(--bs);border-radius:16px;box-shadow:0 10px 28px rgba(0,0,0,.55);padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 /* the same tiles as the apps menu: an icon on a rounded square, its name under it */
+.sidepop.railpop{left:calc(100% + 12px);right:auto;top:-10px;width:224px}
 .sidepop .tile{width:auto;color:var(--t);padding:14px 6px 12px}
 .sidepop .tile i{display:grid;place-items:center;font-style:normal;width:44px;height:44px;border-radius:12px;background:var(--as);color:var(--ast)}
 .sidepop .tile i svg{width:22px;height:22px}
 .sl{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:14px 8px 6px}
 .sl .linkish{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
-.snav{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;border-radius:8px;padding:8px;color:var(--t);font-size:14px;text-align:left;min-height:38px}
-.snav:hover{background:var(--s2)}
-.snav svg{color:var(--m)}
-.snav.on{background:var(--as);box-shadow:inset 3px 0 0 var(--a);color:var(--ast);font-weight:600}
-.snav.on svg{color:var(--ast)}
-.snav .n{margin-left:auto;font-size:12px;color:var(--m);font-weight:400}
 .stchips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 8px 4px}
 .stchips .chip.tog{min-height:32px;padding:3px 11px;font-size:13px}
 .side .chk{min-height:40px;padding:0 8px;font-size:14px}
@@ -289,10 +322,9 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .menubtn,.mob{display:none}
 .scrim{display:none}
 @media(min-width:900px){
- .shell.mini .side{width:60px;flex-basis:60px;padding:10px 0;align-items:center;overflow-x:hidden}
+ .shell.mini .side{width:60px;flex-basis:60px;padding:10px 0;align-items:center;overflow:visible}
  .shell.mini .side .full{display:none}
  .shell.mini .side .rail{display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
- .modebar .seg{display:none}
  @media(prefers-reduced-motion:no-preference){.side{transition:width .18s ease,flex-basis .18s ease,padding .18s ease}}
 }
 @media(max-width:899px){
@@ -329,6 +361,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 var I={
  plus:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
  plusS:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+ searchC:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
  search:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#99a1b3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
  filter:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>',
  cam:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 012-2h2l1.5-2h5L16 6h2a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>',
@@ -371,17 +404,14 @@ function loadList(delay){
  listTimer=setTimeout(function(){
   var seq=++listSeq;
   if(!S.div)return;
-  var q={division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''};
-  if(S.mode==='items'){
-   api('/api/vendors/items?'+qs(q)).then(function(d){if(seq!==listSeq)return;S.items=d.items||[];S.loading=false;S.err='';paintResults()})
-    .catch(function(e){if(seq!==listSeq)return;S.loading=false;S.err=e.message;paintResults()});
-   return;
-  }
+  // both lists, so every tab shows its count (the one showing is waited on; the other fills its count in)
+  var q={division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''},items=S.mode==='items';
+  var done=function(main){return function(){if(seq!==listSeq)return;if(main){S.loading=false;S.err=''}paintResults()}};
+  var bad=function(main){return function(e){if(seq!==listSeq||!main)return;S.loading=false;S.err=e.message;paintResults()}};
+  api('/api/vendors/items?'+qs(q)).then(function(d){if(seq===listSeq)S.items=d.items||[]}).then(done(items),bad(items));
   api('/api/vendors?'+qs(q)).then(function(d){
-   if(seq!==listSeq)return;
-   S.results=(d.vendors||[]).map(function(v){v.item_names=v.item_names||[];v.matched_items=v.matched_items||[];v.states=v.states||[];return v});
-   S.loading=false;S.err='';paintResults();
-  }).catch(function(e){if(seq!==listSeq)return;S.loading=false;S.err=e.message;paintResults()});
+   if(seq===listSeq)S.results=(d.vendors||[]).map(function(v){v.item_names=v.item_names||[];v.matched_items=v.matched_items||[];v.states=v.states||[];return v});
+  }).then(done(!items),bad(!items));
  },delay||0);
 }
 function loadDetail(){
@@ -454,25 +484,23 @@ function appsHTML(){
 function appUrl(a){return a.url+(a.division&&S.div?'?division='+encodeURIComponent(S.div):'')}
 function renderMast(){
  var title=S.view==='admin'?'Catalog review':S.view==='scan'?(S.scanStage===2?(S.edit?'Edit contact':'New contact'):'Scan card'):S.view==='form'?(S.edit?'Edit contact':'New contact'):'Vendors';
+ var lv=listView(),findOpen=lv&&(S.findOpen||!!S.q);
  return '<header class="mast"><div class="mast-in">'+
- (listView()?'<button class="ib menubtn" data-act="drawer" aria-label="Open the menu" aria-expanded="'+S.drawer+'">'+I.menu+'</button>':'')+
+ (lv?'<button class="cbtn menubtn" data-act="drawer" aria-label="Open the menu" aria-expanded="'+S.drawer+'">'+I.menu+'</button>':'')+
  '<h1 data-act="title">'+esc(title)+'</h1>'+
- '<div class="rel"><button class="pill" data-act="p-div" aria-haspopup="true" aria-expanded="'+(S.panel==='div')+'"><span>'+esc(divName(S.div)||'Division')+'</span>'+I.chev+'</button>'+
- (S.panel==='div'?'<div class="ov" data-act="close"></div><div class="pop" style="width:220px"><h3>Division</h3>'+S.divs.map(function(d){return '<button class="opt" data-act="div" data-id="'+esc(d.id)+'" style="min-height:48px"><b>'+esc(d.name)+(d.id===S.div?' ✓':'')+'</b></button>'}).join('')+'<span class="hint" style="padding:0 4px">Divisions come from Bid Scout.</span></div>':'')+
- '</div><div class="sp"></div>'+
- '<div class="rel"><button class="ib" aria-label="Apps" aria-haspopup="true" aria-expanded="'+(S.panel==='apps')+'" data-act="p-apps">'+I.waffle+'</button>'+
+ (lv&&S.divs.length>0?'<div class="dtabs" role="tablist" aria-label="Division">'+S.divs.map(function(d){return '<button class="dtab'+(d.id===S.div?' on':'')+'" role="tab" aria-selected="'+(d.id===S.div)+'" data-act="div" data-id="'+esc(d.id)+'">'+esc(d.name)+'</button>'}).join('')+'</div>':'')+
+ '<div class="mright">'+
+ (lv?'<div class="find'+(findOpen?' open':'')+'"><label class="msearch">'+I.search+'<span class="sr">Search</span><input id="q" type="search" placeholder="Search items, vendors or contacts" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"></label>'+
+   '<button class="cbtn" data-act="find" aria-expanded="'+findOpen+'" aria-controls="q" title="Search" aria-label="Search">'+I.searchC+(S.q&&!findOpen?'<span class="dot"></span>':'')+'</button></div>':'')+
+ (lv?'<div class="rel mob"><button class="cbtn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plusS+'</button>'+(S.panel==='add'?addMenu():'')+'</div>':'')+
+ '<div class="rel"><button class="cbtn" aria-label="Services" title="Services" aria-haspopup="true" aria-expanded="'+(S.panel==='apps')+'" data-act="p-apps">'+I.waffle+'</button>'+
  (S.panel==='apps'?'<div class="ov" data-act="close"></div><div class="pop r" style="width:auto">'+appsHTML()+'</div>':'')+
- '</div></div></header>'+(S.offline?'<div class="offline" role="status">You’re offline. Vendors needs a connection to show and save anything.</div>':'');
+ '</div></div></div></header>'+(S.offline?'<div class="offline" role="status">You’re offline. Vendors needs a connection to show and save anything.</div>':'');
 }
 
 /* ---------- list ---------- */
 function addMenu(panel){
  return '<div class="ov" data-act="close"></div><div class="pop r menu"><h3>Add a contact</h3><button class="opt" data-act="scan"><span class="ic">'+I.cam+'</span><span><b>Scan a business card</b><span class="s">Use the camera, then review</span></span></button><button class="opt" data-act="manual"><span class="ic">'+I.pen+'</span><span><b>Enter manually</b><span class="s">Type the details yourself</span></span></button><button class="btn" data-act="close">Cancel</button></div>';
-}
-function renderToolbar(){
- return '<div class="tool"><div class="search">'+I.search+'<input id="q" type="search" placeholder="Search items, vendors or contacts" aria-label="Search" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"></div>'+
- '<div class="rel mob"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
- (S.panel==='add'?addMenu():'')+'</div></div>';
 }
 /* ---------- the sidebar ---------- */
 function viewCount(m){
@@ -480,22 +508,23 @@ function viewCount(m){
  if(!S.results)return '';
  return m==='people'?peopleRows().length:S.results.length;
 }
+function addTiles(cls){
+ return '<div class="ov" data-act="close"></div><div class="sidepop'+cls+'" role="menu"><button class="tile" role="menuitem" data-act="scan" title="Scan a business card: use the camera, then review"><i>'+I.cam+'</i>Scan card</button><button class="tile" role="menuitem" data-act="manual" title="Enter manually: type the details yourself"><i>'+I.pen+'</i>Enter manually</button></div>';
+}
 function sideHTML(){
- var VIEWS=[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]],n=filterCount();
+ var railOn=S.mini&&mq.matches;   // folded: New contact's tiles open beside the strip's +
+ var n=filterCount();
  var full='<div class="full">'+
-  '<div class="sh"><b>Browse</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
+  '<div class="sh"><b>Filters</b><button class="sfold" data-act="fold" title="Hide the sidebar" aria-label="Hide the sidebar">'+I.fold+'</button></div>'+
   '<div class="rel"><button class="btn pri newbtn" data-act="sideadd" aria-haspopup="menu" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'New contact</button>'+
-  (S.panel==='sadd'?'<div class="ov" data-act="close"></div><div class="sidepop" role="menu"><button class="tile" role="menuitem" data-act="scan" title="Scan a business card: use the camera, then review"><i>'+I.cam+'</i>Scan card</button><button class="tile" role="menuitem" data-act="manual" title="Enter manually: type the details yourself"><i>'+I.pen+'</i>Enter manually</button></div>':'')+'</div>'+
-  '<div class="sl">View</div>'+
-  VIEWS.map(function(v){return '<button class="snav'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" aria-current="'+(S.mode===v[0]?'page':'false')+'">'+v[2]+v[1]+'<span class="n">'+viewCount(v[0])+'</span></button>'}).join('')+
+  (S.panel==='sadd'&&!railOn?addTiles(''):'')+'</div>'+
   '<div class="sl">Region'+(n?'<button class="linkish" data-act="clear">Clear all</button>':'')+'</div>'+
   '<div class="stchips" role="group" aria-label="Region">'+['Any'].concat(STATES).map(function(st){var on=S.st===st;return '<button class="chip tog'+(on?' on':'')+'" aria-pressed="'+on+'" data-act="region" data-id="'+st+'">'+st+'</button>'}).join('')+'</div>'+
   '<div class="hint" style="padding:2px 8px 4px">Shows the contacts who cover that state; ones with no region set stay, marked.</div>'+
   '<label class="chk"><input type="checkbox" data-chg="wc"'+(S.wc?' checked':'')+'>Only vendors with a contact</label></div>';
  var rail='<div class="rail">'+
   '<button class="rbtn" data-act="fold" title="Show the sidebar" aria-label="Show the sidebar">'+I.unfold+'</button>'+
-  '<button class="rbtn pri" data-act="sideadd" title="New contact" aria-label="New contact">'+I.plusS+'</button>'+
-  VIEWS.map(function(v){return '<button class="rbtn'+(S.mode===v[0]?' on':'')+'" data-act="mode" data-id="'+v[0]+'" title="'+v[1]+'" aria-label="'+v[1]+'">'+v[2]+'</button>'}).join('')+
+  '<div class="rel"><button class="rbtn pri" data-act="sideadd" title="New contact" aria-label="New contact" aria-haspopup="menu" aria-expanded="'+(S.panel==='sadd')+'">'+I.plusS+'</button>'+(S.panel==='sadd'&&railOn?addTiles(' railpop'):'')+'</div>'+
   '<button class="rbtn" data-act="fold" title="Region'+(n?': '+S.st:'')+'" aria-label="Filters'+(n?' ('+n+' on)':'')+'">'+I.filter+(n?'<span class="dot"></span>':'')+'</button></div>';
  return '<aside class="side'+(S.drawer?' open':'')+'" aria-label="Browse and filter">'+full+rail+'</aside>';
 }
@@ -598,12 +627,15 @@ function countText(){
  var n=S.mode==='people'?peopleRows().length:S.results.length;
  return n+' '+(S.mode==='people'?(n===1?'person':'people'):(n===1?'vendor':'vendors'));
 }
-function modeBar(){
- return '<div class="modebar"><div class="seg" role="group" aria-label="Show"><button type="button" data-act="mode" data-id="people" aria-pressed="'+(S.mode==='people')+'">People</button><button type="button" data-act="mode" data-id="vendors" aria-pressed="'+(S.mode==='vendors')+'">Vendors</button><button type="button" data-act="mode" data-id="items" aria-pressed="'+(S.mode==='items')+'">Items</button></div><span class="hint" id="modecount" aria-live="polite">'+countText()+'</span></div>';
+function rbar(){
+ var V=[['people','People'],['vendors','Vendors'],['items','Items']];
+ return '<div class="rbar"><div class="rtabs" role="tablist" aria-label="Show">'+V.map(function(v){
+  return '<button class="rtab'+(S.mode===v[0]?' on':'')+'" role="tab" aria-selected="'+(S.mode===v[0])+'" data-act="mode" data-id="'+v[0]+'">'+v[1]+'<span class="vt" data-vt="'+v[0]+'">'+viewCount(v[0])+'</span></button>'}).join('')+
+  '</div><span class="count" id="modecount" aria-live="polite">'+countText()+'</span></div>';
 }
 function paintResults(){
  var el=$('results');if(!el){render();return}
- document.querySelectorAll('.side .snav[data-act="mode"]').forEach(function(b){var n=b.querySelector('.n');if(n)n.textContent=viewCount(b.dataset.id)});
+ document.querySelectorAll('.rtab .vt').forEach(function(n){n.textContent=viewCount(n.dataset.vt)});
  el.innerHTML=renderResults();
  var c=$('count');if(c)c.textContent=countText();
  var mc=$('modecount');if(mc)mc.textContent=countText();
@@ -1055,7 +1087,7 @@ function render(){
  else{
   var det=mq.matches&&(S.mode==='items'?!!S.ikey:!!S.vid);
   main='<div class="shell'+(S.mini?' mini':'')+'">'+sideHTML()+'<div class="scrim'+(S.drawer?' open':'')+'" data-act="drawer"></div><div class="content">'+
-   renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div></div></div>';
+   '<div class="desk tw'+(det?'':' nodet')+'"><div class="rcard">'+rbar()+'<div id="results">'+renderResults()+'</div></div>'+(det?'<div class="detail">'+detailHTML()+'</div>':'')+'</div></div></div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
@@ -1115,7 +1147,6 @@ var A={
  pullall:function(){api('/api/vendors/admin/pull-all',{method:'POST'}).then(function(d){toast(d.message||'Pulling every vendor not pulled in the last day');pollAdmin()}).catch(fail);return 'skip'},
  retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
  close:function(){S.panel=null},
- 'p-div':function(){S.panel=S.panel==='div'?null:'div'},
  'p-apps':function(){S.panel=S.panel==='apps'?null:'apps'},
  'p-add':function(){S.ctxV='';S.panel=S.panel==='add'?null:'add'},
  div:function(el){S.div=el.dataset.id;S.panel=null;S.vid=null;S.detail=null;S.view=S.view==='admin'?'admin':'list';S.itemsOpen=false;S.results=null;S.loading=true;saveUrl();loadList()},
@@ -1123,16 +1154,20 @@ var A={
  vendor:function(el){openVendor(el.dataset.id)},
  person:function(el){openPerson(el.dataset.id,el.dataset.v)},
  tovendor:function(){if(S.mode!=='vendors'){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}}S.cid=null;S.itemsOpen=false;saveUrl()},
+ find:function(){
+  if(S.findOpen||S.q){if(S.q){var qi=$('q');if(qi)qi.focus();return 'skip'}S.findOpen=false;return}
+  S.findOpen=true;render();var qn=$('q');if(qn)qn.focus();return 'skip';
+ },
  fold:function(){S.mini=!S.mini;S.panel=null;try{localStorage.setItem('vendors.sideMini',S.mini?'1':'0')}catch(e){}},
  drawer:function(){S.drawer=!S.drawer;S.panel=null},
- sideadd:function(){if(S.mini&&mq.matches){S.mini=false;try{localStorage.setItem('vendors.sideMini','0')}catch(e){}}S.ctxV='';S._ctx='';S.panel=S.panel==='sadd'?null:'sadd'},
+ sideadd:function(){S.ctxV='';S._ctx='';S.panel=S.panel==='sadd'?null:'sadd'},
  region:function(el){var st=el.dataset.id;S.st=S.st===st&&st!=='Any'?'Any':st;loadList()},
  mode:function(el){
   S.drawer=false;
   var m=el.dataset.id;if(m===S.mode)return;
-  var was=S.mode;S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}
+  S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}
   S.ikey=null;if(m==='vendors')S.cid=null;else{S.vid=null;S.cid=null;S.detail=null}
-  if(m==='items'||was==='items'){S.loading=true;if(m==='items')S.items=null;loadList()}
+  if(m==='items'&&!S.items||m!=='items'&&!S.results){S.loading=true;loadList()}
   saveUrl();
  },
  item:function(el){S.ikey=el.dataset.id;S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0)},
@@ -1246,6 +1281,7 @@ document.addEventListener('keydown',function(e){
   else if(S.vm||S.modal){A.cancel();render()}
   else if(S.panel){S.panel=null;render()}
   else if(S.drawer){S.drawer=false;render()}
+  else if(S.findOpen&&!S.q){S.findOpen=false;render()}
   else if(S.view==='scan'&&S.scanStage!==1){A.cancel();render()}
  }
 });
