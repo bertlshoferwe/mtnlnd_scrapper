@@ -113,6 +113,7 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
  .desk.nodet{grid-template-columns:minmax(0,1fr)}
 }
 /* the vendor panel stays put beside the grid, and scrolls on its own when it's taller than the window */
+@media(min-width:1000px){.desk.tw{grid-template-columns:minmax(0,1fr) clamp(360px,36vw,480px)}.desk.tw.nodet{grid-template-columns:minmax(0,1fr)}}
 .detail{position:sticky;top:72px;max-height:calc(100vh - 88px);max-height:calc(100dvh - 88px);overflow-y:auto;overscroll-behavior:contain;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
 .dhead{padding:16px;display:flex;gap:14px;align-items:center}
 .pen{opacity:0;transition:opacity .15s}
@@ -133,6 +134,8 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .ccard-b{display:flex;flex-direction:column;gap:2px;padding-left:52px}
 @media(max-width:639px){.ccard-b{padding-left:0}.ccard-acts .ib{width:44px;height:44px}}
 .kv{font-size:14px;color:var(--ast);text-decoration:none;display:inline-flex;gap:6px;align-items:center;min-height:28px;overflow-wrap:anywhere}
+.linkish{border:0;background:none;padding:0;color:var(--ast);font:inherit;cursor:pointer}
+.linkish:hover{text-decoration:underline}
 .back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;font-size:14px;font-weight:600;color:var(--ast);padding:8px 4px;min-height:44px}
 .page{max-width:720px;margin:0 auto}
 .warn{padding:10px 14px;border-radius:12px;border:1px solid var(--w);background:#2c2418;color:#f0cfa0;font-size:14px}
@@ -195,6 +198,54 @@ mark{background:#3a4678;color:#fff;border-radius:3px;padding:0 1px}
 .seg button[aria-pressed="true"]{background:var(--as);color:var(--ast)}
 .cf-reg{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--b)}
 .cf-reg .in2{height:36px;font-size:14px;border-radius:8px}
+/* the two views: a table of people or of vendors, details beside it on a wide screen */
+.modebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 10px}
+.modebar .hint{font-size:13px}
+.tbl{container-type:inline-size;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
+.thead,.trow{display:grid;align-items:center;column-gap:14px;padding:0 14px}
+.tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,1.5fr)}
+.tv{grid-template-columns:minmax(0,1.5fr) minmax(0,2fr) 84px minmax(0,1fr)}
+.thead{height:40px;border-bottom:1px solid var(--b);background:var(--s2)}
+.thead button{border:0;background:none;padding:0;color:var(--m);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;height:40px;text-align:left}
+.thead button:hover,.thead button.on{color:var(--t)}
+.trow{min-height:58px;width:100%;border:0;border-bottom:1px solid var(--b);background:transparent;text-align:left;font-size:14px;cursor:pointer;color:var(--t)}
+.trow:last-child{border-bottom:0}
+.trow:hover{background:var(--s2)}
+.trow.sel{background:var(--as);box-shadow:inset 3px 0 0 var(--a)}
+.cell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell .sub{font-size:12px;color:var(--m);overflow:hidden;text-overflow:ellipsis}
+.cell.mu{color:var(--m)}
+.pc{display:flex;align-items:center;gap:10px;min-width:0}
+.pc>div{min-width:0}
+.pc b{font-weight:600}
+.av-s{width:32px;height:32px;font-size:12px}
+.logo.xs{width:22px;height:22px;font-size:9px;border-radius:6px}
+.logo.md{width:34px;height:34px;font-size:12px;border-radius:9px}
+.narrow{display:none}
+@container (max-width:860px){.tp{grid-template-columns:minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr)}.tp .c-email{display:none}}
+@container (max-width:640px){
+ .tp{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}.tp .c-title,.tp .c-cov{display:none}
+ .tv{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr)}.tv .c-n,.tv .c-cov{display:none}
+}
+@container (max-width:460px){
+ .tp,.tv{grid-template-columns:minmax(0,1fr)}.tp .c-vendor,.tv .c-sells,.thead{display:none}
+ .wide{display:none}.narrow{display:block}
+}
+/* one person's details */
+.pdet .ph{padding:20px 20px 14px;display:flex;gap:14px;align-items:center}
+.pdet .ph .cf-av{width:56px;height:56px;font-size:20px}
+.pdet h2{margin:0;font-size:20px;overflow-wrap:anywhere}
+.pacts{display:flex;gap:8px;padding:0 20px 18px;flex-wrap:wrap}
+.pacts .btn{height:38px;font-size:13px;border-radius:10px;padding:0 12px}
+.pinfo{border-top:1px solid var(--b);padding:6px 20px}
+.prow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;padding:9px 0;font-size:14px;align-items:center}
+.prow .k{color:var(--m);font-size:13px}
+.prow a{color:var(--ast);text-decoration:none;overflow-wrap:anywhere}
+.prow a:hover{text-decoration:underline}
+.psec{border-top:1px solid var(--b);padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.psec .lab{margin:0}
+.oth{display:flex;align-items:center;gap:10px;padding:8px;margin:0 -8px;border-radius:10px;border:0;background:none;width:calc(100% + 16px);text-align:left}
+.oth:hover{background:var(--s2)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 @media(max-width:639px){.btn,.ib{min-height:44px}.btn.sm{height:44px}}
@@ -208,10 +259,11 @@ var CFG=window.APP_CONFIG||{};
 var COLORS=['#4f6bd6','#2f8f83','#b0663a','#8a5bc2','#3f7fb8','#a5524f','#5e8a3a','#b08a2f','#6a6fa8','#b05a8c'];
 var STATES=['UT','ID','CO','NV','WY','AZ','NM','MT'];
 var TESSERACT_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-var S={divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
+var S={mode:'people',cid:null,sort:{people:{k:'vendor',d:1},vendors:{k:'name',d:1}},divs:[],div:'',q:'',st:'Any',wc:false,view:'list',vid:null,panel:null,itemsOpen:false,addItem:false,newItem:'',
   modal:false,edit:null,draft:null,dup:null,scan:null,scanStage:0,scanMsg:'',cardPath:null,confirmDel:false,vm:null,toast:'',
   results:null,loading:true,err:'',detail:null,names:[],busy:false,atab:'review',admin:{review:null,vendors:null},offline:!navigator.onLine,ctxV:''};
 var mq=window.matchMedia('(min-width:1000px)');
+try{var savedMode=localStorage.getItem('vendors.mode');if(savedMode==='vendors'||savedMode==='people')S.mode=savedMode}catch(e){}
 var $=function(id){return document.getElementById(id)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 var I={
@@ -255,7 +307,9 @@ function loadList(delay){
   var seq=++listSeq;
   if(!S.div)return;
   api('/api/vendors?'+qs({division:S.div,q:S.q.trim(),state:S.st==='Any'?'':S.st,with_contact:S.wc?1:''})).then(function(d){
-   if(seq!==listSeq)return;S.results=d.vendors;S.loading=false;S.err='';paintResults();
+   if(seq!==listSeq)return;
+   S.results=(d.vendors||[]).map(function(v){v.item_names=v.item_names||[];v.matched_items=v.matched_items||[];v.states=v.states||[];return v});
+   S.loading=false;S.err='';paintResults();
   }).catch(function(e){if(seq!==listSeq)return;S.loading=false;S.err=e.message;paintResults()});
  },delay||0);
 }
@@ -267,7 +321,7 @@ function loadDetail(){
   S.detail=d;
   // "Open <them>" from a duplicate: once their vendor is showing, open their contact
   var pe=S.pendingEdit&&d.contacts&&d.contacts.filter(function(c){return c.id===S.pendingEdit})[0];
-  if(S.pendingEdit){S.pendingEdit=null;if(pe){closeForm();S.edit=pe.id;S.draft=draftFrom(pe);S.modal=true}}
+  if(S.pendingEdit){S.pendingEdit=null;if(pe){if(S.mode==='people')S.cid=pe.id;closeForm();S.edit=pe.id;S.draft=draftFrom(pe);S.modal=true}}
   render();
  })
   .catch(function(e){if(S.vid===id){S.detail={error:e.message};render()}});
@@ -315,7 +369,7 @@ function fmtPhone(v){
 }
 function filterCount(){return (S.st!=='Any'?1:0)+(S.wc?1:0)}
 function saveUrl(){
- var q={division:S.div};if(S.vid)q.vendor=S.vid;
+ var q={division:S.div};if(S.vid)q.vendor=S.vid;if(S.vid&&S.cid&&S.mode==='people')q.contact=S.cid;
  try{history.replaceState(null,'','?'+qs(q))}catch(e){}
  try{localStorage.setItem('vendors.div',S.div)}catch(e){}
 }
@@ -349,43 +403,113 @@ function addMenu(panel){
 }
 function renderToolbar(){
  var n=filterCount();
- return '<div class="tool"><div class="search">'+I.search+'<input id="q" type="search" placeholder="Search items, vendors or contacts" aria-label="Search" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"><span class="n" id="count" aria-live="polite"></span></div>'+
+ return '<div class="tool"><div class="search">'+I.search+'<input id="q" type="search" placeholder="Search items, vendors or contacts" aria-label="Search" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"></div>'+
  '<div class="rel"><button class="btn" aria-label="Filters'+(n?' ('+n+' on)':'')+'" aria-haspopup="true" aria-expanded="'+(S.panel==='filter')+'" data-act="p-filter">'+I.filter+(n?'<span class="badge">'+n+'</span>':'')+'</button>'+
  (S.panel==='filter'?'<div class="ov" data-act="close"></div><div class="pop r" role="dialog" aria-label="Filters"><h3>Filters</h3>'+filtersBody()+'<div style="display:flex;gap:8px"><button class="btn" style="flex:1" data-act="clear">Clear</button><button class="btn pri" style="flex:1" data-act="close">Done</button></div></div>':'')+'</div>'+
  '<div class="rel"><button class="btn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plus+'</button>'+
  (S.panel==='add'?addMenu():'')+'</div></div>';
 }
-// A vendor's card. Browsing: just who they are and one quiet line of counts. Searching: the contacts
-// and items that matched, since that's what you're looking for; coverage only once a job state is set.
-function vcard(r,T){
- var head='<div class="vhead">'+logoHTML(r)+'<div style="min-width:0"><div class="vname">'+hl(r.name,T)+'</div>'+(r.website?'<div class="vweb">'+hl(r.website,T)+'</div>':'')+'</div></div>';
- var open='<button class="card vcard'+(S.vid===r.id&&mq.matches?' sel':'')+'" data-act="vendor" data-id="'+esc(r.id)+'">';
- if(!T.length){
-  var bits=[r.contact_count+' contact'+(r.contact_count===1?'':'s')];
-  if(r.item_count)bits.push(r.item_count+' item'+(r.item_count===1?'':'s'));
-  var st=r.states.filter(function(x){return x!=='All'});
-  if(r.states.indexOf('All')>=0)bits.push('Nationwide');else if(st.length)bits.push(st.join(', '));
-  return open+head+'<div class="vmeta">'+esc(bits.join(' · '))+'</div></button>';
- }
- var sh=r.contacts.slice(0,2),more=r.contacts.length-sh.length,stateOn=S.st!=='Any';
- var body=sh.map(function(c){return '<div class="sm-row"><b>'+hl(c.name,T)+'</b>'+(c.title?'<span class="ti">'+hl(c.title,T)+'</span>':'')+(stateOn?srvLine(c):'')+'</div>'}).join('');
- if(!r.contacts.length)body='<div class="hint">No contacts yet</div>';
- if(more>0)body+='<div class="more">+'+more+' more</div>';
- var items=r.matched_items.length?'<div class="chips">'+r.matched_items.slice(0,3).map(function(i){return '<span class="chip hit">'+hl(i,T)+'</span>'}).join('')+(r.matched_items.length>3?'<span class="more">+'+(r.matched_items.length-3)+' items</span>':'')+'</div>':'';
- return open+head+body+items+'</button>';
+/* ---------- the list: People or Vendors ---------- */
+// People: one row per contact (searching shows the ones who matched, or a vendor's whole team when it
+// matched by its name or what it sells). Vendors: one row per company. Columns sort; narrow screens
+// drop columns (container queries) down to a simple list.
+function sortArrow(k){var st=S.sort[S.mode];return st.k===k?(st.d>0?' ↑':' ↓'):''}
+function th(k,label,cls){var on=S.sort[S.mode].k===k;return '<div class="cell '+(cls||'')+'"><button type="button" class="'+(on?'on':'')+'" data-act="sort" data-id="'+k+'">'+label+sortArrow(k)+'</button></div>'}
+function cmp(a,b){a=String(a||'').toLowerCase();b=String(b||'').toLowerCase();return a<b?-1:a>b?1:0}
+function peopleRows(){
+ var T=toks(),out=[];
+ (S.results||[]).forEach(function(v){
+  var m=v.contacts.filter(function(c){return c.matched}),list=T.length&&m.length?m:v.contacts;
+  list.forEach(function(c){out.push({c:c,v:v})});
+ });
+ var st=S.sort.people,key={name:function(r){return r.c.name},vendor:function(r){return r.v.name+'\u0000'+r.c.name},title:function(r){return r.c.title||'\uffff'},covers:function(r){return r.c.unset?'\uffff':r.c.area_text}}[st.k];
+ return out.sort(function(a,b){return st.d*cmp(key(a),key(b))||cmp(a.c.name,b.c.name)});
+}
+function vendorRows(){
+ var st=S.sort.vendors,res=(S.results||[]).slice();
+ return res.sort(function(a,b){
+  var r=st.k==='contacts'?(a.contact_count-b.contact_count):st.k==='covers'?cmp(a.states.join(','),b.states.join(',')):cmp(a.name,b.name);
+  return st.d*r||cmp(a.name,b.name);
+ });
+}
+function coversText(c){return c.unset?'<span class="cell mu">—</span>':esc(c.area_text)}
+function renderPeople(){
+ var T=toks(),rows=peopleRows();
+ if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No one matches. Try another item, name or state.':'No contacts in '+esc(divName(S.div))+' yet. Use + to add one.')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Contacts"><div class="thead tp" role="row">'+th('name','Person')+th('vendor','Vendor','c-vendor')+th('title','Title','c-title')+th('covers','Covers','c-cov')+'<div class="cell c-email" style="font-size:12px;font-weight:600;color:var(--m)">Email</div></div>';
+ rows.forEach(function(r){
+  var c=r.c,v=r.v,sel=S.cid===c.id&&S.vid===v.id&&mq.matches;
+  var item=T.length&&!c.matched&&v.matched_items.length?'<div class="sub">sells '+hl(v.matched_items[0],T)+'</div>':'';
+  h+='<button class="trow tp'+(sel?' sel':'')+'" role="row" data-act="person" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'">'+
+   '<div class="cell pc"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(c.name))+'</span><div><b>'+hl(c.name,T)+'</b>'+
+    '<div class="sub wide">'+(c.phone?esc(c.phone):c.alt_phone?esc(c.alt_phone):'&nbsp;')+'</div><div class="sub narrow">'+hl(v.name,T)+(c.title?' · '+hl(c.title,T):'')+'</div></div></div>'+
+   '<div class="cell c-vendor"><div class="pc">'+logoHTML(v,'xs')+'<span style="overflow:hidden;text-overflow:ellipsis">'+hl(v.name,T)+'</span></div>'+item+'</div>'+
+   '<div class="cell c-title'+(c.title?'':' mu')+'">'+(c.title?hl(c.title,T):'—')+'</div>'+
+   '<div class="cell c-cov">'+coversText(c)+'</div>'+
+   '<div class="cell c-email'+(c.email?'':' mu')+'">'+(c.email?hl(c.email,T):'—')+'</div></button>';
+ });
+ return h+'</div>';
+}
+function renderVendorsTbl(){
+ var T=toks(),rows=vendorRows();
+ if(!rows.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
+ var h='<div class="tbl" role="table" aria-label="Vendors"><div class="thead tv" role="row">'+th('name','Vendor')+'<div class="cell c-sells" style="font-size:12px;font-weight:600;color:var(--m)">What they sell</div>'+th('contacts','Contacts','c-n')+th('covers','Covers','c-cov')+'</div>';
+ rows.forEach(function(v){
+  var sells=T.length&&v.matched_items.length?v.matched_items:v.item_names,more=(T.length&&v.matched_items.length?v.matched_items.length:v.item_count)-sells.length;
+  var st=v.states.indexOf('All')>=0?'Nationwide':v.states.join(', ');
+  h+='<button class="trow tv'+(S.vid===v.id&&mq.matches?' sel':'')+'" role="row" data-act="vendor" data-id="'+esc(v.id)+'">'+
+   '<div class="cell pc">'+logoHTML(v,'md')+'<div><b>'+hl(v.name,T)+'</b><div class="sub wide">'+(v.website?hl(v.website,T):'&nbsp;')+'</div><div class="sub narrow">'+v.contact_count+' contact'+(v.contact_count===1?'':'s')+(v.item_count?' · '+esc(v.item_names.slice(0,2).join(', ')):'')+'</div></div></div>'+
+   '<div class="cell c-sells'+(sells.length?'':' mu')+'">'+(sells.length?sells.map(function(x){return hl(x,T)}).join(', ')+(more>0?' <span class="mu">+'+more+'</span>':''):'—')+'</div>'+
+   '<div class="cell c-n">'+v.contact_count+'</div>'+
+   '<div class="cell c-cov'+(st?'':' mu')+'">'+(st?esc(st):'—')+'</div></button>';
+ });
+ return h+'</div>';
 }
 function renderResults(){
  if(S.loading&&!S.results)return '<div class="loading"><span class="spin"></span>Loading vendors…</div>';
  if(S.err&&!S.results)return '<div class="card empty">Couldn’t load vendors: '+esc(S.err)+'</div>';
- var T=toks(),res=S.results||[],h='';
- if(!res.length)return '<div class="card empty">'+(T.length||filterCount()?'No vendors match. Try another item, name or state.':'No vendors in '+esc(divName(S.div))+' yet. Use + to add a contact, and their vendor comes with them.')+'</div>';
- h='<div class="grid">'+res.map(function(r){return vcard(r,T)}).join('')+'</div>';
- return (T.length?'<div class="h2">'+res.length+' vendor'+(res.length===1?'':'s')+'</div>':'<div class="h2">Vendors · A to Z</div>')+h;
+ return S.mode==='people'?renderPeople():renderVendorsTbl();
+}
+function countText(){
+ if(!S.results)return '';
+ var n=S.mode==='people'?peopleRows().length:S.results.length;
+ return n+' '+(S.mode==='people'?(n===1?'person':'people'):(n===1?'vendor':'vendors'));
+}
+function modeBar(){
+ return '<div class="modebar"><div class="seg" role="group" aria-label="Show"><button type="button" data-act="mode" data-id="people" aria-pressed="'+(S.mode==='people')+'">People</button><button type="button" data-act="mode" data-id="vendors" aria-pressed="'+(S.mode==='vendors')+'">Vendors</button></div><span class="hint" id="modecount" aria-live="polite">'+countText()+'</span></div>';
 }
 function paintResults(){
  var el=$('results');if(!el){render();return}
  el.innerHTML=renderResults();
- var c=$('count');if(c)c.textContent=S.results?S.results.length+' vendor'+(S.results.length===1?'':'s'):'';
+ var c=$('count');if(c)c.textContent=countText();
+ var mc=$('modecount');if(mc)mc.textContent=countText();
+}
+
+/* ---------- one person ---------- */
+function renderPerson(){
+ var v=S.detail;
+ if(!v||v.id!==S.vid&&!v.error)return '<div class="card loading"><span class="spin"></span>Loading…</div>';
+ if(v.error)return '<div class="card empty">'+esc(v.error)+'</div>';
+ var c=(v.contacts||[]).filter(function(x){return x.id===S.cid})[0];
+ if(!c)return renderVendor();
+ var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[],ITEMS=12;
+ var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0"><h2>'+esc(c.name)+'</h2><div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button></div></div></div>';
+ h+='<div class="pacts">'+(c.phone?'<a class="btn pri" href="'+esc(telHref(c.phone))+'">'+I.phone+'Call</a>':'')+(c.email?'<a class="btn" href="mailto:'+esc(c.email)+'">'+I.mail+'Email</a>':'')+
+  '<button class="btn" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'Share</button><button class="btn" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'Edit</button></div>';
+ h+='<div class="pinfo">'+
+  (c.phone?'<div class="prow"><span class="k">Phone</span><a href="'+esc(telHref(c.phone))+'">'+esc(c.phone)+'</a></div>':'')+
+  (c.alt_phone?'<div class="prow"><span class="k">Alt. phone</span><a href="'+esc(telHref(c.alt_phone))+'">'+esc(c.alt_phone)+'</a></div>':'')+
+  (c.email?'<div class="prow"><span class="k">Email</span><a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a></div>':'')+
+  '<div class="prow"><span class="k">Covers</span><span>'+srvLine(c)+'</span></div>'+
+  (c.has_card?'<div class="prow"><span class="k">Card</span><a href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">View business card</a></div>':'')+'</div>';
+ h+='<div class="psec"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="tovendor">View vendor</button></div>';
+ if(its.length)h+='<div class="lab">What they sell · '+its.length+'</div><div class="chips">'+(S.itemsOpen?its:its.slice(0,ITEMS)).map(function(i){return '<span class="chip">'+esc(i.name)+'</span>'}).join('')+
+  (its.length>ITEMS?'<button class="chip tog" data-act="items">'+(S.itemsOpen?'Show fewer':'+'+(its.length-ITEMS)+' more')+'</button>':'')+'</div>';
+ if(others.length){
+  h+='<div class="lab">Others at '+esc(v.name)+' · '+others.length+'</div><div>'+others.map(function(o){
+   return '<button class="oth" data-act="person" data-id="'+esc(o.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(o.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(o.name)+'</b><span class="hint" style="display:block">'+esc([o.title,o.phone].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>';
+ }
+ return h+'</div></div>';
 }
 
 /* ---------- one vendor ---------- */
@@ -803,17 +927,17 @@ function render(){
  else if(S.view==='admin')main=renderAdmin();
  else if(S.view==='scan'&&S.scanStage!==2)main=renderScan();
  else if(S.view==='scan'||(S.view==='form'&&!S.modal))main=renderForm();
- else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+'Vendors</button>'+renderVendor()+'</div>';
+ else if(S.view==='vendor'&&!mq.matches)main='<div class="page"><button class="back" data-act="back">'+I.back+(S.mode==='people'?'People':'Vendors')+'</button>'+(S.mode==='people'&&S.cid?renderPerson():renderVendor())+'</div>';
  else{
   var det=S.vid&&mq.matches;
-  main=renderToolbar()+'<div class="desk'+(det?'':' nodet')+'" style="margin-top:12px"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+renderVendor()+'</div>':'')+'</div>';
+  main=renderToolbar()+modeBar()+'<div class="desk tw'+(det?'':' nodet')+'"><div id="results">'+renderResults()+'</div>'+(det?'<div class="detail">'+(S.mode==='people'&&S.cid?renderPerson():renderVendor())+'</div>':'')+'</div>';
  }
  $('root').innerHTML=renderMast()+'<main class="main">'+main+'</main>'+
   (S.cardView?'<div class="modal-ov" data-act="cardclose-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Business card">'+renderCardView()+'</div></div>':'')+
   (S.vm?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="Edit vendor">'+renderVendorModal()+'</div></div>':'')+
   (S.modal&&S.draft?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="'+(S.edit?'Edit contact':'New contact')+'">'+renderForm()+'</div></div>':'')+
   (S.toast?'<div class="toast" role="status">'+esc(S.toast)+'</div>':'');
- var c=$('count');if(c)c.textContent=S.results?S.results.length+' vendor'+(S.results.length===1?'':'s'):'';
+ var c=$('count');if(c)c.textContent=countText();
  var nd=document.querySelector('.dlg');if(nd)nd.scrollTop=ost;
  if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
  if(S.addItem&&$('newitem')&&(!keep||keep.id!=='newitem'))$('newitem').focus();
@@ -821,8 +945,14 @@ function render(){
 function toast(m){S.toast=m;render();clearTimeout(toast.t);toast.t=setTimeout(function(){S.toast='';render()},2400)}
 function fail(e){S.busy=false;toast(e.message||String(e))}
 function go(view){S.view=view;S.panel=null;window.scrollTo(0,0)}
+function openPerson(cid,vid){
+ S.cid=cid;S.itemsOpen=false;S.addItem=false;
+ if(S.vid!==vid||!S.detail||S.detail.id!==vid){S.vid=vid;S.detail=null;loadDetail()}
+ S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
+ saveUrl();
+}
 function openVendor(id){
- S.vid=id;S.itemsOpen=false;S.addItem=false;if(!S.detail||S.detail.id!==id)S.detail=null;
+ S.vid=id;S.cid=null;S.itemsOpen=false;S.addItem=false;if(!S.detail||S.detail.id!==id)S.detail=null;
  S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
  saveUrl();loadDetail();
 }
@@ -839,7 +969,7 @@ function saveContact(){
  S.busy=true;render();
  api(S.edit?'/api/vendors/contacts/'+encodeURIComponent(S.edit):'/api/vendors/contacts',{method:S.edit?'PATCH':'POST',body:body}).then(function(r){
   var wasEdit=S.edit;S.busy=false;closeForm();S.view=mq.matches?'list':'vendor';
-  S.vid=r.vendor_id;S.detail=null;S.itemsOpen=false;window.scrollTo(0,0);saveUrl();refresh();
+  S.vid=r.vendor_id;S.cid=S.mode==='people'?r.contact_id:null;S.detail=null;S.itemsOpen=false;window.scrollTo(0,0);saveUrl();refresh();
   toast(wasEdit?'Contact updated':'Contact saved');
  }).catch(function(e){fail(e);checkDup(0)});
 }
@@ -864,7 +994,11 @@ var A={
  div:function(el){S.div=el.dataset.id;S.panel=null;S.vid=null;S.detail=null;S.view=S.view==='admin'?'admin':'list';S.itemsOpen=false;S.results=null;S.loading=true;saveUrl();loadList()},
  clear:function(){S.st='Any';S.wc=false;loadList()},
  vendor:function(el){openVendor(el.dataset.id)},
- back:function(){S.view='list';S.vid=null;saveUrl()},
+ person:function(el){openPerson(el.dataset.id,el.dataset.v)},
+ tovendor:function(){if(S.mode!=='vendors'){S.mode='vendors';try{localStorage.setItem('vendors.mode','vendors')}catch(e){}}S.cid=null;S.itemsOpen=false;saveUrl()},
+ mode:function(el){var m=el.dataset.id;if(m===S.mode)return 'skip';S.mode=m;try{localStorage.setItem('vendors.mode',m)}catch(e){}if(m==='vendors')S.cid=null;else{S.vid=null;S.detail=null}saveUrl()},
+ sort:function(el){var st=S.sort[S.mode],k=el.dataset.id;if(st.k===k)st.d=-st.d;else{st.k=k;st.d=k==='contacts'?-1:1}},
+ back:function(){S.view='list';S.vid=null;S.cid=null;saveUrl()},
  items:function(){S.itemsOpen=!S.itemsOpen;S.addItem=false},
  additem:function(){S.addItem=true;S.newItem=''},
  rmitem:function(el){
@@ -929,8 +1063,8 @@ document.addEventListener('click',function(e){
  if(!el){
   // desktop: a click on empty space (not a card, the panel, the toolbar or a dialog) closes the vendor's details
   if(S.vid&&mq.matches&&S.view==='list'&&!S.panel&&!S.vm&&!S.modal&&!S.cardView&&
-     !e.target.closest('.vcard,.detail,.tool,.mast,.modal-ov,.toast,a,button,input,select,label'))
-   {S.vid=null;S.detail=null;saveUrl();render()}
+     !e.target.closest('.trow,.thead,.modebar,.detail,.tool,.mast,.modal-ov,.toast,a,button,input,select,label'))
+   {S.vid=null;S.cid=null;S.detail=null;saveUrl();render()}
   return;
  }
  var act=el.dataset.act;
@@ -1049,7 +1183,8 @@ api('/api/divisions').then(function(divs){
  S.loading=false;render();
  if(!S.div)return;
  S.loading=true;loadList();loadNames();
- if(p.get('vendor'))openVendor(p.get('vendor'));else saveUrl();
+ if(p.get('vendor')&&p.get('contact')){S.mode='people';openPerson(p.get('contact'),p.get('vendor'))}
+ else if(p.get('vendor'))openVendor(p.get('vendor'));else saveUrl();
  render();
 }).catch(function(e){S.loading=false;S.err='Couldn’t load the divisions: '+e.message;render()});
 })();

@@ -170,8 +170,9 @@ def api_vendor_list():
         ordered = matched + [c for c in rest if not _unset(c) or not state] + [c for c in rest if _unset(c) and state]
         items = [i["name"] for i in v["items"] if any(w in i["name"].lower() for w in words)] if words else []
         states = sorted({a["state"] for c in cs for a in c["areas"]} | ({"All"} if any(c["nationwide"] for c in cs) else set()))
-        out.append(dict(_vendor_out(v), contacts=[_contact_out(c) for c in ordered], contact_count=len(cs),
-                        matched_items=items, item_count=len(v["items"]), states=states))
+        out.append(dict(_vendor_out(v), contacts=[dict(_contact_out(c), matched=c in matched) for c in ordered],
+                        contact_count=len(cs), matched_items=items, item_count=len(v["items"]),
+                        item_names=[i["name"] for i in v["items"][:6]], states=states))
     out.sort(key=lambda r: r["name"].lower())
     return jsonify({"vendors": out})
 
