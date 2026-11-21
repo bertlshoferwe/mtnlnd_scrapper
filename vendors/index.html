@@ -233,6 +233,23 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .cf-reg{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--b)}
 .cf-reg .in2{height:36px;font-size:14px;border-radius:8px}
 /* the two views: a table of people or of vendors, details beside it on a wide screen */
+/* tablet and desktop: the page itself never scrolls. The sidebar stays still; the list (under its
+   pinned header row) and the details panel each scroll on their own */
+@media(min-width:768px){
+ html.lock,html.lock body{height:100%;overflow:hidden}
+ html.lock #root{height:100vh;height:100dvh;display:flex;flex-direction:column}
+ html.lock .mast{flex:none}
+ html.lock .main{flex:1;min-height:0;display:flex;flex-direction:column}
+ html.lock .shell{flex:1;min-height:0;display:flex;align-items:stretch}
+ html.lock .content{flex:1;min-height:0;display:flex;flex-direction:column}
+ html.lock .desk{flex:1;min-height:0;align-items:stretch;grid-template-rows:minmax(0,1fr)}
+ html.lock .rcard{display:flex;flex-direction:column;min-height:0}
+ html.lock #results{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;overscroll-behavior:contain}
+ html.lock .rcard .tbl{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--bs) transparent}
+ html.lock .thead{position:sticky;top:0;z-index:2}
+ html.lock .detail{position:static;max-height:none;min-height:0}
+}
+@media(min-width:900px){html.lock .side{position:static;height:auto;min-height:0}}
 /* the results card: what's showing and how many, then the table */
 .rcard{background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden;min-width:0}
 .rbar{display:flex;align-items:center;gap:4px 14px;min-height:48px;padding:0 16px;border-bottom:1px solid var(--b)}
@@ -734,11 +751,24 @@ function ensureSelection(){
  var ir=itemRows();if(!ir.length||ir.some(function(i){return i.key===S.ikey}))return false;
  S.ikey=ir[0].key;return true;
 }
+// Redrawing replaces the list and the details panel, so their scroll positions are carried over
+// (the details panel's only while it's showing the same thing).
+function listScroller(){return document.querySelector('#results .tbl')||$('results')}
+function keepScroll(){
+ var l=listScroller(),d=document.querySelector('.detail'),k=S.mode+'|'+S.vid+'|'+S.cid+'|'+S.ikey;
+ var lt=l?l.scrollTop:0,ll=l?l.scrollLeft:0,dt=d?d.scrollTop:0,dk=d?k:null;
+ return function(){
+  var l2=listScroller(),d2=document.querySelector('.detail');
+  if(l2){l2.scrollTop=lt;l2.scrollLeft=ll}
+  if(d2&&dk===S.mode+'|'+S.vid+'|'+S.cid+'|'+S.ikey)d2.scrollTop=dt;
+ };
+}
 function paintResults(){
  if(ensureSelection()){render();return}
  var el=$('results');if(!el){render();return}
  document.querySelectorAll('.side .snav .n').forEach(function(n){n.textContent=viewCount(n.dataset.vt)});
- el.innerHTML=renderResults();
+ var back=keepScroll();
+ el.innerHTML=renderResults();back();
  var c=$('count');if(c)c.textContent=countText();
  var mc=$('modecount');if(mc)mc.textContent=countText();
 }
@@ -753,9 +783,8 @@ function renderPerson(){
  var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[];
  var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0">'+
   '<div class="pname"><h2>'+esc(c.name)+'</h2>'+
-   // the star is the button: always showing (gold) on the main contact, on hover for everyone else
-   '<button class="ib sm'+(c.primary?' starred':' hov')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'Main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'" aria-label="'+(c.primary?'Unstar as main contact':'Make main contact')+'">'+(c.primary?I.starF:I.star)+'</button>'+
-   '<button class="ib sm" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button></div>'+
+   // the main contact's gold star comes first; anyone else's star waits for a hover, after Share
+   (c.primary?'<button class="ib sm'+(c.primary?' starred':' hov')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'Main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'" aria-label="'+(c.primary?'Unstar as main contact':'Make main contact')+'">'+(c.primary?I.starF:I.star)+'</button>'+'<button class="ib sm" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button>':'<button class="ib sm" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button>'+'<button class="ib sm'+(c.primary?' starred':' hov')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'Main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'" aria-label="'+(c.primary?'Unstar as main contact':'Make main contact')+'">'+(c.primary?I.starF:I.star)+'</button>')+'</div>'+
   '<div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button>'+(c.primary?' · <span style="color:var(--w)">Main contact</span>':'')+'</div></div>'+
   '<button class="ib hov pedit" data-act="editc" data-id="'+esc(c.id)+'" title="Edit '+esc(c.name)+'" aria-label="Edit '+esc(c.name)+'">'+I.pen+'</button></div>';
  h+='<div class="pinfo">'+
@@ -1187,7 +1216,7 @@ function renderAdmin(){
 /* ---------- drawing the page ---------- */
 function render(){
  var ae=document.activeElement,keep=ae&&ae.id?{id:ae.id,a:ae.selectionStart,b:ae.selectionEnd}:null;
- var od=document.querySelector('.dlg'),ost=od?od.scrollTop:0;
+ var od=document.querySelector('.dlg'),ost=od?od.scrollTop:0,back=keepScroll();
  var main='';
  if(!S.divs.length)main=S.loading?'<div class="loading"><span class="spin"></span>Loading…</div>':'<div class="card empty">'+esc(S.err||'No divisions yet. Add one in Bid Scout.')+'</div>';
  else if(S.view==='admin')main=renderAdmin();
@@ -1205,6 +1234,8 @@ function render(){
   (S.modal&&S.draft?'<div class="modal-ov" data-act="cancel-ov"><div class="dlg" role="dialog" aria-modal="true" aria-label="'+(S.edit?'Edit contact':'New contact')+'">'+renderForm()+'</div></div>':'')+
   (S.toast?'<div class="toast" role="status">'+esc(S.toast)+'</div>':'');
  var c=$('count');if(c)c.textContent=countText();
+ document.documentElement.classList.toggle('lock',listView()&&mq.matches);
+ back();
  var nd=document.querySelector('.dlg');if(nd)nd.scrollTop=ost;
  if(keep&&$(keep.id)){var el=$(keep.id);el.focus();try{if(keep.a!=null)el.setSelectionRange(keep.a,keep.b)}catch(e){}}
  if(S.addItem&&$('newitem')&&(!keep||keep.id!=='newitem'))$('newitem').focus();
