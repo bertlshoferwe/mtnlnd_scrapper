@@ -284,8 +284,21 @@ body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!impor
 .pdet .ph{padding:20px 20px 14px;display:flex;gap:14px;align-items:center}
 .pdet .ph .cf-av{width:56px;height:56px;font-size:20px}
 .pdet h2{margin:0;font-size:20px;overflow-wrap:anywhere}
-.pacts{display:flex;gap:8px;padding:0 20px 18px;flex-wrap:wrap}
-.pacts .btn{height:38px;font-size:13px;border-radius:10px;padding:0 12px}
+.pdet .ph{position:relative}
+.pname{display:flex;align-items:center;gap:6px;min-width:0}
+.pname h2{min-width:0}
+.ib.sm{width:32px;height:32px;color:var(--m);flex:none}
+.ib.sm:hover{color:var(--t)}
+.ib.sm.starred{color:var(--w)}
+.pedit{position:absolute;top:12px;right:12px;width:36px;height:36px;color:var(--m)}
+.pedit:hover{color:var(--t)}
+/* Share, the star and Edit wait for a hover (they're always there on a touch screen) */
+.pdet .hov{opacity:0;transition:opacity .12s}
+.pdet .ph:hover .hov,.pdet .hov:focus-within,.pdet .hov:focus-visible{opacity:1}
+@media(hover:none){.pdet .hov{opacity:1}}
+.pval{display:flex;align-items:center;gap:4px;min-width:0}
+.linkish.copy{color:var(--ast);text-align:left;overflow-wrap:anywhere}
+.linkish.copy:hover{text-decoration:underline}
 .pinfo{border-top:1px solid var(--b);padding:6px 20px}
 .prow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;padding:9px 0;font-size:14px;align-items:center}
 .prow .k{color:var(--m);font-size:13px}
@@ -729,14 +742,18 @@ function renderPerson(){
  var c=(v.contacts||[]).filter(function(x){return x.id===S.cid})[0];
  if(!c)return renderVendor();
  var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[],ITEMS=12;
- var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0"><h2>'+esc(c.name)+(c.primary?' <span class="star" title="Main contact at '+esc(v.name)+'">'+I.starS+'</span>':'')+'</h2><div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button></div></div></div>';
- h+='<div class="pacts">'+(c.phone?'<a class="btn pri" href="'+esc(telHref(c.phone))+'">'+I.phone+'Call</a>':'')+(c.email?'<a class="btn" href="mailto:'+esc(c.email)+'">'+I.mail+'Email</a>':'')+
-  '<button class="btn'+(c.primary?' starred':'')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'The main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'">'+(c.primary?I.starF:I.star)+(c.primary?'Main contact':'Make main')+'</button>'+
-  '<button class="btn" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'Share</button><button class="btn" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'Edit</button></div>';
+ var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0">'+
+  '<div class="pname"><h2>'+esc(c.name)+'</h2>'+
+   // the star is the button: always showing (gold) on the main contact, on hover for everyone else
+   '<button class="ib sm'+(c.primary?' starred':' hov')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'Main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'" aria-label="'+(c.primary?'Unstar as main contact':'Make main contact')+'">'+(c.primary?I.starF:I.star)+'</button>'+
+   '<button class="ib sm hov" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button></div>'+
+  '<div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button>'+(c.primary?' · <span style="color:var(--w)">Main contact</span>':'')+'</div></div>'+
+  '<button class="ib hov pedit" data-act="editc" data-id="'+esc(c.id)+'" title="Edit '+esc(c.name)+'" aria-label="Edit '+esc(c.name)+'">'+I.pen+'</button></div>';
  h+='<div class="pinfo">'+
   (c.phone?'<div class="prow"><span class="k">Phone</span><a href="'+esc(telHref(c.phone))+'">'+esc(c.phone)+'</a></div>':'')+
   (c.alt_phone?'<div class="prow"><span class="k">Alt. phone</span><a href="'+esc(telHref(c.alt_phone))+'">'+esc(c.alt_phone)+'</a></div>':'')+
-  (c.email?'<div class="prow"><span class="k">Email</span><a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a></div>':'')+
+  (c.email?'<div class="prow"><span class="k">Email</span><span class="pval"><button class="linkish copy" data-act="copyemail" data-id="'+esc(c.email)+'" title="Copy">'+esc(c.email)+'</button>'+
+   '<a class="ib sm" href="mailto:'+esc(c.email)+'" title="Write to '+esc(c.email)+'" aria-label="Write to '+esc(c.email)+'">'+I.mail+'</a></span></div>':'')+
   '<div class="prow"><span class="k">Region</span><span>'+srvLine(c)+'</span></div>'+
   (c.has_card?'<div class="prow"><span class="k">Card</span><a href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">View business card</a></div>':'')+'</div>';
  h+='<div class="psec"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="tovendor">View vendor</button></div>';
@@ -1320,6 +1337,7 @@ var A={
   api('/api/vendors/'+encodeURIComponent(vid)+'/main-contact',{method:'POST',body:{contact_id:to}})
    .then(function(){toast(to?'Main contact set':'Main contact cleared')}).catch(function(e){fail(e);refresh()});
  },
+ copyemail:function(el){var e=el.dataset.id;copyText(e).then(function(){toast(e+' copied')},function(){toast('Couldn’t copy it')});return 'skip'},
  sharec:function(el){var c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===el.dataset.id})[0];if(c)shareContact(c);return 'skip'},
  nat:function(){S.draft.nationwide=!S.draft.nationwide},
  natset:function(el){var on=el.dataset.id==='1';if(S.draft.nationwide===on)return 'skip';S.draft.nationwide=on},
