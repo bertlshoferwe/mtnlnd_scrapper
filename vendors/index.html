@@ -53,6 +53,8 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
  .dtab{padding:0 11px}
  .find.open .msearch{position:absolute;left:0;right:0;top:calc(100% + 8px);width:auto;height:48px;z-index:35;background:var(--pop);border:1px solid var(--bs);box-shadow:0 10px 28px rgba(0,0,0,.35)}
  .find.open .msearch input{color:var(--t)}
+ /* the open search box sits under the top bar, so the list moves down to make room for it */
+ .mast:has(.find.open)+.main{padding-top:66px}
  .main{padding:10px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
 }
 .pill{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--bs);background:var(--as);color:var(--ast);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;max-width:46vw}
@@ -109,6 +111,15 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .ov{position:fixed;inset:0;z-index:40;background:rgba(3,6,14,.64)}
 .pop{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--pop);border-top:1px solid var(--bs);border-radius:16px 16px 0 0;padding:16px 12px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;max-height:88vh;overflow:auto}
 .pop h3{margin:0 4px 4px;font-size:14px}
+.setm{gap:0}
+.setm .sech{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;border:0;background:none;padding:0 8px;color:var(--t);text-align:left}
+.setm .sech~.sech{border-top:1px solid var(--b)}
+.setm .sl{flex:1;font-size:15px;font-weight:700}
+.setm .sv{color:var(--m);font-size:14px}
+.setm .sech svg{color:var(--m);transition:transform .15s}
+.setm .sech[aria-expanded="true"] svg{transform:rotate(180deg)}
+.setm .setb{display:none;flex-direction:column;gap:8px;padding:0 0 12px}
+.setm .setb.open{display:flex}
 .pop .mh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--m);padding:10px 10px 4px}
 .opt{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 14px;border-radius:12px;border:1px solid var(--bs);background:var(--s2);width:100%;text-align:left;text-decoration:none}
 .opt:hover{border-color:var(--a)}
@@ -131,6 +142,11 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
  .pop.menu .opt .ic{width:34px;height:34px}
  .pop.menu .opt b{font-size:14px}
  .pop.menu .mh{display:block}
+ .setm .sech{pointer-events:none;min-height:0;padding:10px 10px 4px}
+ .setm .sech~.sech{margin-top:4px}
+ .setm .sl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--m)}
+ .setm .sv,.setm .sech svg{display:none}
+ .setm .setb{display:flex;gap:2px;padding:0}
  .main{padding:16px 20px}
 }
 .appsgrid{display:grid;grid-template-columns:repeat(var(--cols,3),88px);gap:8px}
@@ -388,6 +404,11 @@ body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!impor
  .sfold{display:none}
  @media(prefers-reduced-motion:no-preference){.side{transition:transform .2s ease}}
 }
+/* on a phone the sidebar comes up from the bottom, the full width, like the other menus */
+@media(max-width:639px){
+ .side{left:0;right:0;top:auto;bottom:0;width:auto;height:auto;max-height:88vh;max-height:88dvh;border-radius:16px 16px 0 0;border:0;border-top:1px solid var(--bs);transform:translateY(102%);padding:16px 12px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.45)}
+ .side.open{transform:none}
+}
 /* a vendor's main contact: a gold star */
 .star{color:var(--w);display:inline-flex;vertical-align:-2px}
 .btn.starred{border-color:var(--w);color:var(--w)}
@@ -545,6 +566,19 @@ function appsHTML(){
   return '<a class="tile'+(a.key==='vendors'?' cur':'')+'" href="'+esc(appUrl(a))+'" data-app="'+esc(a.key)+'"'+(a.key==='vendors'?' aria-current="page"':'')+'>'+a.icon+'<span>'+esc(a.name)+'</span></a>'}).join('')+'</div>';
 }
 function appUrl(a){return a.url+(a.division&&S.div?'?division='+encodeURIComponent(S.div):'')}
+// ⚙: Theme and Start on. On a phone it's a sheet across the bottom with each one folded (showing
+// what's picked) until tapped; on a wider screen both lists simply show.
+function setMenu(){
+ var sec=function(id,label,val,opts){var open=S.setSec===id;
+  return '<button class="sech" data-act="setsec" data-id="'+id+'" aria-expanded="'+open+'"><span class="sl">'+label+'</span><span class="sv">'+val+'</span>'+I.chev+'</button>'+
+   '<div class="setb'+(open?' open':'')+'">'+opts+'</div>'};
+ var th=[['auto','Auto','Follows this device',I.auto],['light','Light','',I.sun],['dark','Dark','',I.moon]],vw=[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]];
+ var pick=function(list,cur){return list.filter(function(t){return t[0]===cur})[0][1]};
+ return sec('theme','Theme',pick(th,themeChoice()),th.map(function(t){var on=themeChoice()===t[0];
+   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="theme" data-id="'+t[0]+'"><span class="ic">'+t[3]+'</span><span style="flex:1"><b>'+t[1]+'</b>'+(t[2]?'<span class="s">'+t[2]+'</span>':'')+'</span>'+(on?I.check:'')+'</button>'}).join(''))+
+  sec('start','Start on',pick(vw,defaultView()),vw.map(function(t){var on=defaultView()===t[0];
+   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="startview" data-id="'+t[0]+'"><span class="ic">'+t[2]+'</span><span style="flex:1"><b>'+t[1]+'</b></span>'+(on?I.check:'')+'</button>'}).join(''));
+}
 function renderMast(){
  var title=S.view==='admin'?'Catalog review':S.view==='scan'?(S.scanStage===2?(S.edit?'Edit contact':'New contact'):'Scan card'):S.view==='form'?(S.edit?'Edit contact':'New contact'):'Vendors';
  var lv=listView(),findOpen=lv&&(S.findOpen||!!S.q);
@@ -555,14 +589,10 @@ function renderMast(){
  '<div class="mright">'+
  (lv?'<div class="find'+(findOpen?' open':'')+'"><label class="msearch">'+I.search+'<span class="sr">Search</span><input id="q" type="search" placeholder="Search items, vendors or contacts" value="'+esc(S.q)+'" autocomplete="off" enterkeyhint="search"></label>'+
    '<button class="cbtn" data-act="find" aria-expanded="'+findOpen+'" aria-controls="q" title="Search" aria-label="Search">'+I.searchC+(S.q&&!findOpen?'<span class="dot"></span>':'')+'</button></div>':'')+
- (lv?'<div class="rel mob"><button class="cbtn pri" aria-label="Add a contact" aria-haspopup="true" aria-expanded="'+(S.panel==='add')+'" data-act="p-add">'+I.plusS+'</button>'+(S.panel==='add'?addMenu():'')+'</div>':'')+
  '<div class="rel"><button class="cbtn" aria-label="Services" title="Services" aria-haspopup="true" aria-expanded="'+(S.panel==='apps')+'" data-act="p-apps">'+I.waffle+'</button>'+
  (S.panel==='apps'?'<div class="ov" data-act="close"></div><div class="pop r" style="width:auto">'+appsHTML()+'</div>':'')+
  '</div><div class="rel"><button class="cbtn" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded="'+(S.panel==='set')+'" data-act="p-set">'+I.gear+'</button>'+
- (S.panel==='set'?'<div class="ov" data-act="close"></div><div class="pop r menu" role="menu" style="width:230px"><div class="mh">Theme</div>'+[['auto','Auto','Follows this device',I.auto],['light','Light','',I.sun],['dark','Dark','',I.moon]].map(function(t){var on=themeChoice()===t[0];
-   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="theme" data-id="'+t[0]+'"><span class="ic">'+t[3]+'</span><span style="flex:1"><b>'+t[1]+'</b>'+(t[2]?'<span class="s">'+t[2]+'</span>':'')+'</span>'+(on?I.check:'')+'</button>'}).join('')+
-   '<div class="mh" style="border-top:1px solid var(--b);margin-top:4px">Start on</div>'+[['people','People',I.users],['vendors','Vendors',I.shop],['items','Items',I.box]].map(function(t){var on=defaultView()===t[0];
-   return '<button class="opt" role="menuitemradio" aria-checked="'+on+'" data-act="startview" data-id="'+t[0]+'"><span class="ic">'+t[2]+'</span><span style="flex:1"><b>'+t[1]+'</b></span>'+(on?I.check:'')+'</button>'}).join('')+'</div>':'')+
+ (S.panel==='set'?'<div class="ov" data-act="close"></div><div class="pop r menu setm" role="menu">'+setMenu()+'</div>':'')+
  '</div></div></div></header>'+(S.offline?'<div class="offline" role="status">You’re offline. Vendors needs a connection to show and save anything.</div>':'');
 }
 
@@ -1298,7 +1328,6 @@ var A={
  retry:function(el){api('/api/vendors/admin/pull',{method:'POST',body:{vendor_id:el.dataset.id}}).then(function(d){toast(d.message||'Pull started');setTimeout(loadAdmin,4000)}).catch(fail);return 'skip'},
  close:function(){S.panel=null},
  'p-apps':function(){S.panel=S.panel==='apps'?null:'apps'},
- 'p-add':function(){S.ctxV='';S.panel=S.panel==='add'?null:'add'},
  div:function(el){S.div=el.dataset.id;S.panel=null;S.vid=null;S.detail=null;S.view=S.view==='admin'?'admin':'list';S.itemsOpen=false;S.results=null;S.loading=true;saveUrl();loadList()},
  clear:function(){S.st='Any';S.wc=false;loadList()},
  vendor:function(el){openVendor(el.dataset.id)},
@@ -1308,7 +1337,8 @@ var A={
   if(S.findOpen||S.q){if(S.q){var qi=$('q');if(qi)qi.focus();return 'skip'}S.findOpen=false;return}
   S.findOpen=true;render();var qn=$('q');if(qn)qn.focus();return 'skip';
  },
- 'p-set':function(){S.panel=S.panel==='set'?null:'set'},
+ 'p-set':function(){S.panel=S.panel==='set'?null:'set';S.setSec=null},
+ setsec:function(el){S.setSec=S.setSec===el.dataset.id?null:el.dataset.id},
  theme:function(el){setTheme(el.dataset.id)},
  startview:function(el){try{localStorage.setItem('vendors.defaultView',el.dataset.id)}catch(e){}toast('Vendors will open on '+({people:'People',vendors:'Vendors',items:'Items'}[el.dataset.id]))},
  fold:function(){S.mini=!S.mini;S.panel=null;try{localStorage.setItem('vendors.sideMini',S.mini?'1':'0')}catch(e){}},
