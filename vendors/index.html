@@ -159,6 +159,9 @@ mark{background:var(--mark);color:var(--markt);border-radius:3px;padding:0 1px}
 .ccard-h{display:flex;align-items:center;gap:12px;min-width:0}
 .ccard-h .cf-av{width:40px;height:40px;font-size:14px}
 .ccard-h .nm{font-weight:700;font-size:15px;overflow-wrap:anywhere}
+.ccard-h .nmpen{width:28px;height:28px;vertical-align:middle;margin-left:2px;color:var(--m)}
+.ccard-h .nmpen:hover{color:var(--t)}
+.ccard-h .nmpen svg{width:15px;height:15px}
 .ccard-acts{display:flex;align-items:center;margin-left:auto;flex:none}
 .ccard-acts .ib{width:36px;height:36px;color:var(--m)}
 .ccard-acts .ib:hover{color:var(--t)}
@@ -296,6 +299,12 @@ body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!impor
 .pdet .hov{opacity:0;transition:opacity .12s}
 .pdet .ph:hover .hov,.pdet .hov:focus-within,.pdet .hov:focus-visible{opacity:1}
 @media(hover:none){.pdet .hov{opacity:1}}
+.psec.acc{padding:4px 20px}
+.acch{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;border:0;background:none;padding:0;color:var(--m)}
+.acch:hover{color:var(--t)}
+.acch svg{transition:transform .15s}
+.acch[aria-expanded="true"] svg{transform:rotate(180deg)}
+.psec.acc .chips{padding:0 0 14px}
 .pval{display:flex;align-items:center;gap:4px;min-width:0}
 .linkish.copy{color:var(--ast);text-align:left;overflow-wrap:anywhere}
 .linkish.copy:hover{text-decoration:underline}
@@ -741,12 +750,12 @@ function renderPerson(){
  if(v.error)return '<div class="card empty">'+esc(v.error)+'</div>';
  var c=(v.contacts||[]).filter(function(x){return x.id===S.cid})[0];
  if(!c)return renderVendor();
- var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[],ITEMS=12;
+ var others=v.contacts.filter(function(x){return x.id!==c.id}),its=v.items||[];
  var h='<div class="card pdet"><div class="ph"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="flex:1;min-width:0">'+
   '<div class="pname"><h2>'+esc(c.name)+'</h2>'+
    // the star is the button: always showing (gold) on the main contact, on hover for everyone else
    '<button class="ib sm'+(c.primary?' starred':' hov')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'" aria-pressed="'+!!c.primary+'" title="'+(c.primary?'Main contact at '+esc(v.name)+' — click to unstar':'Make them the main contact at '+esc(v.name))+'" aria-label="'+(c.primary?'Unstar as main contact':'Make main contact')+'">'+(c.primary?I.starF:I.star)+'</button>'+
-   '<button class="ib sm hov" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button></div>'+
+   '<button class="ib sm" data-act="sharec" data-id="'+esc(c.id)+'" title="Share '+esc(c.name)+'" aria-label="Share '+esc(c.name)+'">'+I.share+'</button></div>'+
   '<div class="hint" style="font-size:14px">'+(c.title?esc(c.title)+' · ':'')+'<button class="linkish" data-act="tovendor">'+esc(v.name)+'</button>'+(c.primary?' · <span style="color:var(--w)">Main contact</span>':'')+'</div></div>'+
   '<button class="ib hov pedit" data-act="editc" data-id="'+esc(c.id)+'" title="Edit '+esc(c.name)+'" aria-label="Edit '+esc(c.name)+'">'+I.pen+'</button></div>';
  h+='<div class="pinfo">'+
@@ -757,12 +766,13 @@ function renderPerson(){
   '<div class="prow"><span class="k">Region</span><span>'+srvLine(c)+'</span></div>'+
   (c.has_card?'<div class="prow"><span class="k">Card</span><a href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">View business card</a></div>':'')+'</div>';
  h+='<div class="psec"><div class="vhead">'+logoHTML(v,'md')+'<div style="min-width:0;flex:1"><b>'+esc(v.name)+'</b>'+(v.website?'<div><a class="vweb" href="https://'+esc(v.website.replace(/^https?:\/\//i,''))+'" target="_blank" rel="noopener">'+esc(v.website)+'</a></div>':'')+'</div><button class="btn sm" data-act="tovendor">View vendor</button></div>';
- if(its.length)h+='<div class="lab">What they sell · '+its.length+'</div><div class="chips">'+(S.itemsOpen?its:its.slice(0,ITEMS)).map(function(i){return '<span class="chip">'+esc(i.name)+'</span>'}).join('')+
-  (its.length>ITEMS?'<button class="chip tog" data-act="items">'+(S.itemsOpen?'Show fewer':'+'+(its.length-ITEMS)+' more')+'</button>':'')+'</div>';
  if(others.length){
   h+='<div class="lab">Others at '+esc(v.name)+' · '+others.length+'</div><div>'+others.map(function(o){
    return '<button class="oth" data-act="person" data-id="'+esc(o.id)+'" data-v="'+esc(v.id)+'"><span class="cf-av av-s" aria-hidden="true">'+esc(ini(o.name))+'</span><span style="min-width:0;flex:1"><b style="font-weight:600">'+esc(o.name)+(o.primary?' <span class="star">'+I.starS+'</span>':'')+'</b><span class="hint" style="display:block">'+esc([o.title,o.phone].filter(Boolean).join(' · ')||'—')+'</span></span></button>'}).join('')+'</div>';
  }
+ // what the vendor sells: at the bottom, folded away until it's wanted
+ if(its.length)h+='</div><div class="psec acc"><button class="acch" data-act="sells" aria-expanded="'+!!S.sellOpen+'"><span class="lab">What '+esc(v.name)+' sells · '+its.length+'</span>'+I.chev+'</button>'+
+  (S.sellOpen?'<div class="chips">'+its.map(function(i){return '<span class="chip">'+esc(i.name)+'</span>'}).join('')+'</div>':'');
  return h+'</div></div>';
 }
 
@@ -777,8 +787,9 @@ function renderVendor(){
  if(!cs.length)h+='<div class="crow"><span class="hint">No contacts yet.</span></div>';
  else h+='<div class="clist">';
  cs.forEach(function(c){
-  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+(c.primary?' <span class="star">'+I.starS+'</span>':'')+'</div>'+(c.primary?'<div class="hint" style="color:var(--w)">Main contact</div>':'')+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
-   '<div class="ccard-acts"><button class="ib pen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button>'+
+  h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+(c.primary?' <span class="star">'+I.starS+'</span>':'')+
+    '<button class="ib pen nmpen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button></div>'+(c.primary?'<div class="hint" style="color:var(--w)">Main contact</div>':'')+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
+   '<div class="ccard-acts">'+
    '<button class="ib'+(c.primary?' starred':'')+'" aria-pressed="'+!!c.primary+'" aria-label="'+(c.primary?'Main contact — unstar':'Make main contact')+'" title="'+(c.primary?'Main contact — click to unstar':'Make main contact')+'" data-act="star" data-id="'+esc(c.id)+'" data-v="'+esc(v.id)+'">'+(c.primary?I.starF:I.star)+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
    '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.alt_phone?'<a class="kv" href="'+esc(telHref(c.alt_phone))+'">'+I.phone+esc(c.alt_phone)+' <span class="hint">alt</span></a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
    (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'<div style="margin-top:6px">'+srvLine(c)+'</div></div></div>';
@@ -1213,6 +1224,7 @@ function toast(m){S.toast=m;render();clearTimeout(toast.t);toast.t=setTimeout(fu
 function fail(e){S.busy=false;toast(e.message||String(e))}
 function go(view){S.view=view;S.panel=null;window.scrollTo(0,0)}
 function openPerson(cid,vid){
+ if(cid!==S.cid)S.sellOpen=false;   // each person's details start with What they sell folded
  S.cid=cid;S.itemsOpen=false;S.addItem=false;
  if(S.vid!==vid||!S.detail||S.detail.id!==vid){S.vid=vid;S.detail=null;loadDetail()}
  S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
@@ -1338,6 +1350,7 @@ var A={
    .then(function(){toast(to?'Main contact set':'Main contact cleared')}).catch(function(e){fail(e);refresh()});
  },
  copyemail:function(el){var e=el.dataset.id;copyText(e).then(function(){toast(e+' copied')},function(){toast('Couldn’t copy it')});return 'skip'},
+ sells:function(){S.sellOpen=!S.sellOpen},
  sharec:function(el){var c=(S.detail&&S.detail.contacts||[]).filter(function(x){return x.id===el.dataset.id})[0];if(c)shareContact(c);return 'skip'},
  nat:function(){S.draft.nationwide=!S.draft.nationwide},
  natset:function(el){var on=el.dataset.id==='1';if(S.draft.nationwide===on)return 'skip';S.draft.nationwide=on},
