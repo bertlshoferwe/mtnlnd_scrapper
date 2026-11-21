@@ -381,7 +381,7 @@ function renderVendor(){
  cs.forEach(function(c){
   h+='<div class="ccard"><div class="ccard-h"><span class="cf-av" aria-hidden="true">'+esc(ini(c.name))+'</span><div style="min-width:0"><div class="nm">'+esc(c.name)+'</div>'+(c.title?'<div class="hint">'+esc(c.title)+'</div>':'')+'</div>'+
    '<div class="ccard-acts"><button class="ib pen" aria-label="Edit '+esc(c.name)+'" title="Edit" data-act="editc" data-id="'+esc(c.id)+'">'+I.pen+'</button><button class="ib" aria-label="Share '+esc(c.name)+'" title="Share" data-act="sharec" data-id="'+esc(c.id)+'">'+I.share+'</button></div></div>'+
-   '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
+   '<div class="ccard-b">'+(c.phone?'<a class="kv" href="'+esc(telHref(c.phone))+'">'+I.phone+esc(c.phone)+'</a>':'')+(c.alt_phone?'<a class="kv" href="'+esc(telHref(c.alt_phone))+'">'+I.phone+esc(c.alt_phone)+' <span class="hint">alt</span></a>':'')+(c.email?'<a class="kv" href="mailto:'+esc(c.email)+'">'+I.mail+esc(c.email)+'</a>':'')+
    (c.has_card?'<a class="kv" href="'+esc(cardUrl(c))+'" data-act="cardview" data-id="'+esc(c.id)+'">'+I.card+'Business card</a>':'')+'<div style="margin-top:6px">'+srvLine(c)+'</div></div></div>';
  });
  if(cs.length)h+='</div>';
@@ -412,7 +412,7 @@ function renderVendorModal(){
 
 /* ---------- contact form ---------- */
 function vendorMatch(name){var n=String(name||'').trim().toLowerCase();return n?S.names.filter(function(x){return x.name.trim().toLowerCase()===n})[0]:null}
-function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',ext:'',email:'',website:'',nationwide:false,areas:[]}}
+function blank(vname){return {name:'',title:'',vendor:vname||'',phone:'',ext:'',alt:'',altExt:'',email:'',website:'',nationwide:false,areas:[]}}
 function renderForm(){
  var d=S.draft,v=vendorMatch(d.vendor),fixed=!S.edit&&S.ctxV;   // added from inside a vendor: that's its vendor
  var h='<div class="page">';
@@ -431,6 +431,7 @@ function renderForm(){
  if(!fixed)h+='<div class="cf-f"><label for="f-vendor">Vendor</label><div class="cf-in">'+I.shop+'<input class="in2" id="f-vendor" data-fld="vendor" list="vl" value="'+esc(d.vendor)+'" autocomplete="off" placeholder="Pick one, or type a new vendor"></div><datalist id="vl">'+S.names.map(function(x){return '<option value="'+esc(x.name)+'">'}).join('')+'</datalist><span class="cf-hint" id="vhint">'+vendorHint(d.vendor,v)+'</span></div>';
  h+='<div class="cf-grid">'+
   '<div class="cf-f"><label for="f-phone">Phone</label><div class="cf-in">'+I.phone+'<input class="in2" id="f-phone" data-fld="phone" type="tel" inputmode="tel" value="'+esc(d.phone)+'" autocomplete="off" placeholder="(801) 555-0123"><input class="in2 ext" id="f-ext" data-fld="ext" inputmode="numeric" value="'+esc(d.ext)+'" placeholder="Ext." aria-label="Extension" autocomplete="off"></div></div>'+
+  '<div class="cf-f"><label for="f-alt">Alternate phone</label><div class="cf-in">'+I.phone+'<input class="in2" id="f-alt" data-fld="alt" type="tel" inputmode="tel" value="'+esc(d.alt)+'" autocomplete="off" placeholder="Cell or a second line"><input class="in2 ext" id="f-altext" data-fld="altExt" inputmode="numeric" value="'+esc(d.altExt)+'" placeholder="Ext." aria-label="Alternate phone extension" autocomplete="off"></div></div>'+
   '<div class="cf-f"><label for="f-email">Email</label><div class="cf-in">'+I.mail+'<input class="in2" id="f-email" data-fld="email" type="email" inputmode="email" value="'+esc(d.email)+'" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="name@company.com" aria-describedby="emailerr"></div><span class="cf-hint" id="emailerr" style="color:var(--d)">'+(emailBad(d.email)?'That email doesn’t look right':'')+'</span></div>'+
  '</div>';
  // service area: nationwide, or the states (and regions in them) they cover; neither = coverage not set
@@ -479,7 +480,7 @@ function snapshot(){
  if(S.modal&&S.edit&&S.draft){
   var d=S.draft,m=vendorMatch(d.vendor);
   return {url:'/api/vendors/contacts/'+encodeURIComponent(S.edit),check:!d.name.trim()?'Add a name':!d.vendor.trim()?'Pick or type a vendor':emailBad(d.email)?'Fix the email':'',
-   body:{division:S.div,name:d.name,title:d.title,phone:joinPhone(d),email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
+   body:{division:S.div,name:d.name,title:d.title,phone:joinPhone(d),alt_phone:joinPhone({phone:d.alt,ext:d.altExt}),email:d.email,nationwide:d.nationwide,areas:JSON.parse(JSON.stringify(d.areas)),vendor:d.vendor.trim(),vendor_id:m?m.id:null}};
  }
  return null;
 }
@@ -690,14 +691,15 @@ function renderCardView(){
 
 /* ---------- sharing a contact ---------- */
 function shareText(c,v){
- return [c.name,[c.title,v&&v.name].filter(Boolean).join(', '),c.phone&&('Phone: '+c.phone),c.email&&('Email: '+c.email),
+ return [c.name,[c.title,v&&v.name].filter(Boolean).join(', '),c.phone&&('Phone: '+c.phone),c.alt_phone&&('Alt phone: '+c.alt_phone),c.email&&('Email: '+c.email),
   'Covers: '+c.area_text,v&&v.website&&('Website: '+v.website)].filter(Boolean).join('\n');
 }
 function vcfOf(c,v){
  var e=function(x){return String(x||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/([,;])/g,'\\$1')};
  var parts=String(c.name||'').trim().split(/\s+/),last=parts.length>1?parts.pop():'',sp=splitPhone(c.phone);
  return ['BEGIN:VCARD','VERSION:3.0','N:'+e(last)+';'+e(parts.join(' '))+';;;','FN:'+e(c.name),v?'ORG:'+e(v.name):'',c.title?'TITLE:'+e(c.title):'',
-  c.phone?'TEL;TYPE=WORK,VOICE:'+sp.phone+(sp.ext?' x'+sp.ext:''):'',c.email?'EMAIL;TYPE=WORK:'+e(c.email):'',
+  c.phone?'TEL;TYPE=WORK,VOICE:'+sp.phone+(sp.ext?' x'+sp.ext:''):'',
+  c.alt_phone?'TEL;TYPE=VOICE:'+splitPhone(c.alt_phone).phone+(splitPhone(c.alt_phone).ext?' x'+splitPhone(c.alt_phone).ext:''):'',c.email?'EMAIL;TYPE=WORK:'+e(c.email):'',
   v&&v.website?'URL:https://'+e(v.website.replace(/^https?:\/\//i,'')):'','NOTE:'+e('Covers: '+c.area_text),'END:VCARD'].filter(Boolean).join('\r\n');
 }
 function copyText(t){
@@ -793,14 +795,14 @@ function openVendor(id){
  S.view=mq.matches?'list':'vendor';if(!mq.matches)window.scrollTo(0,0);
  saveUrl();loadDetail();
 }
-function draftFrom(c){var ph=splitPhone(c.phone);return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:ph.phone,ext:ph.ext,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
+function draftFrom(c){var ph=splitPhone(c.phone),ap=splitPhone(c.alt_phone);return {name:c.name,title:c.title,vendor:S.detail?S.detail.name:'',phone:ph.phone,ext:ph.ext,alt:ap.phone,altExt:ap.ext,email:c.email,website:'',nationwide:c.nationwide,areas:c.areas.map(function(a){return {state:a.state,regions:a.regions.slice()}})}}
 function closeForm(){S.showDel=false;S.saveSt='';S.saveBad=false;S.ctxV='';S.draft=null;S.edit=null;S.scan=null;S.scanStage=0;S.scanErr='';S.cardPath=null;S.confirmDel=false;S.dup=null;S.modal=false}
 function saveContact(){
  var d=S.draft;
  if(!d.name.trim()){toast('Add a name first');return}
  if(!d.vendor.trim()){toast('Pick or type a vendor');return}
  if(emailBad(d.email)){toast('That email doesn’t look right');var fe=$('f-email');if(fe)fe.focus();return}
- var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:joinPhone(d),email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
+ var m=vendorMatch(d.vendor),body={division:S.div,name:d.name,title:d.title,phone:joinPhone(d),alt_phone:joinPhone({phone:d.alt,ext:d.altExt}),email:d.email,nationwide:d.nationwide,areas:d.areas,vendor:d.vendor.trim(),vendor_id:m?m.id:null,vendor_website:m?'':d.website};
  if(S.view==='scan'&&S.cardPath)body.card_image_path=S.cardPath;
  S.busy=true;render();
  api(S.edit?'/api/vendors/contacts/'+encodeURIComponent(S.edit):'/api/vendors/contacts',{method:S.edit?'PATCH':'POST',body:body}).then(function(r){
@@ -906,12 +908,12 @@ document.addEventListener('input',function(e){
  var t=e.target;
  if(t.id==='q'){S.q=t.value;loadList(220)}
  else if(t.dataset&&t.dataset.fld){
-  if(t.dataset.fld==='phone'){
+  if(t.dataset.fld==='phone'||t.dataset.fld==='alt'){
    var before=t.value.slice(0,t.selectionStart).replace(/\D/g,'').length,nv=fmtPhone(t.value);
    if(nv!==t.value){t.value=nv;var pos=0,seen=0;while(pos<nv.length&&seen<before){if(/\d/.test(nv[pos]))seen++;pos++}try{t.setSelectionRange(pos,pos)}catch(x){}}
   }
   if(CAP_FIELDS[t.dataset.fld]){var cv=(t.dataset.fld==='name'?nameCase:capWords)(t.value);if(cv!==t.value){var cs=t.selectionStart,ce=t.selectionEnd;t.value=cv;try{t.setSelectionRange(cs,ce)}catch(x){}}}
-  if(t.dataset.fld==='ext'&&/\D/.test(t.value))t.value=t.value.replace(/\D/g,'').slice(0,6);
+  if((t.dataset.fld==='ext'||t.dataset.fld==='altExt')&&/\D/.test(t.value))t.value=t.value.replace(/\D/g,'').slice(0,6);
   S.draft[t.dataset.fld]=t.value;
   if(/^(name|title|vendor)$/.test(t.dataset.fld))paintHead();
   if(t.dataset.fld==='vendor'){var h=$('vhint');if(h)h.textContent=vendorHint(t.value,vendorMatch(t.value))}

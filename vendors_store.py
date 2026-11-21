@@ -201,21 +201,31 @@ def _set_areas(contact_id, nationwide, areas):
         _db().table("vendor_contact_areas").insert(rows).execute()
 
 
+def _write_contact(contact_id, row):
+    t = _db().table("vendor_contacts")
+    return (t.update(row).eq("id", contact_id) if contact_id else t.insert(row)).execute().data[0]
+
+
 def save_contact(contact_id, vendor_id, fields, actor=None):
     """Create (contact_id None) or update a contact. fields: name, title,
-    phone, email, nationwide, areas, card_image_path."""
+    phone, alt_phone, email, nationwide, areas, card_image_path."""
     row = {"vendor_id": vendor_id, "name": fields["name"].strip()[:120],
            "title": (fields.get("title") or "").strip()[:120] or None,
            "phone": norm_phone(fields.get("phone"))[:40] or None,
+           "alt_phone": norm_phone(fields.get("alt_phone"))[:40] or None,
            "email": norm_email(fields.get("email")),
            "nationwide": bool(fields.get("nationwide")), "updated_at": _now()}
     if fields.get("card_image_path"):
         row["card_image_path"] = fields["card_image_path"]
-    if contact_id:
-        saved = _db().table("vendor_contacts").update(row).eq("id", contact_id).execute().data[0]
-    else:
+    if not contact_id:
         row["created_by"] = actor
-        saved = _db().table("vendor_contacts").insert(row).execute().data[0]
+    try:
+        saved = _write_contact(contact_id, row)
+    except Exception as e:
+        if "alt_phone" not in str(e):
+            raise
+        print("  ! vendor_contacts has no alt_phone yet — run migrations/007_vendor_alt_phone.sql")
+        saved = _write_contact(contact_id, {k: v for k, v in row.items() if k != "alt_phone"})
     _set_areas(saved["id"], row["nationwide"], fields.get("areas"))
     audit(actor, "update" if contact_id else "create", "vendor_contacts", saved["id"],
           {k: v for k, v in row.items() if k != "updated_at"} | {"areas": fields.get("areas") or []})

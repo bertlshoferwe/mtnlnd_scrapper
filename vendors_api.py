@@ -124,7 +124,7 @@ def _area_text(c):
 
 def _contact_out(c):
     return {"id": c["id"], "name": c["name"], "title": c.get("title") or "", "phone": c.get("phone") or "",
-            "email": c.get("email") or "", "nationwide": c["nationwide"], "areas": c["areas"],
+            "alt_phone": c.get("alt_phone") or "", "email": c.get("email") or "", "nationwide": c["nationwide"], "areas": c["areas"],
             "unset": _unset(c), "area_text": _area_text(c), "has_card": bool(c.get("card_image_path")),
             "card_v": re.sub(r"\D", "", str(c.get("updated_at") or ""))[:14]}
 
@@ -154,7 +154,8 @@ def api_vendor_list():
         return _err(str(e), 500)
 
     def hay(c):
-        return " ".join([c["name"], c.get("title") or "", c.get("email") or "", c.get("phone") or "", _area_text(c)]).lower()
+        return " ".join([c["name"], c.get("title") or "", c.get("email") or "", c.get("phone") or "",
+                         c.get("alt_phone") or "", _area_text(c)]).lower()
 
     out = []
     for v in vendors.values():
@@ -326,7 +327,7 @@ def _contact_fields(data):
         raise ValueError("that email doesn't look right")
     areas = [{"state": str(a.get("state") or "").upper(), "regions": [str(r) for r in a.get("regions") or []]}
              for a in data.get("areas") or [] if isinstance(a, dict)]
-    return {"name": name, "title": data.get("title"), "phone": data.get("phone"), "email": email,
+    return {"name": name, "title": data.get("title"), "phone": data.get("phone"), "alt_phone": data.get("alt_phone"), "email": email,
             "nationwide": bool(data.get("nationwide")), "areas": areas}
 
 
